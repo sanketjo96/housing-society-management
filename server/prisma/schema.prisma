@@ -92,10 +92,51 @@ model User {
   occupancyChanges   OccupancyChange[]
   uploadedProofs     PaymentProof[]      @relation("ProofUploader")
   reviewedProofs     PaymentProof[]      @relation("ProofReviewer")
-  auditLogs          AuditLog[]
-  billedRecords      MaintenanceRecord[]
+  auditLogs           AuditLog[]
+  billedRecords       MaintenanceRecord[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([societyId])
+}
+
+// Enables real logout (Task 2.3) — a stateless JWT can't be revoked before its natural
+// expiry, so refresh tokens are opaque random values checked against this table, not
+// signed/verified JWTs. tokenHash stores a SHA-256 hash, not the raw token — same
+// principle as passwordHash, though a fast hash (not bcrypt) is appropriate here since
+// the token itself is already high-entropy (32 random bytes), not a low-entropy
+// user-chosen secret vulnerable to brute force. revokedAt is set (not deleted) on
+// logout, keeping the row as a record that this token was explicitly invalidated
+// rather than merely expired.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// Task 2.4. Same opaque-random-token + hash-at-rest pattern as RefreshToken, and for
+// the same reason: a reset link must be revocable/single-use, which a signed JWT can't
+// do on its own. usedAt (not deleted on use) makes reuse detectable — "an expired or
+// reused token is rejected" is this task's explicit requirement, so a used token must
+// stay in the table as a used one, not disappear.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Flat {

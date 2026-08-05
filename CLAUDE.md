@@ -169,3 +169,38 @@ nginx/    reverse proxy config
 docs/     living documentation, built up phase by phase
 prisma/   schema, migrations, seed (inside server/)
 ```
+
+## Backend architecture: route / controller / service, every endpoint (from Task 2.1)
+
+```
+server/src/
+  routes/       *.route.ts      — HTTP wiring only: path + method → controller. No logic.
+  controllers/  *.controller.ts — parses/validates the request (Zod schema lives here),
+                                  calls the service, maps the result or a thrown domain
+                                  error to an HTTP status + JSON body.
+  services/     *.service.ts    — the actual business logic. Plain functions, no Express
+                                  types (no req/res). Throws typed domain errors (e.g.
+                                  DuplicateFieldError), not HTTP status codes — the
+                                  controller decides what those mean over HTTP.
+  lib/                          — small shared helpers used across services (e.g.
+                                  prisma-errors.ts's P2002 → field-name extraction).
+```
+
+Adopted starting with Task 2.1, after Task 2.1 was first built as a single fat route
+handler and then deliberately refactored into this shape. Why: Task 4.1/4.2 already
+require the equivalent split independently (a "pure function" rate calculator, a "plain
+function" generation job called from *both* a manual-trigger endpoint *and* a cron job)
+— business logic that must be callable from more than one entry point can't live inside
+a route handler. Applying the same split everywhere from Task 2.1 onward, rather than
+only where the tracker explicitly forces it, keeps the codebase consistent and makes
+every service unit-testable without HTTP (see
+`server/tests/services/admin-users.service.test.ts` vs.
+`server/tests/routes/admin-users.test.ts` for the same logic tested both ways).
+
+**Gotcha discovered building this**: Prisma 7 + `@prisma/adapter-pg` does **not** use
+the classic documented `err.meta.target: string[]` shape for P2002 (unique constraint)
+errors. Confirmed empirically by triggering a real duplicate-key insert — the actual
+field name is nested at `err.meta.driverAdapterError.cause.constraint.fields`.
+`src/lib/prisma-errors.ts`'s `getUniqueConstraintFields()` checks that path first, falls
+back to the classic shape. Any future service that needs to detect *which* field
+violated a unique constraint should use this helper, not re-derive it.

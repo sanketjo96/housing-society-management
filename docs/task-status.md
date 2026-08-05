@@ -24,10 +24,10 @@ the source of truth for build progress since it lives in git.
 
 ## Phase 2 — Auth & Access Control
 
-- [ ] 2.1 Admin-created user endpoint
-- [ ] 2.2 Login and JWT issuance
-- [ ] 2.3 Refresh token and logout
-- [ ] 2.4 Password reset flow
+- [x] 2.1 Admin-created user endpoint
+- [x] 2.2 Login and JWT issuance
+- [x] 2.3 Refresh token and logout
+- [x] 2.4 Password reset flow
 - [ ] 2.5 Role-guard middleware
 - [ ] 2.6 Tenant-scoping middleware
 - [ ] 2.7 Frontend login page
