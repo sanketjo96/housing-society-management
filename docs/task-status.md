@@ -1,7 +1,9 @@
 # Task status
 
-Mirrors the task tracker (task-prompts). Updated as each task completes — this file,
-not the Google Sheet, is the source of truth for build progress since it lives in git.
+Mirrors **`task-prompts-v1`** (supersedes the original `task-prompts` — see `CLAUDE.md`'s
+pivot note: quarterly `Invoice` bundling dropped, `MaintenanceRecord` is now the sole
+payable entity). Updated as each task completes — this file, not the Google Sheet, is
+the source of truth for build progress since it lives in git.
 
 ## Phase 0 — Project scaffolding & Docker infra
 
@@ -14,11 +16,11 @@ not the Google Sheet, is the source of truth for build progress since it lives i
 
 ## Phase 1 — Data model / schema
 
-- [ ] 1.1 Society and User models
-- [ ] 1.2 Flat and OccupancyChange models
-- [ ] 1.3 MaintenanceRecord and Invoice models
-- [ ] 1.4 PaymentProof, NotificationLog, AuditLog models
-- [ ] 1.5 Seed script
+- [x] 1.1 Society and User models
+- [x] 1.2 Flat and OccupancyChange models
+- [x] 1.3 MaintenanceRecord model (reworked post-pivot — no Invoice; status + dueDate added)
+- [x] 1.4 PaymentProof, NotificationLog, AuditLog models (PaymentProof now many-to-many with MaintenanceRecord)
+- [x] 1.5 Seed script
 
 ## Phase 2 — Auth & Access Control
 
@@ -40,60 +42,64 @@ not the Google Sheet, is the source of truth for build progress since it lives i
 - [ ] 3.5 Frontend onboard-flat form
 - [ ] 3.6 Frontend flat list and tenant assignment UI
 
-## Phase 4 — Maintenance Records (monthly accrual)
+## Phase 4 — Maintenance Records (monthly, independently payable)
 
 - [ ] 4.1 Rate calculation function
-- [ ] 4.2 Monthly record generation logic
+- [ ] 4.2 Monthly record generation logic (now also sets status=UNPAID + dueDate)
 - [ ] 4.3 Manual trigger endpoint for record generation
 - [ ] 4.4 Monthly cron wiring
-- [ ] 4.5 Resident maintenance records endpoint
-- [ ] 4.6 Admin maintenance records endpoint
-- [ ] 4.7 Frontend resident maintenance page
+- [ ] 4.5 Resident maintenance records endpoint (now the resident's primary outstanding-balance view)
+- [ ] 4.6 Admin maintenance records endpoint (absorbed dues-summary from removed 5.5)
+- [ ] 4.7 Frontend resident maintenance page (now the primary payment entry point)
 
-## Phase 5 — Invoices (quarterly billing)
+## Phase 5 — [DISSOLVED] Quarterly invoicing
 
-- [ ] 5.1 Quarterly invoice generation logic
-- [ ] 5.2 Manual trigger endpoint for invoice generation
-- [ ] 5.3 Quarterly cron wiring
-- [ ] 5.4 Resident invoices endpoint
-- [ ] 5.5 Admin invoices and dues summary endpoint
-- [ ] 5.6 Frontend resident invoices page
-- [ ] 5.7 Frontend admin dues overview
+Superseded by the pivot — `MaintenanceRecord` is independently payable, no quarterly
+bundling. All 7 tasks removed; remaining useful concerns folded into Phase 4 (dues
+summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 
-## Phase 6 — QR Payment & Proof Verification
+- [x] ~~5.1 Quarterly invoice generation logic~~ REMOVED
+- [x] ~~5.2 Manual trigger endpoint for invoice generation~~ REMOVED
+- [x] ~~5.3 Quarterly cron wiring~~ REMOVED
+- [x] ~~5.4 Resident invoices endpoint~~ REMOVED — superseded by 4.5
+- [x] ~~5.5 Admin invoices and dues summary endpoint~~ REMOVED — merged into 4.6
+- [x] ~~5.6 Frontend resident invoices page~~ REMOVED — superseded by 4.7
+- [x] ~~5.7 Frontend admin dues overview~~ REMOVED — redundant with 8.1/8.2
 
-- [ ] 6.1 UPI QR generation endpoint
-- [ ] 6.2 Payment proof upload endpoint
+## Phase 6 — QR Payment & Proof Verification (now selection-based across records)
+
+- [ ] 6.1 UPI QR generation endpoint (accepts selected maintenanceRecordIds, not one invoiceId)
+- [ ] 6.2 Payment proof upload endpoint (one proof, many selected records)
 - [ ] 6.3 Authenticated proof view/download endpoint
 - [ ] 6.4 Admin pending proofs list endpoint
-- [ ] 6.5 Approve proof endpoint
-- [ ] 6.6 Reject proof endpoint
-- [ ] 6.7 Manual mark-as-paid fallback
-- [ ] 6.8 Frontend invoice QR and upload UI
+- [ ] 6.5 Approve proof endpoint (cascades N records, not fixed 3)
+- [ ] 6.6 Reject proof endpoint (reverts N records)
+- [ ] 6.7 Manual mark-as-paid fallback (accepts a list of record IDs)
+- [ ] 6.8 Frontend outstanding-balance selection & payment UI (was: invoice QR/upload UI)
 - [ ] 6.9 Frontend admin proof review queue
 
 ## Phase 7 — Notifications (email only)
 
 - [ ] 7.1 EmailProvider interface and implementation
-- [ ] 7.2 Invoice-generated notification
+- [ ] 7.2 Maintenance-record-generated notification (was: invoice-generated)
 - [ ] 7.3 Proof-submitted admin notification
 - [ ] 7.4 Proof approved/rejected resident notification
 - [ ] 7.5 Notification logging
-- [ ] 7.6 Escalation job
+- [ ] 7.6 Escalation job (invoices → MaintenanceRecords)
 
 ## Phase 8 — Admin Dashboard
 
-- [ ] 8.1 Outstanding total and collection rate widget
-- [ ] 8.2 Flat-wise dues table
+- [ ] 8.1 Outstanding total and collection rate widget (base logic now from 4.6, not removed 5.5)
+- [ ] 8.2 Flat-wise dues table (base logic now from 4.6, not removed 5.5)
 - [ ] 8.3 Pending proofs widget
 - [ ] 8.4 Flagged flats widget
 
 ## Phase 9 — Security & Hardening Audit
 
-- [ ] 9.1 Society-scoping audit
+- [ ] 9.1 Society-scoping audit (module list: no more "invoices")
 - [ ] 9.2 Rate limiting on auth endpoints
 - [ ] 9.3 Consistent error handling
-- [ ] 9.4 AuditLog verification
+- [ ] 9.4 AuditLog verification (reference Tasks 4.2, 6.5, 6.6, 6.7 — not removed 5.1)
 - [ ] 9.5 File upload validation re-check
 
 ## Phase 10 — Production Deployment

@@ -11,3 +11,232 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Role {
+  ADMIN
+  OWNER
+  TENANT
+}
+
+// Who was billed for a given MaintenanceRecord's month. Deliberately not the same
+// enum as Role (ADMIN is never a billing payer type).
+enum PayerType {
+  OWNER
+  TENANT
+}
+
+// A MaintenanceRecord's payment state. Renamed from the original InvoiceStatus now
+// that MaintenanceRecord itself is the payable unit (quarterly Invoice bundling was
+// dropped — see CLAUDE.md's pivot note).
+enum PaymentStatus {
+  UNPAID
+  PENDING_REVIEW
+  PAID
+}
+
+enum ProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
+// see CLAUDE.md out-of-scope list). Modeled as an enum now so adding a channel later
+// is a one-line change, not a migration to a previously-untyped string column.
+enum NotificationChannel {
+  EMAIL
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+}
+
+model Society {
+  id   String @id @default(cuid())
+  name String
+  address String
+
+  // UPI payment address QR codes are generated against (Task 6.1). Required — a
+  // society can't be onboarded without a way to actually collect payment.
+  upiVpa String
+
+  // The tenant-occupied billing multiplier (rule 1: "have this factor configurable,
+  // could be 1.7x or 2x etc."). Owner-occupied always bills at 1x the flat's baseRate;
+  // this only applies when payerType=TENANT. @db.Decimal(3,2) allows up to 9.99, far
+  // more headroom than needed for a realistic multiplier.
+  tenantRateFactor Decimal @default(1.5) @db.Decimal(3, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+  flats Flat[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?  @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  ownedFlats         Flat[]              @relation("FlatOwner")
+  currentTenantFlats Flat[]              @relation("FlatCurrentTenant")
+  occupancyChanges   OccupancyChange[]
+  uploadedProofs     PaymentProof[]      @relation("ProofUploader")
+  reviewedProofs     PaymentProof[]      @relation("ProofReviewer")
+  auditLogs          AuditLog[]
+  billedRecords      MaintenanceRecord[]
+
+  @@index([societyId])
+}
+
+model Flat {
+  id         String   @id @default(cuid())
+  block      String
+  flatNumber String
+  baseRate   Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  ownerId String
+  owner   User   @relation("FlatOwner", fields: [ownerId], references: [id])
+
+  currentTenantId String?
+  currentTenant   User?   @relation("FlatCurrentTenant", fields: [currentTenantId], references: [id])
+
+  occupancyChanges   OccupancyChange[]
+  maintenanceRecords MaintenanceRecord[]
+
+  @@unique([societyId, block, flatNumber])
+  @@index([societyId])
+}
+
+// Records a tenant's occupancy period on a flat. Absence of a row covering a given
+// date means the flat was owner-occupied on that date — owner-occupied periods are
+// implicit, not stored. effectiveEnd is null while the tenancy is still ongoing.
+model OccupancyChange {
+  id             String    @id @default(cuid())
+  effectiveStart DateTime
+  effectiveEnd   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  flatId String
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id])
+
+  @@index([flatId])
+  @@index([tenantId])
+}
+
+// One row per flat per calendar month — the single payable unit (quarterly Invoice
+// bundling was dropped; see CLAUDE.md's pivot note). period is "YYYY-MM". Becomes
+// payable immediately once generated: status starts UNPAID, dueDate is set at
+// generation time (Task 4.2). A resident may select any combination of their UNPAID
+// records to settle in one payment (Task 6.x) — each record stays a clean binary
+// paid/unpaid state, never partially paid. Unique on [flatId, period] enforces
+// "exactly 12 records/flat/year, never duplicated" at the database level, backing up
+// the idempotency Task 4.2 requires of the monthly generation job.
+model MaintenanceRecord {
+  id        String        @id @default(cuid())
+  period    String
+  payerType PayerType
+  amount    Decimal       @db.Decimal(10, 2)
+  status    PaymentStatus @default(UNPAID)
+  dueDate   DateTime
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  flatId String
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  // The SPECIFIC user billed this month — resolved once at generation time (Task
+  // 4.1/4.2) from occupancy history, not re-derived later from Flat.currentTenantId.
+  // currentTenantId only reflects *current* occupancy, so once a flat's tenant
+  // changes again after this record's month, currentTenantId would silently point at
+  // the wrong (new) tenant for this historical record. payerId is the one place every
+  // later consumer (notifications, payment display, audit) should look, so the
+  // majority-of-days-with-tiebreak resolution logic lives in exactly one place.
+  payerId String
+  payer   User   @relation(fields: [payerId], references: [id])
+
+  paymentProofs PaymentProof[]
+
+  @@unique([flatId, period])
+  @@index([flatId])
+  @@index([status])
+  @@index([payerId])
+}
+
+// One proof can cover multiple resident-selected MaintenanceRecords (implicit
+// many-to-many — Prisma manages the join table). uploadedBy is always the resident;
+// reviewedBy/reviewedAt are set only once an admin acts (approve/reject), so both are
+// optional. adminNote is typically set on reject (a reason), optional either way.
+model PaymentProof {
+  id         String      @id @default(cuid())
+  fileUrl    String
+  status     ProofStatus @default(PENDING)
+  adminNote  String?
+  reviewedAt DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  uploadedById String
+  uploadedBy   User   @relation("ProofUploader", fields: [uploadedById], references: [id])
+
+  reviewedById String?
+  reviewedBy   User?   @relation("ProofReviewer", fields: [reviewedById], references: [id])
+
+  maintenanceRecords MaintenanceRecord[]
+
+  @@index([uploadedById])
+  @@index([status])
+}
+
+// channel/recipient/status describe the send attempt itself. relatedEntityType +
+// relatedEntityId are a lightweight polymorphic reference (Postgres has no native
+// polymorphic FK) — a notification can be about a MaintenanceRecord (generated),
+// a PaymentProof (submitted/approved/rejected), etc. No FK constraint on purpose:
+// the entity type varies per notification.
+model NotificationLog {
+  id                String              @id @default(cuid())
+  channel           NotificationChannel
+  recipient         String
+  status            NotificationStatus
+  relatedEntityType String
+  relatedEntityId   String
+  createdAt         DateTime            @default(now())
+
+  @@index([relatedEntityType, relatedEntityId])
+}
+
+// actorId is nullable — some audited actions are system-initiated (e.g. the monthly
+// generation cron, Task 4.2), not performed by any human User. entityType/entityId
+// use the same lightweight polymorphic pattern as NotificationLog, for the same
+// reason (audited entities vary: MaintenanceRecord, PaymentProof, etc.).
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+}

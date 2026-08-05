@@ -1,16 +1,33 @@
 # CLAUDE.md — Housing Society Management (MVP)
 
 Persistent project rules. Read in full before starting any task. Source of truth for
-business rules is `docs/requirements.md` (mirrors the original requirements doc); this
-file exists to keep the rules and confirmed decisions in context during implementation.
-The phase/task breakdown lives in the task tracker (task-prompts) — 11 phases (0–10),
-51 tasks — and is authoritative for what to build next and in what order.
+business rules is `docs/requirements.md` (mirrors the original requirements doc), as
+amended by the pivot below — this file exists to keep the rules and confirmed decisions
+in context during implementation. The phase/task breakdown lives in the task tracker
+**`task-prompts-v1`** (supersedes the original `task-prompts` — the original quarterly
+invoicing design is preserved there for history but is no longer current) — 11 phases
+(0–10), authoritative for what to build next and in what order. Phase 5 (originally
+"quarterly invoicing") is dissolved; its tasks are marked `REMOVED` in the tracker, with
+their remaining useful concerns folded into Phase 4 and Phase 8.
+
+### Pivot (2026-08-05): quarterly `Invoice` bundling dropped
+
+Original design: `MaintenanceRecord`s were monthly/accrual-only, bundled 3-at-a-time
+into a quarterly `Invoice`, which was the only payable entity. **This has been
+replaced**: `MaintenanceRecord` is now independently payable immediately after
+generation — no bundling, no quarter to wait for. A resident sees their live
+outstanding balance (however many unpaid months exist) and may select any combination
+of unpaid records to settle in a single payment. Every record stays a clean
+paid/unpaid binary; "partial payment" means *selecting a subset of records*, never
+splitting one record's amount. The business rules below reflect the current (post-pivot)
+design; see `docs/data-model.md`'s pivot note and `task-prompts-v1` for full reasoning.
 
 ## Project overview
 
 Web app for a single residential housing society's committee: flat onboarding, monthly
-maintenance accrual, quarterly invoicing, UPI-based payment collection with manual proof
-verification, and email notifications including overdue-dues escalation.
+maintenance accrual (independently payable per month, see pivot note above), UPI-based
+payment collection with manual proof verification, and email notifications including
+overdue-dues escalation.
 
 - Initial scale: one society, ~24 flats. Schema must not require a rewrite to onboard a
   second society later, but multi-society UX (society switching, cross-society admin) is
@@ -31,28 +48,35 @@ verification, and email notifications including overdue-dues escalation.
 2. **Occupancy is tracked historically** via `OccupancyChange`, not a single current flag
    — a flat's occupancy can change mid-quarter and past billing periods must retain the
    rate that actually applied at the time.
-3. **Maintenance records are monthly, accrual-only, never independently payable.** One
-   record per flat per calendar month, storing the rate/amount/payer type for that month.
-4. **Invoices are quarterly and the only payable entity.** Every 3 months, bundle the 3
-   most recent un-invoiced maintenance records for a flat into one invoice. Total = sum
-   of those 3 records (not a flat multiplication), since payer type may differ per month
-   within the quarter.
-5. **Cadence**: exactly 12 maintenance records and 4 invoices per flat per year.
-6. **Payment is all-or-nothing per invoice.** No partial payments in this phase.
+3. **Maintenance records are monthly and independently payable.** One record per flat
+   per calendar month, storing the rate/amount/payer type for that month. Payable
+   immediately once generated — `status` starts `UNPAID` with a `dueDate` set at
+   generation time (§ Pivot above).
+4. **A resident's "outstanding balance" is the live sum of their unpaid records** —
+   however many months are currently unpaid, no quarterly grouping. There is no
+   separate bundling entity.
+5. **Cadence**: exactly 12 maintenance records per flat per year (one per month).
+6. **Payment is all-or-nothing per record, but selection-based across records.** No
+   record is ever partially paid. A resident may select any combination of their
+   currently-unpaid records to settle in one payment; on approval, every selected
+   record flips to `PAID` together in one transaction — no partial-cascade state.
+   Unselected records are untouched and remain outstanding.
 7. **Payment method (this phase): UPI QR + manual proof verification.** No payment
    gateway integration (that's Phase 2, out of scope here). Flow:
-   - Resident views unpaid invoice → sees QR encoding a UPI deep link (amount + reference
-     pre-filled).
-   - Resident pays via any UPI app, uploads screenshot/PDF as proof.
-   - Invoice status → `PENDING_REVIEW`.
-   - Admin approves (→ `PAID`, cascades to all 3 linked maintenance records, one
-     transaction) or rejects (→ reverts to `UNPAID`, resident notified with optional
-     reason, must re-upload).
-   - Admin manual "mark as paid" fallback for cash/bank-transfer, logged distinctly in
-     the audit trail (separate from QR-flow approvals).
-8. **Escalation**: invoice unpaid past due date + grace period → flat flagged. System
-   computes outstanding total and prepares a message; admin manually shares it (no
-   auto-post to WhatsApp — see out-of-scope list, compliance risk).
+   - Resident views outstanding balance (all unpaid records) → selects any subset to
+     pay → sees a QR encoding a UPI deep link for the sum of the selection.
+   - Resident pays via any UPI app, uploads screenshot/PDF as proof — one proof, linked
+     to all selected records (many-to-many).
+   - Every selected record's status → `PENDING_REVIEW`.
+   - Admin approves (→ all selected records `PAID`, one transaction) or rejects (→ all
+     selected records revert to `UNPAID`, resident notified with optional reason, must
+     re-upload).
+   - Admin manual "mark as paid" fallback for cash/bank-transfer (accepts a list of
+     records), logged distinctly in the audit trail (separate from QR-flow approvals).
+8. **Escalation**: a maintenance record unpaid past due date + grace period → flat
+   flagged. System computes outstanding total (across all that flat's unpaid records)
+   and prepares a message; admin manually shares it (no auto-post to WhatsApp — see
+   out-of-scope list, compliance risk).
 9. **Notifications are email-only this phase.** WhatsApp Business API is Phase 2.
 
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
@@ -63,7 +87,8 @@ verification, and email notifications including overdue-dues escalation.
   in 28- or 30-day months), **the status active on the last day of the month wins.**
   Example: owner-occupied Aug 1–10, tenant Aug 11–31 → tenant has majority (21 vs 10
   days) → whole month billed at tenant rate.
-- **Invoice due date**: generation date + 15 days.
+- **MaintenanceRecord due date**: generation date + 15 days (was "Invoice due date"
+  pre-pivot — same default value, now attached to the record itself).
 - **Escalation grace period**: 7 days past due date (configurable).
 - **Test runner**: Vitest for both `server/` and `client/` (Task 0.1 leaves this open;
   chosen for a single toolchain — `client/`'s React Testing Library setup needs Vitest
@@ -73,25 +98,25 @@ verification, and email notifications including overdue-dues escalation.
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| Society | name, address | Root tenant entity |
+| Society | name, address, upiVpa, tenantRateFactor (default 1.5) | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | block, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
-| MaintenanceRecord | flatId, period, payerType, amount, invoiceId (nullable) | Monthly |
-| Invoice | flatId, quarter, totalAmount, status, dueDate | Quarterly, only payable entity |
-| PaymentProof | invoiceId, uploadedBy, fileUrl, status, adminNote, reviewedBy/At | |
+| MaintenanceRecord | flatId, period, payerType, payerId, amount, status, dueDate | Monthly, independently payable — the sole payable entity. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
+| PaymentProof | uploadedBy, fileUrl, status, adminNote, reviewedBy/At | Many-to-many with MaintenanceRecord — one proof can cover several selected records |
 | NotificationLog | channel, recipient, status, linked entity | |
 | AuditLog | actor, action, entity, timestamp, note | Financial action trail |
 
-3 MaintenanceRecord rows link to 1 Invoice via `invoiceId`. Invoice status cascades to
-linked records on payment.
+No `Invoice` entity (removed in the pivot). A `PaymentProof` can link to any number of
+`MaintenanceRecord`s a resident selected for one payment; approval cascades `PAID` to
+all of them together, in one transaction.
 
 ## Non-functional requirements
 
 - **Correctness over scale** — 24-flat MVP; do not over-engineer for multi-tenant scale,
   concurrency, or data volume.
-- **Idempotency mandatory** for monthly and quarterly generation jobs — re-running for
-  the same period/quarter must never duplicate records or invoices.
+- **Idempotency mandatory** for the monthly generation job — re-running for the same
+  period must never duplicate records.
 - **Financial data isolation** — proof files and billing data never accessible
   cross-society or to the wrong resident.
 - **Auditability** — every state-changing financial action leaves an audit trail.

@@ -1,8 +1,8 @@
 # Onboarding — getting the stack running locally
 
 Exact steps to go from a clean checkout to a verified, working local stack. This file
-grows through later phases (seed data, auth, the full billing/payment walkthrough) —
-right now (end of Phase 0) it covers infra only, since no real features exist yet.
+grows through later phases (auth, the full billing/payment walkthrough) — it currently
+covers infra, database setup, and seed data (through end of Phase 1).
 
 ## Prerequisites
 
@@ -67,7 +67,39 @@ Backend tests need a reachable Postgres — either the Docker Compose one (if `s
 points at `localhost:5432`, which the Compose stack publishes to) or your own local
 instance.
 
-## 5. Common gotchas (read before assuming something's broken)
+## 5. Seeding local dev data
+
+```sh
+cd server
+npx prisma db seed
+```
+
+Runs `prisma/seed.ts` against whatever `DATABASE_URL` points to. **Idempotent** —
+safe to run repeatedly; if the seed society already exists it logs "already exists,
+skipping" and does nothing further, rather than duplicating data.
+
+Creates one society, **"Sunrise Residency"**, with:
+
+| | Count | Details |
+|---|---|---|
+| Users | 10 | 1 admin, 5 owners, 4 tenants |
+| Flats | 5 | A-101, A-102 (owner-occupied, never had a tenant), A-103 (currently tenant-occupied), B-201 (currently tenant-occupied, **with occupancy history** — a prior tenant moved out before the current one moved in), B-202 (currently owner-occupied, but **had** a tenant who moved out) |
+| OccupancyChange rows | 4 | Deliberately includes both "still ongoing" (`effectiveEnd: null`) and "ended" (`effectiveEnd` set) rows, and one flat (B-201) with 2 rows — a real mid-history case, not just current state |
+
+**Login for every seeded user**: password `password123` (real bcrypt hash, not a
+placeholder — these accounts will actually work once Phase 2's login lands). Emails
+follow `<firstname>@sunrise.test`, e.g. `admin@sunrise.test`, `alice@sunrise.test`,
+`dave@sunrise.test`. Full list and each flat's owner/tenant mapping: `prisma/seed.ts`.
+
+Why real password hashes now, ahead of Phase 2: this seed data is meant to serve every
+later phase's testing, including login — generating it once with real hashes avoids
+re-seeding once auth exists.
+
+To reset and reseed from scratch: `npx prisma migrate reset` (interactive — asks for
+confirmation, since it wipes the database; **never** run this non-interactively or
+against anything other than a local dev database).
+
+## 6. Common gotchas (read before assuming something's broken)
 
 - **`frontend` shows `Exited (0)`, not `Up`** — expected. It's a build-only container;
   see `docs/docker-compose.md`.
