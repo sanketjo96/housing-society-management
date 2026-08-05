@@ -265,3 +265,70 @@ token. `400` on invalid input.
   undermine the point. Verified with a dedicated test: log in (real refresh token
   issued) → reset password again → assert no unrevoked refresh token remains for that
   user.
+
+## Role-guard middleware — `requireRole([...roles])`
+
+`src/middleware/require-role.ts`. This is what finally enforces the `TODO` that's
+been sitting in `admin-users.route.ts` since Task 2.1 — that route had zero
+server-side protection until this task.
+
+### How to protect a new route
+
+```ts
+import { requireRole } from '../middleware/require-role';
+
+router.post('/api/some/admin/thing', requireRole(['ADMIN']), someHandler);
+router.get('/api/some/shared/thing', requireRole(['ADMIN', 'OWNER', 'TENANT']), otherHandler);
+```
+
+Pass the middleware *before* the controller handler, with the list of roles allowed to
+reach it. Multiple roles are fine — pass everyone who should be let through.
+
+### What it actually does, in order
+
+1. **No `Authorization` header, or not in `Bearer <token>` form → `401`.** Can't even
+   attempt to know who's asking.
+2. **Token doesn't verify against `JWT_ACCESS_SECRET`, or has expired → `401`.**
+   `jwt.verify` throws for both cases (bad signature and expiry are the same failure
+   mode from the caller's perspective) — deliberately mapped to the same status/error,
+   not distinguished, since there's no legitimate reason a client needs to tell those
+   apart.
+3. **Token is valid, but decoded `role` isn't in the allowed list → `403`.** This is
+   the one case that's genuinely different from step 2 — we know *exactly* who this
+   is, they're just not allowed here. That distinction (401 vs 403) is why this can't
+   be a single "isAuthenticated" check — role has to be evaluated per-route.
+4. **Token is valid and the role is allowed → `req.user = { id, role, societyId }` is
+   set, then `next()`.** Every downstream controller can read `req.user` directly
+   (TypeScript knows about this field via a `declare global` block augmenting
+   Express's `Request` interface, right in `require-role.ts` — no casting needed
+   anywhere it's used).
+
+### Why one function does both authentication and authorization
+
+They're normally separate concerns, but here they can't be split into two
+middlewares cleanly: you cannot evaluate a role without first successfully decoding a
+valid token, so "verify the token" and "check the role" are inherently sequential
+steps of one operation, not two independent ones that happen to run back-to-back.
+
+### Why `req.user` matters beyond this task
+
+`societyId` on `req.user` is exactly what Task 2.6's tenant-scoping middleware will
+read to enforce "every query is scoped to the requester's own society" — this task
+is what makes that possible, by putting a verified `societyId` somewhere every later
+handler can trust.
+
+### Verified two ways, not just unit-tested
+
+- `tests/middleware/require-role.test.ts` — the middleware in isolation (mocked
+  req/res/next, hand-crafted JWTs for each case: missing header, malformed header,
+  bad signature, expired, wrong role, correct role, multi-role allow-list). No HTTP,
+  no database.
+- `tests/routes/admin-users.test.ts` — updated to actually log in as a real seeded
+  admin and a real seeded owner, using the genuine tokens those logins produce, then
+  asserting the full request cycle through the real route: no token → `401`, owner
+  token → `403`, admin token → `201`. Applying `requireRole` broke these tests
+  immediately (they previously sent no `Authorization` header at all) — expected,
+  and fixed by adding real login-derived tokens, not by weakening the middleware.
+- Also checked directly against the live Docker stack (not just Vitest): a raw
+  `curl` with no token against `/api/admin/users` returns `401`; the same request
+  with the seeded admin's real token returns `201`.

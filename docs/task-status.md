@@ -28,7 +28,7 @@ the source of truth for build progress since it lives in git.
 - [x] 2.2 Login and JWT issuance
 - [x] 2.3 Refresh token and logout
 - [x] 2.4 Password reset flow
-- [ ] 2.5 Role-guard middleware
+- [x] 2.5 Role-guard middleware
 - [ ] 2.6 Tenant-scoping middleware
 - [ ] 2.7 Frontend login page
 - [ ] 2.8 Protected routes and auth context
