@@ -6,6 +6,7 @@ import {
   login,
   logout,
   refreshAccessToken,
+  REFRESH_TOKEN_TTL_DAYS,
 } from '../services/auth.service';
 
 const loginSchema = z.object({
@@ -13,9 +14,27 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1),
-});
+const REFRESH_COOKIE_NAME = 'refreshToken';
+// Scoped to /api/auth — the only paths that ever need to read it — rather than the
+// whole site, so it's never accidentally sent on unrelated requests.
+const REFRESH_COOKIE_PATH = '/api/auth';
+
+// GOTCHA (found via a real end-to-end check against the live public IP, not assumed):
+// this must NOT be tied to NODE_ENV. NODE_ENV is already "production" in the deployed
+// Docker stack, but there's no HTTPS yet — Certbot SSL is Task 10.2, not built. A
+// `Secure` cookie is never sent back by a real browser over plain HTTP except for the
+// special `localhost` exception (which made this look fine when first tested against
+// `http://localhost/` — it silently broke `/api/auth/refresh` the moment the same
+// test ran against the real public IP instead). Driven by its own explicit env var
+// so it can't accidentally piggyback on NODE_ENV again. Task 10.2 must set
+// COOKIE_SECURE=true once real HTTPS exists — until then, this defaults to false.
+const refreshCookieOptions = {
+  httpOnly: true, // never readable by JS — the entire point (Task 2.7's "httpOnly cookie preferred")
+  secure: process.env.COOKIE_SECURE === 'true',
+  sameSite: 'lax' as const,
+  path: REFRESH_COOKIE_PATH,
+  maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+};
 
 export async function loginHandler(req: Request, res: Response) {
   const parsed = loginSchema.safeParse(req.body);
@@ -25,8 +44,9 @@ export async function loginHandler(req: Request, res: Response) {
   }
 
   try {
-    const result = await login(parsed.data);
-    res.status(200).json(result);
+    const { accessToken, refreshToken, user } = await login(parsed.data);
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions);
+    res.status(200).json({ accessToken, user });
   } catch (err) {
     if (err instanceof InvalidCredentialsError) {
       res.status(401).json({ error: err.message });
@@ -37,14 +57,14 @@ export async function loginHandler(req: Request, res: Response) {
 }
 
 export async function refreshHandler(req: Request, res: Response) {
-  const parsed = refreshTokenSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+  const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+  if (typeof refreshToken !== 'string' || refreshToken.length === 0) {
+    res.status(401).json({ error: 'Missing refresh token cookie' });
     return;
   }
 
   try {
-    const result = await refreshAccessToken(parsed.data.refreshToken);
+    const result = await refreshAccessToken(refreshToken);
     res.status(200).json(result);
   } catch (err) {
     if (err instanceof InvalidRefreshTokenError) {
@@ -56,12 +76,10 @@ export async function refreshHandler(req: Request, res: Response) {
 }
 
 export async function logoutHandler(req: Request, res: Response) {
-  const parsed = refreshTokenSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-    return;
+  const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+  if (typeof refreshToken === 'string' && refreshToken.length > 0) {
+    await logout(refreshToken);
   }
-
-  await logout(parsed.data.refreshToken);
+  res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
   res.status(200).json({ message: 'Logged out' });
 }

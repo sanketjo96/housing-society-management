@@ -30,7 +30,7 @@ the source of truth for build progress since it lives in git.
 - [x] 2.4 Password reset flow
 - [x] 2.5 Role-guard middleware
 - [x] 2.6 Tenant-scoping middleware
-- [ ] 2.7 Frontend login page
+- [x] 2.7 Frontend login page
 - [ ] 2.8 Protected routes and auth context
 
 ## Phase 3 — Flat & Society Onboarding

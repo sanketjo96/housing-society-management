@@ -90,13 +90,28 @@ credential check and token issuance).
 
 **Request body**: `{ "email": "...", "password": "..." }`.
 
-**Response**: `200` with `{ accessToken, refreshToken, user }` (`user` excludes `passwordHash`,
-built as an explicit field-by-field object in the service rather than a
-destructure-and-omit — avoids relying on lint config to catch an accidentally-unused
-`passwordHash` variable). `401` for *either* a nonexistent email *or* a wrong
-password — deliberately the same status and message (`InvalidCredentialsError`,
-"Invalid email or password") for both cases, so the response can't be used to
-enumerate which emails have accounts. `400` on invalid input.
+**Response**: `200` with `{ accessToken, user }` in the JSON body (`user` excludes
+`passwordHash`, built as an explicit field-by-field object in the service rather than
+a destructure-and-omit — avoids relying on lint config to catch an
+accidentally-unused `passwordHash` variable) — **plus the refresh token, set as an
+`httpOnly` cookie, never in the JSON body at all** (changed in Task 2.7; see below).
+`401` for *either* a nonexistent email *or* a wrong password — deliberately the same
+status and message (`InvalidCredentialsError`, "Invalid email or password") for both
+cases, so the response can't be used to enumerate which emails have accounts. `400` on
+invalid input.
+
+> **Transport changed in Task 2.7.** The `login()`/`refreshAccessToken()`/`logout()`
+> *service* functions (`src/services/auth.service.ts`) are unchanged from Tasks
+> 2.2/2.3 — they still just take/return a plain token string, no knowledge of
+> HTTP. Only the *controller* (`src/controllers/auth.controller.ts`) changed: it now
+> sets the refresh token via `res.cookie('refreshToken', ..., { httpOnly: true, ... })`
+> instead of including it in the JSON body, and `refresh`/`logout` now read it from
+> `req.cookies.refreshToken` instead of `req.body.refreshToken`. This is the concrete
+> payoff of the route/controller/service split (`CLAUDE.md`) — the business logic
+> didn't need touching at all, only the HTTP-facing plumbing around it. Full reasoning
+> (why httpOnly, why this was worth reworking already-tested endpoints, and a real bug
+> this surfaced) is in `docs/frontend-setup.md`'s "Auth flow, from the frontend's
+> perspective" section — this doc stays focused on the backend contract itself.
 
 **Token format**: HS256 JWT, signed with `JWT_ACCESS_SECRET` (env var — see
 `.env.example` for both the root and `server/` copies; `docker-compose.yml` passes it

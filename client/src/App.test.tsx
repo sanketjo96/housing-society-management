@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react'
 import App from './App'
 
 describe('App', () => {
-  it('renders the placeholder page', () => {
+  it('redirects to the login page by default', () => {
     render(<App />)
-    expect(screen.getByText('Housing Society Management')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /log in/i })).toBeInTheDocument()
   })
 })

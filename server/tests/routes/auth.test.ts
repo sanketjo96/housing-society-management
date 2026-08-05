@@ -34,12 +34,26 @@ describe('POST /api/auth/login', () => {
     await prisma.$disconnect();
   });
 
-  it('returns a JWT for correct credentials', async () => {
+  it('returns a JWT for correct credentials, refresh token set as an httpOnly cookie (not in the body)', async () => {
     const res = await request(app).post('/api/auth/login').send({ email, password });
     expect(res.status).toBe(200);
     expect(typeof res.body.accessToken).toBe('string');
     expect(res.body.user.email).toBe(email);
     expect(res.body.user).not.toHaveProperty('passwordHash');
+    expect(res.body).not.toHaveProperty('refreshToken');
+
+    const setCookie = res.headers['set-cookie'] as unknown as string[];
+    const refreshCookie = setCookie.find((c) => c.startsWith('refreshToken='));
+    expect(refreshCookie).toBeDefined();
+    expect(refreshCookie).toContain('HttpOnly');
+    expect(refreshCookie).toContain('Path=/api/auth');
+
+    // Locks in a real bug found via manual end-to-end testing: this must default to
+    // NOT Secure, since there's no HTTPS yet (Task 10.2) — a Secure cookie is silently
+    // dropped by real browsers over plain HTTP (except for a `localhost`-only
+    // exception, which is exactly what made this look fine at first). Only
+    // COOKIE_SECURE=true should ever add the Secure attribute.
+    expect(refreshCookie).not.toContain('Secure');
   });
 
   it('returns 401 for an incorrect password', async () => {

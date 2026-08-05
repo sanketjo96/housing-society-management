@@ -44,4 +44,22 @@ else
   fail=1
 fi
 
+echo "--- frontend bundle: no leaked dev-only URLs (Task 2.7 regression check) ---"
+# A dev-only client/.env (VITE_API_BASE_URL=http://localhost:3000, for running
+# server/ and client/ as separate local processes) once leaked into the production
+# Docker build because client/.dockerignore didn't exclude .env — Vite bakes env vars
+# into the bundle at build time, so the deployed app tried calling localhost:3000 in
+# every visitor's own browser instead of the real backend. Fixed by excluding .env
+# from the build context; this check catches it if it ever regresses.
+bundle_path=$(curl -s http://localhost/ | grep -oE 'src="[^"]*\.js"' | head -1 | sed 's/src="//;s/"//')
+if [ -z "$bundle_path" ]; then
+  echo "FAIL: could not find the frontend's JS bundle path in the served HTML"
+  fail=1
+elif curl -s "http://localhost${bundle_path}" | grep -q "localhost:3000"; then
+  echo "FAIL: frontend bundle contains 'localhost:3000' — a dev-only env value leaked into the production build"
+  fail=1
+else
+  echo "OK: frontend bundle does not contain dev-only localhost:3000"
+fi
+
 exit $fail

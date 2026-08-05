@@ -26,7 +26,10 @@ export interface LoginInput {
 }
 
 const ACCESS_TOKEN_TTL = '15m';
-const REFRESH_TOKEN_TTL_DAYS = 7;
+// Exported so the controller can set the httpOnly cookie's maxAge from the same
+// source of truth, rather than a second hardcoded 7 that could silently drift from
+// this one.
+export const REFRESH_TOKEN_TTL_DAYS = 7;
 
 function signAccessToken(user: { id: string; role: Role; societyId: string }): string {
   const secret = process.env.JWT_ACCESS_SECRET;
