@@ -89,6 +89,17 @@ export async function login({ email, password }: LoginInput) {
   };
 }
 
+// "Who am I" for the frontend's silent-session-restore flow (Task 2.8): /api/auth/refresh
+// only returns a fresh access token, not the user — the frontend calls this
+// immediately afterward (with that new token) to get the full profile needed to
+// populate the auth context on page load, without asking the user to log in again.
+export async function getCurrentUser(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, phone: true, role: true, societyId: true },
+  });
+}
+
 export async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
   const stored = await prisma.refreshToken.findUnique({
     where: { tokenHash: hashToken(refreshToken) },

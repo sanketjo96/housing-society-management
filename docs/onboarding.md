@@ -99,7 +99,35 @@ To reset and reseed from scratch: `npx prisma migrate reset` (interactive — as
 confirmation, since it wipes the database; **never** run this non-interactively or
 against anything other than a local dev database).
 
-## 6. Common gotchas (read before assuming something's broken)
+## 6. Logging in and what roles unlock which pages (Task 2.8)
+
+Frontend routes are gated by `ProtectedRoute` (`client/src/components/ProtectedRoute.tsx`),
+reading auth state from `AuthContext` (`client/src/context/AuthContext.tsx`).
+
+| Route | Who can see it |
+|---|---|
+| `/login` | Anyone (no auth required) |
+| `/dashboard` | Any authenticated user — `ADMIN`, `OWNER`, or `TENANT` |
+| `/admin` | `ADMIN` only — a minimal example page; `OWNER`/`TENANT` see "Access denied," not a redirect |
+| `/` | Redirects to `/dashboard`, which itself redirects to `/login` if you're not signed in |
+
+**To try it locally**: bring the stack up (§2), open `http://<host>/`, log in with any
+seeded account (§5) — e.g. `admin@sunrise.test` / `password123` for full access
+including `/admin`, or `alice@sunrise.test` / `password123` (an `OWNER`) to see
+`/dashboard` work but `/admin` show "Access denied."
+
+**What happens on page load, before you're redirected anywhere**: `AuthContext` tries
+a silent session restore — calls `POST /api/auth/refresh` (using the httpOnly
+refresh-token cookie from your last login, if any is still valid) and, if that
+succeeds, `GET /api/auth/me` for your profile. `ProtectedRoute` shows "Loading…"
+during this brief window rather than redirecting prematurely — so refreshing the page
+after logging in keeps you logged in, without the login form flashing first.
+
+**Logging out**: the Dashboard page has a working "Log out" button — calls
+`POST /api/auth/logout` (revokes the refresh token server-side), clears local auth
+state, and any protected route you're on will redirect to `/login` on its next render.
+
+## 7. Common gotchas (read before assuming something's broken)
 
 - **`frontend` shows `Exited (0)`, not `Up`** — expected. It's a build-only container;
   see `docs/docker-compose.md`.

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
+  getCurrentUser,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
   login,
@@ -82,4 +83,17 @@ export async function logoutHandler(req: Request, res: Response) {
   }
   res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
   res.status(200).json({ message: 'Logged out' });
+}
+
+export async function meHandler(req: Request, res: Response) {
+  // req.user is always set — requireRole runs first on this route (see auth.route.ts).
+  const user = await getCurrentUser(req.user!.id);
+  if (!user) {
+    // Token is valid but the user row is gone — theoretically possible, not reachable
+    // in this MVP (no user-deletion feature exists), but a real user account must
+    // never be assumed to still exist just because their token verified.
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  res.status(200).json(user);
 }
