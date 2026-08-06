@@ -4,6 +4,8 @@ import { getSocietySettings, updateSocietySettings } from '../services/society-s
 
 // Matches Society.tenantRateFactor's @db.Decimal(3,2) column headroom (up to 9.99).
 const updateSettingsSchema = z.object({
+  name: z.string().min(1, 'Society name is required').optional(),
+  upiVpa: z.string().min(1, 'UPI ID is required').optional(),
   tenantRateFactor: z.coerce.number().positive().max(9.99).optional(),
   defaultBaseRate: z.coerce.number().positive().optional(),
 });

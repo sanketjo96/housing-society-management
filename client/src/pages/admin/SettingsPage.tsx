@@ -1,13 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Settings as SettingsIcon } from 'lucide-react';
+import { Building2, Check, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
+import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 
 export interface SocietySettings {
+  name: string;
+  upiVpa: string;
   tenantRateFactor: number;
   defaultBaseRate: number;
 }
@@ -21,6 +23,8 @@ export async function fetchSettings(): Promise<SocietySettings> {
 }
 
 const settingsFormSchema = z.object({
+  name: z.string().min(1, 'Society name is required'),
+  upiVpa: z.string().min(1, 'UPI ID is required'),
   defaultBaseRate: z.coerce.number().positive('Default base rate must be a positive number'),
   tenantRateFactor: z.coerce
     .number()
@@ -42,14 +46,21 @@ export function SettingsPage() {
     formState: { errors, isDirty },
   } = useForm<SettingsFormInput, unknown, SettingsFormValues>({
     resolver: zodResolver(settingsFormSchema),
-    defaultValues: { defaultBaseRate: undefined, tenantRateFactor: undefined },
+    defaultValues: { name: '', upiVpa: '', defaultBaseRate: undefined, tenantRateFactor: undefined },
   });
 
   // Form fields can't be pre-filled until the GET resolves, so sync them in once data
   // arrives — same pattern as every other edit form in this app (e.g. FlatForm), just
   // deferred a tick here since this page has no separate "loaded flat" prop to key off.
   useEffect(() => {
-    if (data) reset({ defaultBaseRate: data.defaultBaseRate, tenantRateFactor: data.tenantRateFactor });
+    if (data) {
+      reset({
+        name: data.name,
+        upiVpa: data.upiVpa,
+        defaultBaseRate: data.defaultBaseRate,
+        tenantRateFactor: data.tenantRateFactor,
+      });
+    }
   }, [data, reset]);
 
   const mutation = useMutation<SocietySettings, Error, SettingsFormValues>({
@@ -61,7 +72,12 @@ export function SettingsPage() {
     },
     onSuccess: (settings) => {
       queryClient.setQueryData(['society-settings'], settings);
-      reset({ defaultBaseRate: settings.defaultBaseRate, tenantRateFactor: settings.tenantRateFactor });
+      reset({
+        name: settings.name,
+        upiVpa: settings.upiVpa,
+        defaultBaseRate: settings.defaultBaseRate,
+        tenantRateFactor: settings.tenantRateFactor,
+      });
     },
   });
 
@@ -87,6 +103,24 @@ export function SettingsPage() {
           noValidate
           className="rounded-2xl border border-line bg-white p-6"
         >
+          <SectionHeader icon={Building2} title="Society details" />
+
+          <Field label="Society name">
+            <input className={inputClass} {...register('name')} />
+            {errors.name && <ErrMsg>{errors.name.message}</ErrMsg>}
+          </Field>
+
+          <Field label="UPI ID (VPA)">
+            <input className={inputClass} placeholder="society-name@bank" {...register('upiVpa')} />
+            {errors.upiVpa && <ErrMsg>{errors.upiVpa.message}</ErrMsg>}
+          </Field>
+          <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
+            The UPI address residents' payment QR codes encode. Update this whenever the society's
+            collection account changes — takes effect on the very next QR a resident generates.
+          </p>
+
+          <Divider />
+
           <SectionHeader icon={SettingsIcon} title="Billing defaults" />
 
           <Field label="Default base rate (₹ / month)">

@@ -77,7 +77,12 @@ describe('/api/admin/settings', () => {
   it('returns the current settings for an admin', async () => {
     const res = await request(app).get('/api/admin/settings').set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ tenantRateFactor: 1.5, defaultBaseRate: 1500 });
+    expect(res.body).toEqual({
+      name: `Settings Route Society ${suffix}`,
+      upiVpa: 'settings-route@okhdfcbank',
+      tenantRateFactor: 1.5,
+      defaultBaseRate: 1500,
+    });
   });
 
   it('rejects a non-positive tenantRateFactor with a 400', async () => {
@@ -88,13 +93,32 @@ describe('/api/admin/settings', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects an empty society name with a 400', async () => {
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: '' });
+    expect(res.status).toBe(400);
+  });
+
+  it('updates the society name and UPI ID', async () => {
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Renamed via API', upiVpa: 'renamed-via-api@upi' });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Renamed via API');
+    expect(res.body.upiVpa).toBe('renamed-via-api@upi');
+  });
+
   it('updates settings, and generation immediately reflects the new values end to end', async () => {
     const updateRes = await request(app)
       .patch('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ tenantRateFactor: 2, defaultBaseRate: 1700 });
     expect(updateRes.status).toBe(200);
-    expect(updateRes.body).toEqual({ tenantRateFactor: 2, defaultBaseRate: 1700 });
+    expect(updateRes.body.tenantRateFactor).toBe(2);
+    expect(updateRes.body.defaultBaseRate).toBe(1700);
 
     // A flat onboarded without specifying baseRate still requires it explicitly at the
     // service layer (defaultBaseRate only prefills the admin UI's form) — pass the

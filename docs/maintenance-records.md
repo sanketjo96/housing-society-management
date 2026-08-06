@@ -113,13 +113,21 @@ MVP generates at most 24 records/month, correctness over scale (`CLAUDE.md`). **
 
 ## Admin settings — `GET`/`PATCH /api/admin/settings`
 
-Added 2026-08-06. Admin-only. Exposes `Society.tenantRateFactor` and
-`Society.defaultBaseRate` (`src/services/society-settings.service.ts`). **Response
-shape**: `{ tenantRateFactor: number, defaultBaseRate: number }`. `PATCH` accepts
-either or both fields (partial update — omitted fields are left untouched);
-`tenantRateFactor` must be a positive number `<= 9.99` (matching the column's
-`@db.Decimal(3,2)` headroom), `defaultBaseRate` must be a positive number. `400` on
-validation failure.
+Added 2026-08-06. Admin-only. Exposes `Society.name`, `Society.upiVpa`,
+`Society.tenantRateFactor`, and `Society.defaultBaseRate`
+(`src/services/society-settings.service.ts`). **Response shape**: `{ name: string,
+upiVpa: string, tenantRateFactor: number, defaultBaseRate: number }`. `PATCH` accepts
+any subset of the four fields (partial update — omitted fields are left untouched);
+`name`/`upiVpa` must be non-empty strings, `tenantRateFactor` must be a positive
+number `<= 9.99` (matching the column's `@db.Decimal(3,2)` headroom), `defaultBaseRate`
+must be a positive number. `400` on validation failure.
+
+**`name`/`upiVpa` were added alongside the original pair** — an admin needs to correct
+the society's display name or rotate the UPI collection address (e.g. a new bank
+account) without a support request or DB migration. `upiVpa` is read fresh from the
+`Society` row by every QR generation (`lib/upi.ts`'s `buildUpiDeepLink`, called from
+`ledger.service.ts`), same "no caching" guarantee as `tenantRateFactor` — a change
+takes effect on the very next QR a resident generates.
 
 **`tenantRateFactor` changes take effect on the very next generation run** —
 `generateMaintenanceRecords` re-fetches the `Society` row fresh every time

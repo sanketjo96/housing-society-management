@@ -16,6 +16,13 @@ function renderPage() {
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
+const baseSettings = {
+  name: 'Sunrise Residency',
+  upiVpa: 'sunrise-residency@okhdfcbank',
+  tenantRateFactor: 1.5,
+  defaultBaseRate: 1500,
+};
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     setAccessToken('fake-admin-token');
@@ -31,7 +38,7 @@ describe('SettingsPage', () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('/api/admin/settings')) {
-        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
@@ -40,6 +47,8 @@ describe('SettingsPage', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
     expect(screen.getByDisplayValue('1.5')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('sunrise-residency@okhdfcbank')).toBeInTheDocument();
     // The save button starts disabled — nothing has been changed yet.
     expect(screen.getByRole('button', { name: /save settings/i })).toBeDisabled();
   });
@@ -50,10 +59,13 @@ describe('SettingsPage', () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
         sentBody = init.body as string;
-        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 2, defaultBaseRate: 1800 }) });
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ ...baseSettings, tenantRateFactor: 2, defaultBaseRate: 1800, name: 'Renamed Society' }),
+        });
       }
       if (url.includes('/api/admin/settings')) {
-        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
@@ -62,6 +74,8 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText(/society name/i));
+    await user.type(screen.getByLabelText(/society name/i), 'Renamed Society');
     await user.clear(screen.getByLabelText(/default base rate/i));
     await user.type(screen.getByLabelText(/default base rate/i), '1800');
     await user.clear(screen.getByLabelText(/tenant occupancy factor/i));
@@ -69,7 +83,62 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
-    expect(JSON.parse(sentBody!)).toEqual({ defaultBaseRate: 1800, tenantRateFactor: 2 });
+    expect(JSON.parse(sentBody!)).toEqual({
+      name: 'Renamed Society',
+      upiVpa: baseSettings.upiVpa,
+      defaultBaseRate: 1800,
+      tenantRateFactor: 2,
+    });
+  });
+
+  it('updates the UPI ID', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    let sentBody: string | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
+        sentBody = init.body as string;
+        return Promise.resolve({ ok: true, json: async () => ({ ...baseSettings, upiVpa: 'new-vpa@okaxis' }) });
+      }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByDisplayValue('sunrise-residency@okhdfcbank')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText(/upi id/i));
+    await user.type(screen.getByLabelText(/upi id/i), 'new-vpa@okaxis');
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
+    expect(JSON.parse(sentBody!).upiVpa).toBe('new-vpa@okaxis');
+  });
+
+  it('rejects an empty society name client-side', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
+        return Promise.reject(new Error('PATCH should not have been called'));
+      }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText(/society name/i));
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/society name is required/i)).toBeInTheDocument();
+    });
   });
 
   it('rejects a non-positive occupancy factor client-side', async () => {
@@ -79,7 +148,7 @@ describe('SettingsPage', () => {
         return Promise.reject(new Error('PATCH should not have been called'));
       }
       if (url.includes('/api/admin/settings')) {
-        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });

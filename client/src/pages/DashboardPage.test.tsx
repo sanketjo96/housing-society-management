@@ -46,7 +46,15 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
       return Promise.resolve({ ok: true, json: async () => [] });
     }
     if (url.includes('/api/admin/settings')) {
-      return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          name: 'Sunrise Residency',
+          upiVpa: 'sunrise-residency@okhdfcbank',
+          tenantRateFactor: 1.5,
+          defaultBaseRate: 1500,
+        }),
+      });
     }
     if (url.includes('/api/admin/dashboard/summary')) {
       return Promise.resolve({
