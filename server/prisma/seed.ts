@@ -30,12 +30,15 @@ function enumeratePeriods(startPeriod: string, endPeriod: string): string[] {
   return periods;
 }
 
-// Idempotent (generateMaintenanceRecords already is, per flat+period) — safe to call
-// every time the seed script runs, not just on first creation. All periods except the
-// most recent are marked PAID directly (this is synthetic demo history, not a real
-// payment audit trail, so there's no proof-upload/approval flow to go through) so the
-// Passbook/admin views show a believable mix of settled history plus one currently
-// outstanding period, rather than every record sitting UNPAID.
+// Idempotent (generateMaintenanceRecords already is, per flat+period; the deposit
+// backfill below skips a flat that already has one) — safe to call every time the seed
+// script runs, not just on first creation. Every period generates a SYSTEM charge
+// (MaintenanceRecord — always implicitly "Approved" under the ledger model, see
+// CLAUDE.md's ledger pivot note). All periods except the most recent are then "settled"
+// by one synthetic APPROVED Deposit LedgerEntry per flat, covering their combined
+// amount — not a real payment audit trail, so there's no QR/proof-upload flow to go
+// through — so the Passbook/admin views show a believable mix of settled history plus
+// one currently outstanding (Payable > 0) period, rather than every charge outstanding.
 async function backfillMaintenanceRecords(societyId: string) {
   const endPeriod = previousPeriod();
   const periods = enumeratePeriods(BACKFILL_START_PERIOD, endPeriod);
@@ -47,17 +50,41 @@ async function backfillMaintenanceRecords(societyId: string) {
   }
 
   const historicalPeriods = periods.slice(0, -1);
+  let depositsCreated = 0;
   if (historicalPeriods.length > 0) {
-    await prisma.maintenanceRecord.updateMany({
-      where: { flat: { societyId }, period: { in: historicalPeriods }, status: 'UNPAID' },
-      data: { status: 'PAID' },
-    });
+    const flats = await prisma.flat.findMany({ where: { societyId } });
+    for (const flat of flats) {
+      const alreadyBackfilled = await prisma.ledgerEntry.findFirst({
+        where: { flatId: flat.id, type: 'DEPOSIT' },
+      });
+      if (alreadyBackfilled) continue;
+
+      const historicalRecords = await prisma.maintenanceRecord.findMany({
+        where: { flatId: flat.id, period: { in: historicalPeriods } },
+      });
+      const amount = historicalRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+      if (amount <= 0) continue;
+
+      await prisma.ledgerEntry.create({
+        data: {
+          flatId: flat.id,
+          type: 'DEPOSIT',
+          status: 'APPROVED',
+          amount,
+          note: `UPI payment — covers ${historicalPeriods[0]} to ${historicalPeriods[historicalPeriods.length - 1]}`,
+          payerId: flat.currentTenantId ?? flat.ownerId,
+          reviewedAt: new Date(),
+        },
+      });
+      depositsCreated += 1;
+    }
   }
 
   console.log(
     `Backfilled maintenance records for ${SEED_SOCIETY_NAME}: ${created} created across ` +
-      `${periods[0]}..${periods[periods.length - 1]} (${historicalPeriods.length} period(s) marked PAID, ` +
-      `${periods[periods.length - 1]} left UNPAID as the current due).`,
+      `${periods[0]}..${periods[periods.length - 1]} (${depositsCreated} approved backfill deposit(s) created ` +
+      `covering ${historicalPeriods.length} historical period(s); ${periods[periods.length - 1]} left ` +
+      `outstanding as the current due).`,
   );
 }
 

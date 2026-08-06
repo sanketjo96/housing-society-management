@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../src/db';
 
-describe('MaintenanceRecord as the payable unit', () => {
+describe('MaintenanceRecord as an always-Approved SYSTEM charge (ledger pivot)', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
   let ownerId: string;
@@ -16,7 +16,7 @@ describe('MaintenanceRecord as the payable unit', () => {
     await prisma.$disconnect();
   });
 
-  it('is created UNPAID with a dueDate, and its status can transition to PAID', async () => {
+  it('is created with a dueDate and a payer, and has no per-record status column', async () => {
     const society = await prisma.society.create({
       data: { name: `Test Society ${suffix}`, address: '123 Test St', upiVpa: 'test@okhdfcbank' },
     });
@@ -57,14 +57,8 @@ describe('MaintenanceRecord as the payable unit', () => {
     });
     recordId = record.id;
 
-    expect(record.status).toBe('UNPAID');
     expect(record.dueDate).toEqual(dueDate);
     expect(record.payerId).toBe(owner.id);
-
-    const paid = await prisma.maintenanceRecord.update({
-      where: { id: record.id },
-      data: { status: 'PAID' },
-    });
-    expect(paid.status).toBe('PAID');
+    expect('status' in record).toBe(false);
   });
 });

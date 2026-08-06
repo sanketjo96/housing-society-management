@@ -65,6 +65,16 @@ describe('flats service — bulkImportFlats', () => {
     expect(result.errors[0].row).toBe(3);
   });
 
+  it('falls back to the society default base rate when baseRate is omitted', async () => {
+    const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+    const csv = `wing,flatNumber,ownerName,ownerEmail\nC,110,CSV Owner No Rate,csv-owner-no-rate-${suffix}@example.com`;
+    const result = await bulkImportFlats(societyId, csv);
+
+    expect(result.errors).toHaveLength(0);
+    createdFlatIds.push(result.created[0]!.id);
+    expect(Number(result.created[0]!.baseRate)).toBe(Number(society.defaultBaseRate));
+  });
+
   it('reports a per-row error for an invalid baseRate', async () => {
     const csv = `wing,flatNumber,baseRate,ownerName,ownerEmail\nC,106,not-a-number,CSV Owner,csv-owner-5-${suffix}@example.com`;
     const result = await bulkImportFlats(societyId, csv);

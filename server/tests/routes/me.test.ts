@@ -70,9 +70,15 @@ describe('/api/me endpoints', () => {
   afterAll(async () => {
     await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
-    await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
-    await prisma.passwordResetToken.deleteMany({ where: { userId: { in: createdUserIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    // Query every user in this society rather than relying on createdUserIds alone —
+    // PUT /api/me/flat's self-service tenant find-or-create (like PUT
+    // /api/me/flat/tenant's) creates accounts inline that this array never tracked.
+    const allUserIds = await prisma.user
+      .findMany({ where: { societyId }, select: { id: true } })
+      .then((rows) => rows.map((r) => r.id));
+    await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
+    await prisma.passwordResetToken.deleteMany({ where: { userId: { in: allUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.society.delete({ where: { id: societyId } });
     await prisma.$disconnect();
   });
@@ -117,6 +123,56 @@ describe('/api/me endpoints', () => {
     it('returns 404 for a role with no associated flat (e.g. the tenant, before assignment)', async () => {
       const res = await request(app).get('/api/me/flat').set('Authorization', `Bearer ${tenantToken}`);
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('PUT /api/me/flat', () => {
+    it('rejects a request with no access token (401)', async () => {
+      const res = await request(app).put('/api/me/flat').send({ ownerName: 'X', ownerEmail: 'x@example.com' });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects a non-OWNER token (403) — a TENANT has no flat-level access', async () => {
+      const res = await request(app)
+        .put('/api/me/flat')
+        .set('Authorization', `Bearer ${tenantToken}`)
+        .send({ ownerName: 'X', ownerEmail: 'x@example.com' });
+      expect(res.status).toBe(403);
+    });
+
+    it('updates owner contact details, and separately opens a tenant occupancy, in one combined request', async () => {
+      const res = await request(app)
+        .put('/api/me/flat')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          ownerName: 'Owner Updated',
+          ownerEmail: (await prisma.user.findUniqueOrThrow({ where: { id: ownerId } })).email,
+          occupancy: 'tenant',
+          tenantName: 'Self-Service Tenant',
+          tenantEmail: `me-flat-tenant-${suffix}@example.com`,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.owner.name).toBe('Owner Updated');
+      expect(res.body.currentTenant.name).toBe('Self-Service Tenant');
+
+      // Revert to owner-occupied so later GET /api/me/flat assertions above aren't
+      // affected by test ordering.
+      const revert = await request(app)
+        .put('/api/me/flat')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ownerName: 'Owner Updated', ownerEmail: res.body.owner.email, occupancy: 'owner' });
+      expect(revert.status).toBe(200);
+      expect(revert.body.currentTenant).toBeNull();
+    });
+
+    it('never accepts wing/flatNumber/baseRate — stays admin-set and read-only', async () => {
+      const before = await request(app).get('/api/me/flat').set('Authorization', `Bearer ${ownerToken}`);
+      const res = await request(app)
+        .put('/api/me/flat')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ownerName: 'Owner Updated', ownerEmail: before.body.owner.email, baseRate: 99999 });
+      expect(res.status).toBe(200);
+      expect(Number(res.body.baseRate)).toBe(Number(before.body.baseRate));
     });
   });
 

@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Home, User, Users } from 'lucide-react';
+import { Check, Home, Save, User } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Divider, ErrorBanner, ErrMsg, Field, inputClass, SectionHeader } from '../components/FormField';
+import { OccupancyFields, OwnerDetailsFields } from '../components/FlatFieldsForm';
+import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../components/FormField';
 import { useAuth } from '../context/AuthContext';
 import { authedFetch } from '../lib/api';
 import type { ResidentSummary } from '../types';
@@ -55,6 +56,9 @@ const profileSchema = z.object({
 });
 type ProfileValues = z.infer<typeof profileSchema>;
 
+// A TENANT's own profile (name/phone/email). An OWNER never sees this — the combined
+// flat form below (MyFlatForm) edits the exact same fields via its "Owner details"
+// section, so a second, redundant "edit your name" form would just duplicate it.
 function ProfileSection() {
   const { user, refreshUser } = useAuth();
   const {
@@ -116,134 +120,123 @@ function ProfileSection() {
   );
 }
 
-const tenantSchema = z.object({
-  name: z.string().min(1, "Tenant's name is required"),
-  phone: z.string().optional(),
-  email: z.string().email('Enter a valid email address'),
-  effectiveFrom: z.string().optional(),
-});
-type TenantValues = z.infer<typeof tenantSchema>;
+// Always shaped like the mockup's MyDetailsTab — occupancy/tenant fields are simply
+// unused when occupancy stays 'owner', rather than needing a second parallel schema.
+const myFlatSchema = z
+  .object({
+    ownerName: z.string().min(1, "Owner's name is required"),
+    ownerPhone: z.string().optional(),
+    ownerEmail: z.string().email('Enter a valid email address'),
+    occupancy: z.enum(['owner', 'tenant']),
+    tenantName: z.string().optional(),
+    tenantPhone: z.string().optional(),
+    tenantEmail: z.string().optional(),
+    effectiveFrom: z.string().optional(),
+  })
+  .refine((data) => data.occupancy !== 'tenant' || (!!data.tenantName && !!data.tenantEmail), {
+    message: 'Tenant name and email are required when tenant-occupied',
+    path: ['tenantEmail'],
+  });
 
-function TenantForm({ flat }: { flat: MyFlat }) {
+type MyFlatFormInput = z.input<typeof myFlatSchema>;
+type MyFlatFormValues = z.infer<typeof myFlatSchema>;
+
+// The OWNER-only combined "My details" form — same visual shape as admin's flat-edit
+// form (FlatsListPage.tsx's FlatForm): Flat details (locked), Owner details, Occupancy,
+// conditional Tenant details, one "Save changes" button. Reuses
+// OwnerDetailsFields/OccupancyFields (components/FlatFieldsForm.tsx) — the exact same
+// sections the admin form uses — and PUT /api/me/flat, which itself reuses
+// updateFlat's find-or-create-tenant-inline mechanism server-side
+// (flats.service.ts) — this is where occupancy changes are self-reported.
+function MyFlatForm({ flat }: { flat: MyFlat }) {
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
-  } = useForm<TenantValues>({
-    resolver: zodResolver(tenantSchema),
-    values: flat.currentTenant
-      ? {
-          name: flat.currentTenant.name,
-          phone: flat.currentTenant.phone ?? '',
-          email: flat.currentTenant.email,
-          effectiveFrom: flat.occupancyEffectiveFrom?.slice(0, 10) ?? '',
-        }
-      : { name: '', phone: '', email: '', effectiveFrom: '' },
+  } = useForm<MyFlatFormInput, unknown, MyFlatFormValues>({
+    resolver: zodResolver(myFlatSchema),
+    defaultValues: {
+      ownerName: flat.owner.name,
+      ownerPhone: flat.owner.phone ?? '',
+      ownerEmail: flat.owner.email,
+      occupancy: flat.currentTenant ? 'tenant' : 'owner',
+      tenantName: flat.currentTenant?.name ?? '',
+      tenantPhone: flat.currentTenant?.phone ?? '',
+      tenantEmail: flat.currentTenant?.email ?? '',
+      effectiveFrom: flat.occupancyEffectiveFrom?.slice(0, 10) ?? '',
+    },
   });
+  const occupancy = watch('occupancy');
 
-  const saveMutation = useMutation<unknown, Error, TenantValues>({
+  const mutation = useMutation<unknown, Error, MyFlatFormValues>({
     mutationFn: async (values) => {
-      const res = await authedFetch('/api/me/flat/tenant', { method: 'PUT', body: JSON.stringify(values) });
+      const res = await authedFetch('/api/me/flat', { method: 'PUT', body: JSON.stringify(values) });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not save tenant details.');
+      if (!res.ok) throw new Error(body?.error ?? 'Could not save your flat.');
       return body;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-flat'] }),
-  });
-
-  const removeMutation = useMutation<unknown, Error, void>({
-    mutationFn: async () => {
-      const res = await authedFetch('/api/me/flat/tenant', { method: 'DELETE' });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not remove tenant.');
-      return body;
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-flat'] });
+      // The dashboard header shows the caller's own name — keep it in sync if the
+      // owner just edited it here.
+      void refreshUser();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-flat'] }),
   });
-
-  const error = saveMutation.error ?? removeMutation.error;
 
   return (
-    <form onSubmit={handleSubmit((values) => saveMutation.mutate(values))} noValidate>
-      <Field label="Full name">
-        <input
-          aria-label="Tenant's full name"
-          className={inputClass}
-          placeholder="Tenant's full name"
-          {...register('name')}
-        />
-        {errors.name && <ErrMsg>{errors.name.message}</ErrMsg>}
-      </Field>
-      <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Phone">
-          <input
-            aria-label="Tenant's phone"
-            className={inputClass}
-            placeholder="+91 XXXXX XXXXX"
-            {...register('phone')}
-          />
-        </Field>
-        <Field label="Email">
-          <input
-            aria-label="Tenant's email"
-            type="email"
-            className={inputClass}
-            placeholder="tenant@example.com"
-            {...register('email')}
-          />
-          {errors.email && <ErrMsg>{errors.email.message}</ErrMsg>}
-        </Field>
+    <form
+      onSubmit={handleSubmit((values) => mutation.mutate(values))}
+      noValidate
+      className="rounded-2xl border border-line bg-white p-6"
+    >
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h1 className="m-0 font-display text-lg text-ink">
+            Flat {flat.wing}-{flat.flatNumber}
+          </h1>
+          <p className="m-0 mt-0.5 text-xs text-muted">My details</p>
+        </div>
+        <span className="flex items-center gap-1 rounded-full bg-teal-light px-2.5 py-1 text-xs font-semibold text-teal">
+          <Check size={12} /> Onboarded
+        </span>
       </div>
-      <Field label="Effective from">
-        <input type="date" className={inputClass} {...register('effectiveFrom')} />
-      </Field>
-      <p className="-mt-2 mb-3.5 text-xs text-muted">
-        Used to calculate correct maintenance rates if occupancy changes mid-month.
-      </p>
 
-      {error && <ErrorBanner>{error.message}</ErrorBanner>}
+      <FlatDetailsSection flat={flat} />
 
-      <div className="flex items-center gap-3">
+      <Divider />
+
+      <OwnerDetailsFields register={register} errors={errors} />
+
+      <Divider />
+
+      <OccupancyFields
+        register={register}
+        errors={errors}
+        occupancy={occupancy}
+        onOccupancyChange={(value) => setValue('occupancy', value)}
+      />
+
+      {mutation.error && <ErrorBanner>{mutation.error.message}</ErrorBanner>}
+
+      <div className="mt-5 flex items-center gap-3">
         <button
           type="submit"
-          disabled={saveMutation.isPending}
-          className="rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+          disabled={mutation.isPending}
+          className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
         >
-          {saveMutation.isPending ? 'Saving…' : flat.currentTenant ? 'Save changes' : 'Add tenant'}
+          <Save size={14} /> {mutation.isPending ? 'Saving…' : 'Save changes'}
         </button>
-        {flat.currentTenant && (
-          <button
-            type="button"
-            onClick={() => removeMutation.mutate()}
-            disabled={removeMutation.isPending}
-            className="rounded-lg border border-coral px-4 py-2.5 text-sm font-semibold text-coral disabled:cursor-default disabled:opacity-70"
-          >
-            {removeMutation.isPending ? 'Removing…' : 'Remove tenant'}
-          </button>
-        )}
-        {saveMutation.isSuccess && (
+        {mutation.isSuccess && (
           <span className="flex items-center gap-1.5 text-sm text-teal">
             <Check size={14} /> Saved
           </span>
         )}
       </div>
     </form>
-  );
-}
-
-function OccupancySection({ flat }: { flat: MyFlat }) {
-  return (
-    <section>
-      <SectionHeader icon={Users} title="Occupancy" />
-      <p className="mb-3.5 text-sm text-ink">
-        Currently:{' '}
-        <span className="font-semibold">
-          {flat.currentTenant ? `Tenant-occupied (${flat.currentTenant.name})` : 'Owner-occupied'}
-        </span>
-      </p>
-      <TenantForm flat={flat} />
-    </section>
   );
 }
 
@@ -266,28 +259,23 @@ export function MyDetailsPage() {
         </p>
       )}
 
-      <div className="rounded-2xl border border-line bg-white p-6">
-        {flat && (
-          <>
-            <FlatDetailsSection flat={flat} />
-            <Divider />
-          </>
-        )}
+      {flat && user?.role === 'OWNER' && <MyFlatForm flat={flat} />}
 
-        <ProfileSection />
-
-        {flat && user?.role === 'OWNER' && (
-          <>
-            <Divider />
-            <OccupancySection flat={flat} />
-          </>
-        )}
-      </div>
+      {flat && user?.role === 'TENANT' && (
+        <div className="rounded-2xl border border-line bg-white p-6">
+          <FlatDetailsSection flat={flat} />
+          <Divider />
+          <ProfileSection />
+        </div>
+      )}
 
       {!isLoading && !flat && !isError && (
-        <p className="mt-4 text-sm text-muted">
-          No flat is linked to your account yet — contact your society admin.
-        </p>
+        <div className="rounded-2xl border border-line bg-white p-6">
+          <ProfileSection />
+          <p className="mt-4 text-sm text-muted">
+            No flat is linked to your account yet — contact your society admin.
+          </p>
+        </div>
       )}
     </div>
   );

@@ -56,8 +56,14 @@ the source of truth for build progress since it lives in git.
 > corrections).
 
 - [x] 3.7 Resident self-service endpoints — `PATCH /api/me` (own profile, any role) +
-      `GET/PUT/DELETE /api/me/flat(/tenant)` (`OWNER`/`TENANT`, `docs/auth.md`)
-- [x] 3.8 Frontend "My details" tab (resident view) — `MyDetailsPage.tsx`
+      `GET/PUT/DELETE /api/me/flat(/tenant)` (`OWNER`/`TENANT`, `docs/auth.md`). **2026-08-06
+      ledger pivot**: added `PUT /api/me/flat` (OWNER, one combined owner+occupancy+tenant
+      save, reusing `updateFlat`) as the primary path; `PUT`/`DELETE /api/me/flat/tenant`
+      kept as a lower-level alternative, unremoved.
+- [x] 3.8 Frontend "My details" tab (resident view) — `MyDetailsPage.tsx`. **2026-08-06
+      ledger pivot**: OWNER now sees one combined flat-shaped form (matching admin's
+      flat-edit form) instead of a separate profile + tenant-management flow; TENANT
+      keeps the original read-only-flat + own-profile shape.
 
 Phase 3 complete (3.1–3.8).
 
@@ -110,6 +116,17 @@ summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 
 ## Phase 6 — QR Payment & Proof Verification (now selection-based across records)
 
+> **Pivot note (2026-08-06)**: the record-selection flow this phase describes was
+> itself later replaced by a balance-based ledger (`CLAUDE.md`'s "Pivot (2026-08-06):
+> resident view moves to a transaction ledger") — `PaymentProof` → `LedgerEntry`,
+> `/api/me/maintenance-records/qr` → `/api/me/ledger/deposits/qr`,
+> `/api/me/payment-proofs` → `/api/me/ledger/deposits` (proof now optional) +
+> `/api/me/ledger/credits` (new), `/api/admin/payment-proofs*` →
+> `/api/admin/ledger-entries*`, `MaintenancePage.tsx` → `PassbookPage.tsx`. The tasks
+> below are kept checked (the underlying capability — QR pay, proof review, manual
+> mark-paid — still exists) with their original endpoint names for history; see
+> `docs/payments.md` for the current contract.
+
 - [x] 6.1 UPI QR generation endpoint (`POST /api/me/maintenance-records/qr` — accepts
       selected maintenanceRecordIds, not one invoiceId; stateless, no DB write)
 - [x] 6.2 Payment proof upload endpoint (`POST /api/me/payment-proofs`, multipart —
@@ -146,6 +163,13 @@ not built here. `docs/payments.md` has the full detail.
 - [ ] 7.6 Escalation job (invoices → MaintenanceRecords)
 
 ## Phase 8 — Admin Dashboard
+
+> **Pivot note (2026-08-06)**: internals rewritten against the ledger model — see the
+> Phase 6 pivot note above and `docs/admin-dashboard.md`. `outstandingTotal` (8.1/8.2)
+> is now each flat's Payable (net of approved credit), not a UNPAID/PENDING_REVIEW sum;
+> the pending-proofs widget (8.3) now queries `/api/admin/ledger-entries`; 8.4's
+> "unpaid records" now means "SYSTEM charges past due," since there's no per-charge
+> paid state under the ledger model.
 
 - [x] 8.1 Outstanding total and collection rate widget (`GET
       /api/admin/dashboard/summary` — totalBilled/totalPaid/outstandingTotal split

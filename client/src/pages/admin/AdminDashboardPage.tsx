@@ -54,7 +54,7 @@ async function fetchFlaggedFlats(): Promise<FlaggedFlat[]> {
 }
 
 async function fetchPendingProofsCount(): Promise<number> {
-  const res = await authedFetch('/api/admin/payment-proofs?status=PENDING');
+  const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
   if (!res.ok) throw new Error('Could not load pending proofs.');
   const body = (await res.json()) as PendingProofsResponse[] | PendingProofsResponse;
   return Array.isArray(body) ? body.length : 0;

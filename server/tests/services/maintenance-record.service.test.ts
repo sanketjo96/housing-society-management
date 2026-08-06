@@ -84,7 +84,7 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
     await prisma.$disconnect();
   });
 
-  it('generates one UNPAID record per flat, with the correct payer and amount', async () => {
+  it('generates one record per flat, with the correct payer and amount', async () => {
     const period = '2026-07';
     const result = await generateMaintenanceRecords(societyId, period);
     expect(result.created).toBe(2);
@@ -94,7 +94,6 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
       where: { flatId_period: { flatId: ownerFlatId, period } },
     });
     expect(ownerRecord.payerType).toBe('OWNER');
-    expect(ownerRecord.status).toBe('UNPAID');
     expect(Number(ownerRecord.amount)).toBe(2000);
 
     const tenantRecord = await prisma.maintenanceRecord.findUniqueOrThrow({

@@ -59,13 +59,15 @@ describe('/api/admin/dashboard/*', () => {
     const overdueDueDate = new Date();
     overdueDueDate.setDate(overdueDueDate.getDate() - 30);
 
+    // No LedgerEntry (Deposit) covers this charge, so the flat's Payable stays
+    // positive with no explicit "status" needed — every MaintenanceRecord is always
+    // implicitly Approved under the ledger pivot (CLAUDE.md's ledger pivot note).
     await prisma.maintenanceRecord.create({
       data: {
         flatId,
         period: '2026-01',
         payerType: 'OWNER',
         amount: 1000,
-        status: 'UNPAID',
         dueDate: overdueDueDate,
         payerId: ownerId,
       },
@@ -73,6 +75,7 @@ describe('/api/admin/dashboard/*', () => {
   });
 
   afterAll(async () => {
+    await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });

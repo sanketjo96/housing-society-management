@@ -103,14 +103,14 @@ export async function generateMaintenanceRecords(
 
 const FLAT_SUMMARY_INCLUDE = { flat: { select: { id: true, wing: true, flatNumber: true } } } as const;
 
-// Task 4.5 — a resident's own records (payerId = their user id), newest period first.
-// This is "the resident's primary outstanding-balance view" (see CLAUDE.md's pivot
-// note): the frontend filters status === 'UNPAID' and sums amount client-side rather
-// than this endpoint pre-computing a total, since the full record list is needed
-// anyway (Task 6.x's "select any combination of unpaid records to pay"). Scoped by
-// societyId via the flat relation too, even though payerId alone already can't cross
-// a society boundary — defense-in-depth, consistent with every other query in this
-// codebase (Task 2.6).
+// Task 4.5 — a resident's own SYSTEM charges (payerId = their user id), newest period
+// first. Under the ledger pivot (see CLAUDE.md), every MaintenanceRecord is always an
+// implicitly-"Approved" SYSTEM row — this is a building block for
+// ledger.service.ts:getLedgerForResident, which merges these with the flat's
+// LedgerEntry (Deposit/Credit) rows and computes the running balances; it's no longer
+// exposed as its own top-level resident endpoint. Scoped by societyId via the flat
+// relation too, even though payerId alone already can't cross a society boundary —
+// defense-in-depth, consistent with every other query in this codebase (Task 2.6).
 export async function getMaintenanceRecordsForPayer(payerId: string, societyId: string) {
   return prisma.maintenanceRecord.findMany({
     where: { payerId, flat: { societyId } },
@@ -119,17 +119,18 @@ export async function getMaintenanceRecordsForPayer(payerId: string, societyId: 
   });
 }
 
-// Task 4.6 — every record in the society, admin view, optionally filtered. Same flat
-// summary shape as above, plus the payer's own summary (an admin needs to know *who*
-// to follow up with, not just which flat).
+// Task 4.6 — every SYSTEM charge in the society, admin view, optionally filtered by
+// period/flat. Same flat summary shape as above, plus the payer's own summary (an
+// admin needs to know *who* to follow up with, not just which flat). No status filter
+// any more — every record is always "Approved" under the ledger pivot; payment
+// state now lives on LedgerEntry, not here.
 export async function listMaintenanceRecordsForSociety(
   societyId: string,
-  filters: { status?: 'UNPAID' | 'PENDING_REVIEW' | 'PAID'; period?: string; flatId?: string } = {},
+  filters: { period?: string; flatId?: string } = {},
 ) {
   return prisma.maintenanceRecord.findMany({
     where: {
       flat: { societyId },
-      ...(filters.status ? { status: filters.status } : {}),
       ...(filters.period ? { period: filters.period } : {}),
       ...(filters.flatId ? { flatId: filters.flatId } : {}),
     },

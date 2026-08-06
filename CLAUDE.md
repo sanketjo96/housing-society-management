@@ -114,41 +114,52 @@ overdue-dues escalation.
 2. **Occupancy is tracked historically** via `OccupancyChange`, not a single current flag
    — a flat's occupancy can change mid-quarter and past billing periods must retain the
    rate that actually applied at the time.
-3. **Maintenance records are monthly and independently payable.** One record per flat
-   per calendar month, storing the rate/amount/payer type for that month. Payable
-   immediately once generated — `status` starts `UNPAID` with a `dueDate` set at
-   generation time (§ Pivot above).
-4. **A resident's "outstanding balance" is the live sum of their unpaid records** —
-   however many months are currently unpaid, no quarterly grouping. There is no
-   separate bundling entity.
+3. **Maintenance records are monthly and always a SYSTEM charge.** One record per flat
+   per calendar month, storing the rate/amount/payer type for that month, generated
+   with a `dueDate` (still used for escalation). Under the ledger pivot (§ below), a
+   `MaintenanceRecord` is never individually marked paid — it permanently contributes
+   its `amount` to the flat's `totalCharges`; payment is tracked separately, against the
+   running balance, in `LedgerEntry`.
+4. **A resident's Payable is a single running balance, not a sum of unpaid months.**
+   `Outstanding` = `totalCharges` − approved Deposits (floored at 0); `Credit balance` =
+   approved Credits; `Payable` = `Outstanding` − `Credit balance` (floored at 0). See
+   § Ledger Pivot below for the full formula and reasoning.
 5. **Cadence**: exactly 12 maintenance records per flat per year (one per month).
-6. **Payment is all-or-nothing per record, but selection-based across records.** No
-   record is ever partially paid. A resident may select any combination of their
-   currently-unpaid records to settle in one payment; on approval, every selected
-   record flips to `PAID` together in one transaction — no partial-cascade state.
-   Unselected records are untouched and remain outstanding.
-7. **Payment method (this phase): UPI QR + manual proof verification.** No payment
-   gateway integration (that's Phase 2, out of scope here). Flow:
-   - Resident views outstanding balance (all unpaid records) → selects any subset to
-     pay → sees a QR encoding a UPI deep link for the sum of the selection.
-   - Resident pays via any UPI app, uploads screenshot/PDF as proof — one proof, linked
-     to all selected records (many-to-many).
-   - Every selected record's status → `PENDING_REVIEW`.
-   - Admin approves (→ all selected records `PAID`, one transaction) or rejects (→ all
-     selected records revert to `UNPAID`, resident notified with optional reason, must
-     re-upload).
-   - Admin manual "mark as paid" fallback for cash/bank-transfer (accepts a list of
-     records), logged distinctly in the audit trail (separate from QR-flow approvals).
-8. **Escalation**: a maintenance record unpaid past due date + grace period → flat
-   flagged. System computes outstanding total (across all that flat's unpaid records)
-   and prepares a message; admin manually shares it (no auto-post to WhatsApp — see
-   out-of-scope list, compliance risk).
+6. **Payment is against the aggregate balance — explicit partial payment is allowed.**
+   A resident may pay any amount from ₹1 up to the current Payable in one Deposit;
+   paying less than the full amount is expected and fine, not an error case. This is a
+   deliberate reversal of the original per-record "no partial payment" rule (see
+   § Ledger Pivot below) — there is no longer a concept of selecting specific records to
+   pay.
+7. **Payment method (this phase): UPI QR + manual proof verification, proof now
+   optional.** No payment gateway integration (that's Phase 2, out of scope here). Flow:
+   - Resident views the three running balances → enters any amount up to Payable → sees
+     a QR encoding a UPI deep link for that amount.
+   - Resident pays via any UPI app. Uploading a screenshot/PDF as proof is now
+     **optional**, not required, to submit the Deposit (reversal of the original
+     mandatory-proof rule — see § Ledger Pivot below).
+   - The Deposit is created at `status: PENDING`.
+   - Admin approves (→ `APPROVED`, now counts toward the balance) or rejects (→
+     `REJECTED`, resident notified with optional reason, may re-submit).
+   - Admin manual "mark as paid" fallback for cash/bank-transfer creates an
+     already-`APPROVED` Deposit directly, logged distinctly in the audit trail
+     (`MANUAL_MARK_PAID`, separate from QR-flow approvals).
+   - **Add credit** (new, § Ledger Pivot below): a resident may separately log an
+     advance deposit or expense reimbursement (Amount, Note, optional screenshot) as a
+     Credit, `status: PENDING` until admin-approved, which then offsets Payable.
+8. **Escalation**: a flat with Payable > 0 whose oldest maintenance charge is past due
+   date + grace period → flagged. System computes the flat's outstanding total (its full
+   Payable, not just the overdue portion) and prepares a message; admin manually shares
+   it (no auto-post to WhatsApp — see out-of-scope list, compliance risk).
 9. **Notifications are email-only this phase.** WhatsApp Business API is Phase 2.
 10. **Resident self-service** (added 2026-08-06): an `OWNER`/`TENANT` may update their
-    own `name`/`phone`/`email` without admin involvement; an `OWNER` may additionally
-    create/update/remove their own flat's `TENANT`. Does not extend to admin-set flat
-    fields (`wing`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
-    "Addition (2026-08-06)" section above for the full mechanism and reasoning.
+    own `name`/`phone`/`email` without admin involvement. An `OWNER` additionally has a
+    single combined "My details" form — Flat details (locked), Owner details, Occupancy,
+    conditional Tenant details, one Save — that both edits their own identity and
+    manages their flat's current `TENANT` in one request (`PUT /api/me/flat`, § Ledger
+    Pivot below); a `TENANT` only edits their own profile. Does not extend to admin-set
+    flat fields (`wing`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
+    "Addition (2026-08-06)" section above for the original mechanism and reasoning.
 
 ### Addendum (2026-08-06, same day): monthly generation switched to arrears billing
 
@@ -197,6 +208,78 @@ actually consumed by billing logic. Full contract and worked reasoning:
 `docs/maintenance-records.md`'s "Admin settings" section, `docs/data-model.md`'s
 `Society.defaultBaseRate` note.
 
+### Pivot (2026-08-06): resident view moves to a transaction ledger (Passbook + My details)
+
+Confirmed against an updated resident-experience UI mockup (`resident-experience
+(4).jsx`, fetched via the Google Drive connector). This **replaces** the
+record-selection payment model rules 3/6/7 originally described (select specific
+`UNPAID` records → pay their exact sum → cascade to `PAID`) with a **balance-based
+ledger**, the same category of change as the 2026-08-05 Invoice pivot — a real reversal
+of a previously-confirmed rule (rule 6's "no partial payment"), not an additive tweak.
+
+**The model**: every resident-visible row is one of three types — **SYSTEM** (an
+auto-generated monthly charge, i.e. a `MaintenanceRecord` — always implicitly
+"Approved," never individually editable or payable on its own), **Deposit** (created
+when a resident pays via UPI, starts `PENDING`), or **Credit** (an advance deposit or
+expense reimbursement the resident logs, starts `PENDING`, covers both cases in one
+action). Only `APPROVED` rows count toward three running numbers:
+
+```
+totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
+approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
+approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
+
+Outstanding    = max(0, totalCharges - approvedDeposits)
+Credit balance = approvedCredits
+Payable        = max(0, Outstanding - Credit balance)
+```
+
+`PENDING`/`REJECTED` rows stay visible in the resident's Passbook for transparency but
+are excluded from all three sums. A resident may pay **any amount up to Payable** —
+explicit, deliberate partial payment against the aggregate balance, not against
+specific months (there is no longer a concept of "select which records to pay").
+
+**Design decision: additive schema change, not a full replacement.** Rather than
+unifying SYSTEM/Deposit/Credit into one new polymorphic table (which would require
+migrating `MaintenanceRecord`'s generation/idempotency/rate-calc history),
+`MaintenanceRecord` is kept exactly as generated (Phase 4's arrears billing,
+`calculateMonthlyRate`, idempotency — all untouched); only its `status`
+(`PaymentStatus`) column is dropped, since a charge is never individually "paid"
+anymore. A new model, `LedgerEntry`, holds only Deposit/Credit rows and **replaces**
+`PaymentProof` entirely — its many-to-many "one proof covers N selected records" shape
+no longer applies once payment is against an aggregate, not specific months. Full
+schema: `docs/data-model.md`'s "LedgerEntry" section.
+
+**Two further rule reversals, both explicit in the new spec, not incidental:**
+- **Proof upload is now optional for a Deposit** (was mandatory, rule 7) — the
+  mockup's "Upload payment proof" button in the Pay panel is decorative/unwired, and the
+  written spec's Pay flow only requires an amount.
+- **Escalation (rule 8) redefined**: since a Deposit is no longer tied to specific
+  charges, there's no per-charge paid/unpaid state to check. A flat is flagged when
+  `Payable > 0 AND` its **oldest** `MaintenanceRecord.dueDate` is past
+  `dueDate + gracePeriodDays` — the natural generalization of "you still owe money and
+  your oldest bill has been sitting a while." `outstandingTotal` in the flagged-flat
+  response is the flat's full Payable, matching rule 8's "computes outstanding total...
+  across all that flat's unpaid records" wording.
+
+**My details also changes** (Passbook's sibling tab): the resident-facing form now
+matches the admin flat-edit form's exact visual shape (Flat details locked, Owner
+details/Occupancy/Tenant details fully editable), submitted as **one combined
+request**, `PUT /api/me/flat` (OWNER only), reusing `updateFlat`'s existing
+find-or-create-tenant-inline mechanism (`flats.service.ts`, the 2026-08-06 addendum)
+rather than duplicating it — `wing`/`flatNumber`/`baseRate` are still never accepted.
+This replaces the previous three-endpoint split (`PATCH /api/me` + `PUT`/`DELETE
+/api/me/flat/tenant`) as the primary resident-side path; those lower-level endpoints
+are kept, unremoved, same precedent as the admin id-based `assignTenant`/`removeTenant`
+alongside `createFlat`/`updateFlat`. A `TENANT` keeps the simpler original
+flow (read-only flat info + their own profile) — occupancy/tenant management stays an
+`OWNER`-only capability, unchanged.
+
+**Explicitly out of scope**: the mockup's decorative floor/unit occupancy-grid sidebar
+(`FacadeMini`) is hardcoded demo chrome, not derived from real data, and needs
+floor-plan geometry this schema doesn't model — not built. Full contract, endpoint
+list, and manual verification: `docs/payments.md`, `docs/admin-dashboard.md`.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
@@ -228,14 +311,15 @@ actually consumed by billing logic. Full contract and worked reasoning:
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
-| MaintenanceRecord | flatId, period, payerType, payerId, amount, status, dueDate | Monthly, independently payable — the sole payable entity. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
-| PaymentProof | uploadedBy, fileUrl, mimeType, status, adminNote, reviewedBy/At | Many-to-many with MaintenanceRecord — one proof can cover several selected records. `fileUrl` is an opaque storage-adapter key, not a browsable URL; `mimeType` added Phase 6 so every adapter only ever deals in raw bytes (see `docs/payments.md`) |
+| MaintenanceRecord | flatId, period, payerType, payerId, amount, dueDate | Monthly SYSTEM charge, always implicitly "Approved," never individually paid — permanently contributes `amount` to its flat's `totalCharges`. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
+| LedgerEntry | type (DEPOSIT/CREDIT), flatId, payerId, amount, status, note, fileUrl, mimeType, adminNote, reviewedBy/At | Resident-created Deposit or Credit row (ledger pivot, 2026-08-06) — replaces PaymentProof. No link to specific MaintenanceRecords (payment is against the aggregate balance); only APPROVED rows count toward Outstanding/Credit balance/Payable. `fileUrl`/`mimeType` optional (proof no longer mandatory). See `docs/data-model.md` |
 | NotificationLog | channel, recipient, status, linked entity | |
 | AuditLog | actor, action, entity, timestamp, note | Financial action trail |
 
-No `Invoice` entity (removed in the pivot). A `PaymentProof` can link to any number of
-`MaintenanceRecord`s a resident selected for one payment; approval cascades `PAID` to
-all of them together, in one transaction.
+No `Invoice` entity (removed in the 2026-08-05 pivot) and no `PaymentProof` entity
+(replaced by `LedgerEntry` in the 2026-08-06 ledger pivot, above). A resident's balance
+is computed fresh from `MaintenanceRecord` + `LedgerEntry` every time, never stored as
+a running total.
 
 No schema changes are needed for resident self-service (Addition, 2026-08-06, above) —
 `User.name`/`phone`/`email` and `Flat.currentTenantId`/`OccupancyChange` already model

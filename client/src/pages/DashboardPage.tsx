@@ -7,8 +7,8 @@ import { PaymentProofsPage } from './admin/PaymentProofsPage';
 import { SettingsPage } from './admin/SettingsPage';
 import type { AuthUser } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
-import { MaintenancePage } from './MaintenancePage';
 import { MyDetailsPage } from './MyDetailsPage';
+import { PassbookPage } from './PassbookPage';
 
 type TabKey = 'dashboard' | 'passbook' | 'my-details' | 'flats' | 'payment-proofs' | 'settings';
 
@@ -18,10 +18,9 @@ interface TabDef {
   icon: LucideIcon;
 }
 
-// Dashboard is empty (real widgets are Phase 8) but every role sees it, matching both
-// shared UI mockups' shape: a tab bar with "Dashboard" always first. "Passbook" and
-// "My details" are resident-only (an ADMIN has no flat and isn't billed — GET
-// /api/me/flat and /api/me/maintenance-records are both 403 for that role, Tasks
+// Every role sees the Dashboard tab first, matching both shared UI mockups' shape.
+// "Passbook" and "My details" are resident-only (an ADMIN has no flat and isn't
+// billed — GET /api/me/flat and /api/me/ledger are both 403 for that role, Tasks
 // 3.7/4.5); "Flats and residents", "Payment proofs", and "Settings" are admin-only
 // (Task 3.1-3.6; "Payment proofs" is Task 6.9; Settings added 2026-08-06 for the
 // tenant-rate-factor/default-base-rate admin UI). No role sees both resident and admin
@@ -100,7 +99,7 @@ export function DashboardPage() {
         )}
         {tab === 'passbook' && (
           <div role="tabpanel" id="tabpanel-passbook" aria-labelledby="tab-passbook">
-            <MaintenancePage />
+            <PassbookPage />
           </div>
         )}
         {tab === 'my-details' && (

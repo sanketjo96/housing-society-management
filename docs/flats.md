@@ -151,8 +151,11 @@ Task 3.4. Body: `{ "csv": "string" }` — CSV text (not a file upload; the front
 reads the file client-side and posts its text content). Hand-rolled parsing, no
 library — the expected fields never contain commas/quotes, so an RFC 4180 parser isn't
 needed for this MVP's actual data. Column-name-based (case-insensitive, any order):
-`wing`, `flatNumber`, `baseRate`, `ownerName`, `ownerEmail` required; `ownerPhone`,
-`occupancy`, `tenantName`, `tenantPhone`, `tenantEmail`, `effectiveFrom` optional. Each
+`wing`, `flatNumber`, `ownerName`, `ownerEmail` required; `baseRate`, `ownerPhone`,
+`occupancy`, `tenantName`, `tenantPhone`, `tenantEmail`, `effectiveFrom` optional. A
+row that omits `baseRate` inherits `Society.defaultBaseRate`, the same fallback the
+admin UI already uses when onboarding a single new flat (2026-08-06 addendum) — kept
+consistent rather than inventing a second default mechanism just for CSV rows. Each
 row onboards a flat exactly the way the admin form does (same `createFlat()` call) —
 per-row failures are collected into an `errors` array rather than aborting the whole
 batch, so one bad row doesn't block the rest.

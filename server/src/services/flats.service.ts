@@ -283,8 +283,9 @@ export interface BulkImportResult {
   errors: BulkImportRowError[];
 }
 
-const IMPORT_REQUIRED_COLUMNS = ['wing', 'flatnumber', 'baserate', 'ownername', 'owneremail'];
+const IMPORT_REQUIRED_COLUMNS = ['wing', 'flatnumber', 'ownername', 'owneremail'];
 const IMPORT_OPTIONAL_COLUMNS = [
+  'baserate',
   'ownerphone',
   'occupancy',
   'tenantname',
@@ -323,6 +324,11 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
   );
   const cell = (cols: string[], col: string) => (colIndex[col] === -1 ? undefined : cols[colIndex[col]] || undefined);
 
+  // Same fallback as new-flat onboarding in the admin UI (2026-08-06 addendum) — a row
+  // that omits baseRate isn't an error, it just inherits the society's configured
+  // default rather than forcing every CSV row to repeat it.
+  const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+
   const created: BulkImportResult['created'] = [];
   const errors: BulkImportRowError[] = [];
 
@@ -335,12 +341,12 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
     const ownerName = cell(cols, 'ownername');
     const ownerEmail = cell(cols, 'owneremail');
 
-    if (!wing || !flatNumber || !baseRateRaw || !ownerName || !ownerEmail) {
+    if (!wing || !flatNumber || !ownerName || !ownerEmail) {
       errors.push({ row: rowNumber, message: 'Missing required value(s)' });
       continue;
     }
 
-    const baseRate = Number(baseRateRaw);
+    const baseRate = baseRateRaw === undefined ? Number(society.defaultBaseRate) : Number(baseRateRaw);
     if (!Number.isFinite(baseRate) || baseRate <= 0) {
       errors.push({ row: rowNumber, message: `Invalid baseRate "${baseRateRaw}"` });
       continue;

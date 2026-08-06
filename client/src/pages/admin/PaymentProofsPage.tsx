@@ -5,31 +5,29 @@ import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { authedFetch } from '../../lib/api';
 
-interface ProofListItem {
+interface LedgerEntryListItem {
   id: string;
+  type: 'DEPOSIT' | 'CREDIT';
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  amount: string;
+  note: string | null;
+  fileUrl: string | null;
   createdAt: string;
-  uploadedBy: { id: string; name: string; email: string };
-  maintenanceRecords: {
-    id: string;
-    period: string;
-    amount: string;
-    flat: { id: string; wing: string; flatNumber: string };
-  }[];
+  payer: { id: string; name: string; email: string };
+  flat: { id: string; wing: string; flatNumber: string };
 }
 
-async function fetchPendingProofs(): Promise<ProofListItem[]> {
-  const res = await authedFetch('/api/admin/payment-proofs?status=PENDING');
-  if (!res.ok) throw new Error('Could not load payment proofs.');
+async function fetchPendingLedgerEntries(): Promise<LedgerEntryListItem[]> {
+  const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
+  if (!res.ok) throw new Error('Could not load pending ledger entries.');
   return res.json();
 }
 
-// The file endpoint is authenticated (never a public URL — Task 6.3), so a plain <a
-// href> won't carry the Bearer token; fetch it ourselves and hand the browser a
-// blob: URL instead. Works for both images and PDFs — the browser's own viewer opens
-// either in the new tab.
+// The file endpoint is authenticated (never a public URL), so a plain <a href> won't
+// carry the Bearer token; fetch it ourselves and hand the browser a blob: URL instead.
+// Works for both images and PDFs — the browser's own viewer opens either in the new tab.
 async function viewProofFile(id: string) {
-  const res = await authedFetch(`/api/payment-proofs/${id}/file`);
+  const res = await authedFetch(`/api/ledger-entries/${id}/file`);
   if (!res.ok) throw new Error('Could not load the proof file.');
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -41,8 +39,10 @@ async function viewProofFile(id: string) {
 // each column's cell renderer is a small, independently-stateful component rather
 // than one component owning an entire <tr> (that shape doesn't fit TanStack Table's
 // per-cell rendering model, see DataTable.tsx).
-function ProofFileCell({ proofId }: { proofId: string }) {
+function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean }) {
   const [viewError, setViewError] = useState<string | null>(null);
+
+  if (!hasFile) return <span className="text-xs text-muted">No file attached</span>;
 
   return (
     <>
@@ -50,7 +50,7 @@ function ProofFileCell({ proofId }: { proofId: string }) {
         type="button"
         onClick={() => {
           setViewError(null);
-          viewProofFile(proofId).catch((e: Error) => setViewError(e.message));
+          viewProofFile(entryId).catch((e: Error) => setViewError(e.message));
         }}
         className="flex items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-teal"
       >
@@ -61,32 +61,32 @@ function ProofFileCell({ proofId }: { proofId: string }) {
   );
 }
 
-function ProofActionsCell({ proof }: { proof: ProofListItem }) {
+function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
   const queryClient = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
 
   const approveMutation = useMutation({
     mutationFn: async () => {
-      const res = await authedFetch(`/api/admin/payment-proofs/${proof.id}/approve`, { method: 'POST' });
+      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, { method: 'POST' });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not approve this proof.');
+      if (!res.ok) throw new Error(body?.error ?? 'Could not approve this entry.');
       return body;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-payment-proofs'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] }),
   });
 
   const rejectMutation = useMutation({
     mutationFn: async () => {
-      const res = await authedFetch(`/api/admin/payment-proofs/${proof.id}/reject`, {
+      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/reject`, {
         method: 'POST',
         body: JSON.stringify({ reason: reason || undefined }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not reject this proof.');
+      if (!res.ok) throw new Error(body?.error ?? 'Could not reject this entry.');
       return body;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-payment-proofs'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] }),
   });
 
   return (
@@ -116,7 +116,7 @@ function ProofActionsCell({ proof }: { proof: ProofListItem }) {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason (optional)"
-            aria-label={`Rejection reason for ${proof.uploadedBy.name}'s proof`}
+            aria-label={`Rejection reason for ${entry.payer.name}'s entry`}
             className="rounded-md border border-line px-2 py-1 text-xs"
           />
           <div className="flex gap-2">
@@ -147,48 +147,50 @@ function ProofActionsCell({ proof }: { proof: ProofListItem }) {
 }
 
 export function PaymentProofsPage() {
-  const { data, isLoading, isError } = useQuery({ queryKey: ['admin-payment-proofs'], queryFn: fetchPendingProofs });
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['admin-ledger-entries'],
+    queryFn: fetchPendingLedgerEntries,
+  });
 
-  const columns = useMemo<ColumnDef<ProofListItem, unknown>[]>(
+  const columns = useMemo<ColumnDef<LedgerEntryListItem, unknown>[]>(
     () => [
       {
         id: 'flat',
         header: 'Flat',
-        cell: ({ row }) => {
-          const flat = row.original.maintenanceRecords[0]?.flat;
-          return (
-            <span className="text-ink">
-              {flat ? `${flat.wing}-${flat.flatNumber}` : '—'}
-              <div className="text-xs text-muted">{row.original.uploadedBy.name}</div>
-            </span>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.flat.wing}-{row.original.flat.flatNumber}
+            <div className="text-xs text-muted">{row.original.payer.name}</div>
+          </span>
+        ),
       },
       {
-        id: 'periods',
-        header: 'Period(s)',
+        id: 'type',
+        header: 'Type',
         cell: ({ row }) => (
-          <span className="text-muted">{row.original.maintenanceRecords.map((r) => r.period).join(', ')}</span>
+          <span className="text-ink">
+            {row.original.type === 'DEPOSIT' ? 'Deposit' : 'Credit'}
+            {row.original.note && <div className="text-xs text-muted">{row.original.note}</div>}
+          </span>
         ),
       },
       {
         id: 'amount',
         header: 'Amount',
         meta: { align: 'right' },
-        cell: ({ row }) => {
-          const total = row.original.maintenanceRecords.reduce((sum, r) => sum + Number(r.amount), 0);
-          return <span className="font-mono-brand text-ink">₹{total.toLocaleString('en-IN')}</span>;
-        },
+        cell: ({ row }) => (
+          <span className="font-mono-brand text-ink">₹{Number(row.original.amount).toLocaleString('en-IN')}</span>
+        ),
       },
       {
         id: 'proof',
         header: 'Proof',
-        cell: ({ row }) => <ProofFileCell proofId={row.original.id} />,
+        cell: ({ row }) => <ProofFileCell entryId={row.original.id} hasFile={!!row.original.fileUrl} />,
       },
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => <ProofActionsCell proof={row.original} />,
+        cell: ({ row }) => <EntryActionsCell entry={row.original} />,
       },
     ],
     [],
@@ -204,11 +206,11 @@ export function PaymentProofsPage() {
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && (
         <p role="alert" className="text-sm text-coral">
-          Could not load payment proofs.
+          Could not load pending entries.
         </p>
       )}
 
-      {data && <DataTable data={data} columns={columns} getRowId={(p) => p.id} emptyMessage="No pending proofs." />}
+      {data && <DataTable data={data} columns={columns} getRowId={(e) => e.id} emptyMessage="No pending proofs." />}
     </div>
   );
 }

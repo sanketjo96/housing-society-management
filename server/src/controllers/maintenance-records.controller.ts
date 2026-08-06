@@ -15,7 +15,6 @@ const generateSchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  status: z.enum(['UNPAID', 'PENDING_REVIEW', 'PAID']).optional(),
   period: periodField.optional(),
   flatId: z.string().min(1).optional(),
 });

@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload, User, Users } from 'lucide-react';
+import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { DataTable } from '../../components/DataTable';
+import { OccupancyFields, OwnerDetailsFields } from '../../components/FlatFieldsForm';
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
@@ -185,101 +186,16 @@ function FlatForm({
 
       <Divider />
 
-      <SectionHeader icon={User} title="Owner details" />
-      <Field label="Full name">
-        <input
-          aria-label="Owner's full name"
-          className={inputClass}
-          placeholder="Owner's full name"
-          {...register('ownerName')}
-        />
-        {errors.ownerName && <ErrMsg>{errors.ownerName.message}</ErrMsg>}
-      </Field>
-      <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Phone">
-          <input
-            aria-label="Owner's phone"
-            className={inputClass}
-            placeholder="+91 XXXXX XXXXX"
-            {...register('ownerPhone')}
-          />
-        </Field>
-        <Field label="Email">
-          <input
-            aria-label="Owner's email"
-            type="email"
-            className={inputClass}
-            placeholder="owner@example.com"
-            {...register('ownerEmail')}
-          />
-          {errors.ownerEmail && <ErrMsg>{errors.ownerEmail.message}</ErrMsg>}
-        </Field>
-      </div>
+      <OwnerDetailsFields register={register} errors={errors} />
 
       <Divider />
 
-      <SectionHeader icon={Users} title="Occupancy" />
-      <div className="mb-4 flex gap-2" role="group" aria-label="Occupancy">
-        {(
-          [
-            { key: 'owner' as const, label: 'Owner-occupied · 1x rate' },
-            { key: 'tenant' as const, label: 'Tenant-occupied · 1.5x rate' },
-          ]
-        ).map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            aria-pressed={occupancy === opt.key}
-            onClick={() => setValue('occupancy', opt.key)}
-            className={`flex-1 rounded-lg border px-3 py-2.5 text-xs font-semibold ${
-              occupancy === opt.key ? 'border-teal bg-teal-light text-teal' : 'border-line bg-white text-ink'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      {occupancy === 'tenant' && (
-        <div className="rounded-lg border border-line bg-paper p-4">
-          <p className="m-0 mb-3 text-xs font-semibold text-muted">Tenant details</p>
-          <Field label="Full name">
-            <input
-              aria-label="Tenant's full name"
-              className={inputClass}
-              placeholder="Tenant's full name"
-              {...register('tenantName')}
-            />
-            {errors.tenantName && <ErrMsg>{errors.tenantName.message}</ErrMsg>}
-          </Field>
-          <div className="grid grid-cols-2 gap-3.5">
-            <Field label="Phone">
-              <input
-                aria-label="Tenant's phone"
-                className={inputClass}
-                placeholder="+91 XXXXX XXXXX"
-                {...register('tenantPhone')}
-              />
-            </Field>
-            <Field label="Email">
-              <input
-                aria-label="Tenant's email"
-                type="email"
-                className={inputClass}
-                placeholder="tenant@example.com"
-                {...register('tenantEmail')}
-              />
-              {errors.tenantEmail && <ErrMsg>{errors.tenantEmail.message}</ErrMsg>}
-            </Field>
-          </div>
-          <Field label="Effective from">
-            <input type="date" className={inputClass} {...register('effectiveFrom')} />
-          </Field>
-          <p className="m-0 text-xs text-muted">
-            Used to calculate correct maintenance rates if occupancy changes mid-month.
-          </p>
-        </div>
-      )}
+      <OccupancyFields
+        register={register}
+        errors={errors}
+        occupancy={occupancy}
+        onOccupancyChange={(value) => setValue('occupancy', value)}
+      />
 
       {mutation.error && <ErrorBanner>{mutation.error.message}</ErrorBanner>}
 
@@ -344,8 +260,9 @@ function CsvImportPanel() {
         <div>
           <h2 className="m-0 mb-1.5 font-display text-base text-ink">Bulk import (CSV)</h2>
           <p className="m-0 text-xs text-muted">
-            Columns: wing, flatNumber, baseRate, ownerName, ownerEmail, plus optional ownerPhone,
-            occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom.
+            Required columns: wing, flatNumber, ownerName, ownerEmail. Optional: baseRate (falls
+            back to the Settings tab's default base rate), ownerPhone, occupancy (owner/tenant),
+            tenantName, tenantPhone, tenantEmail, effectiveFrom.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">

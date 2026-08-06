@@ -21,19 +21,28 @@ then consumed by the service layer.
   that this message is *prepared*, not sent — "admin manually shares it (no auto-post to
   WhatsApp — compliance risk)" — so this only ever produces text for a human to copy.
 
+> **Pivot note (2026-08-06)**: the formulas below were rewritten against the ledger
+> model (`CLAUDE.md`'s "Pivot (2026-08-06): resident view moves to a transaction
+> ledger") — `MaintenanceRecord.status` no longer exists; payment state now lives on
+> `LedgerEntry`. Endpoint paths/response shapes are otherwise unchanged where possible.
+
 ## `getDashboardSummary(societyId)` — `GET /api/admin/dashboard/summary`
 
 Task 8.1. Response: `{ totalBilled, totalPaid, outstandingTotal, pendingReviewTotal,
-collectionRatePercent }`, computed across every `MaintenanceRecord` in the society
-(all periods, not just the current one — there's no quarterly/monthly window concept
-post-pivot).
+collectionRatePercent }`, computed across every flat in the society (all periods, not
+just the current one). Internals: `getBalancesByFlat` fetches every `MaintenanceRecord`
+and `LedgerEntry` for the society in two bulk queries (not N+1), groups by `flatId`, and
+calls `ledger.service.ts`'s `balancesFromRows` per flat — the exact same formula the
+resident's own Passbook uses (`docs/payments.md`), never duplicated.
 
-- `totalBilled` = sum of every record's `amount`, any status.
-- `totalPaid` = sum of `PAID` records only.
-- `outstandingTotal` = sum of strictly `UNPAID` records — **`PENDING_REVIEW` is broken
-  out separately** (`pendingReviewTotal`), not folded into "outstanding," since a
-  resident has already paid and is waiting on admin review, a materially different
-  state from "hasn't paid yet."
+- `totalBilled` = sum of every flat's `totalCharges`.
+- `totalPaid` = sum of every flat's `approvedDeposits`.
+- `outstandingTotal` = **sum of each flat's own `payable`** — summed per flat, not
+  computed as one global subtraction, since a flat that has overpaid must never offset
+  another flat's balance (each `max(0, ...)` is per-flat).
+- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` amounts (Deposits
+  and Credits together) — neither "confirmed collected" nor "still owed with no action
+  taken."
 - `collectionRatePercent` = `round(totalPaid / totalBilled * 100)`, `0` when
   `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
 
@@ -44,49 +53,48 @@ scanning the table needs to see "this flat is fully settled" as a positive absen
 debt, not have the flat silently missing. Each row: `{ flat: {id, wing, flatNumber},
 owner, currentTenant, outstandingTotal, unpaidCount }`.
 
-- `outstandingTotal`/`unpaidCount` sum `UNPAID` **and** `PENDING_REVIEW` records
-  together — from a "how much does this flat still owe or have in flight" view, both
-  are money not yet fully collected, unlike the summary widget's split (which exists to
-  answer "how much is truly outstanding" vs. "how much is proof-pending").
+- `outstandingTotal` = the flat's **Payable** (net of approved credit) — the primary
+  "what they owe right now" figure under the ledger model, replacing the old
+  UNPAID+PENDING_REVIEW sum.
+- `unpaidCount` = the number of `PENDING` `LedgerEntry` rows for that flat (a rough
+  "how much activity is in flight" signal, distinct from Payable).
 - Sorted `outstandingTotal` descending, so the admin's highest-priority flats surface
   first without any client-side sorting needed (`DataTable` has no sort model, per
   CLAUDE.md's tech-stack table — deliberately minimal for a 24-flat MVP).
-- Reuses `listFlats` (already-scoped, already-tested from Task 3.x) for the flat/
-  owner/tenant shape rather than re-deriving it.
 
 ## `getFlaggedFlats(societyId, gracePeriodDays?)` — `GET /api/admin/dashboard/flagged-flats`
 
-Task 8.4 (rule 8's escalation widget). Response: one row per flat with **at least one**
-`UNPAID` record past `dueDate + gracePeriodDays`: `{ flat, recipient, outstandingTotal,
-oldestDueDate, overdueRecordCount, message }`.
+Task 8.4 (rule 8's escalation widget). Response: one row per flat with `Payable > 0`
+whose **oldest** `MaintenanceRecord.dueDate` is past `dueDate + gracePeriodDays`:
+`{ flat, recipient, outstandingTotal, oldestDueDate, overdueRecordCount, message }`.
 
-- **`gracePeriodDays` is the "configurable" knob from rule 8** — exposed as an optional
-  query param (`?gracePeriodDays=N`, positive integer, `zod`-validated, `400` on a
-  non-numeric value) rather than a new persisted `Society` setting. A query param
-  already satisfies "configurable" for an admin re-checking the list with a different
-  threshold, without an unrequested schema/Settings-tab change — if a persisted default
-  is ever wanted, `Society.escalationGraceDays` would be the natural extension, mirroring
-  how `Society.tenantRateFactor` was added for rule 1.
-- **`outstandingTotal` is the flat's full unpaid total, not just the overdue portion** —
+- **Redefined for the ledger model**: since a Deposit is no longer tied to specific
+  charges (payment is against the aggregate), there's no per-charge paid/unpaid state
+  to check directly any more. The oldest-charge-past-grace heuristic is the natural
+  generalization of "you still owe money and your oldest bill has been sitting a
+  while," and keeps `lib/escalation.ts`'s `isOverdue`/`buildEscalationMessage` pure
+  functions unchanged — only the caller's choice of *which* date to check changes.
+- **`gracePeriodDays` is still the "configurable" knob from rule 8** — exposed as an
+  optional query param (`?gracePeriodDays=N`, positive integer, `zod`-validated, `400`
+  on a non-numeric value), unchanged mechanism from before the pivot.
+- **`outstandingTotal` is the flat's full Payable, not just the overdue portion** —
   rule 8's exact wording: "computes outstanding total (across all that flat's unpaid
-  records)." A flat with one 30-day-overdue record and one 2-day-old record still shows
-  its combined total, so the admin's reminder (and the resident's actual balance) isn't
-  understated.
+  records)."
+- **`overdueRecordCount`** = how many of the flat's SYSTEM charges have individually
+  passed `dueDate + gracePeriodDays`, by calendar time — there's no per-charge
+  paid/unpaid state to count under the ledger model, but this is still a meaningful
+  "how overdue is this flat" signal for the admin.
 - **`recipient` is `flat.currentTenant ?? flat.owner`** — never a stale historical payer
-  re-derived from an old record's `payerId`. Matches rule 1: a tenant-occupied flat's
-  bills go to the tenant, so that's who the reminder addresses, even if the overdue
-  record itself predates the current tenant.
-- `message` is `buildEscalationMessage`'s output, ready to copy-paste as-is (e.g. into
-  WhatsApp manually, or email) — the endpoint returns it, it never sends anything.
+  re-derived from an old record's `payerId`.
+- `message` is `buildEscalationMessage`'s output, ready to copy-paste as-is — the
+  endpoint returns it, it never sends anything.
 
 ## Pending proofs widget — Task 8.3
 
-No new backend endpoint — the frontend widget reuses the existing
-`GET /api/admin/payment-proofs?status=PENDING` (Task 6.4) and shows the count, with a
-click-through to the already-built "Payment proofs" tab. Building a second endpoint
-just to return a count that endpoint's response length already gives for free would
-have duplicated Task 6.4's query for no benefit at this scale (24 flats — no pagination
-to work around).
+No new backend endpoint — the frontend widget reuses
+`GET /api/admin/ledger-entries?status=PENDING` (the ledger pivot's renamed admin review
+endpoint, `docs/payments.md`) and shows the count, with a click-through to the
+already-built "Payment proofs" tab.
 
 ## Frontend — `client/src/pages/admin/AdminDashboardPage.tsx`
 

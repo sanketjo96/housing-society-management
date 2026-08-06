@@ -9,18 +9,12 @@ function daysAgo(n: number): Date {
   return d;
 }
 
-function daysFromNow(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
 describe('admin-dashboard service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
-  let flatAId: string; // no records at all
-  let flatBId: string; // two UNPAID records: one overdue past default grace, one not
-  let flatCId: string; // one PAID, one PENDING_REVIEW
+  let flatAId: string; // no records or ledger entries at all
+  let flatBId: string; // two SYSTEM charges, an old overdue one and a recent one, nothing paid
+  let flatCId: string; // one SYSTEM charge settled by an approved Deposit, plus a pending Credit
   const createdFlatIds: string[] = [];
 
   beforeAll(async () => {
@@ -66,7 +60,8 @@ describe('admin-dashboard service', () => {
     flatCId = flatC!.id;
     createdFlatIds.push(flatCId);
 
-    const flatBOwner = await prisma.flat.findUniqueOrThrow({ where: { id: flatBId } });
+    const flatBRow = await prisma.flat.findUniqueOrThrow({ where: { id: flatBId } });
+    const flatCRow = await prisma.flat.findUniqueOrThrow({ where: { id: flatCId } });
 
     await prisma.maintenanceRecord.createMany({
       data: [
@@ -76,9 +71,8 @@ describe('admin-dashboard service', () => {
           period: '2026-01',
           payerType: 'TENANT',
           amount: 1000,
-          status: 'UNPAID',
           dueDate: daysAgo(30),
-          payerId: flatBOwner.currentTenantId!,
+          payerId: flatBRow.currentTenantId!,
         },
         // Flat B: past due date, but still within the default grace period.
         {
@@ -86,35 +80,45 @@ describe('admin-dashboard service', () => {
           period: '2026-02',
           payerType: 'TENANT',
           amount: 500,
-          status: 'UNPAID',
           dueDate: daysAgo(2),
-          payerId: flatBOwner.currentTenantId!,
+          payerId: flatBRow.currentTenantId!,
         },
-        // Flat C: settled.
+        // Flat C: settled by an approved Deposit below.
         {
           flatId: flatCId,
           period: '2026-01',
           payerType: 'OWNER',
           amount: 800,
-          status: 'PAID',
           dueDate: daysAgo(60),
-          payerId: flatBOwner.ownerId, // any valid user id in-society; payer identity isn't under test here
+          payerId: flatCRow.ownerId,
         },
-        // Flat C: mid-review.
+      ],
+    });
+
+    await prisma.ledgerEntry.createMany({
+      data: [
         {
           flatId: flatCId,
-          period: '2026-02',
-          payerType: 'OWNER',
+          payerId: flatCRow.ownerId,
+          type: 'DEPOSIT',
+          status: 'APPROVED',
+          amount: 800,
+          reviewedAt: new Date(),
+        },
+        {
+          flatId: flatCId,
+          payerId: flatCRow.ownerId,
+          type: 'CREDIT',
+          status: 'PENDING',
           amount: 1200,
-          status: 'PENDING_REVIEW',
-          dueDate: daysFromNow(5),
-          payerId: flatBOwner.ownerId,
+          note: 'Pending expense reimbursement claim',
         },
       ],
     });
   });
 
   afterAll(async () => {
+    await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
@@ -128,13 +132,16 @@ describe('admin-dashboard service', () => {
   });
 
   describe('getDashboardSummary', () => {
-    it('computes totals and collection rate across every record', async () => {
+    it('computes totals and collection rate across every flat', async () => {
       const summary = await getDashboardSummary(societyId);
+      // totalBilled = 1000(B) + 500(B) + 800(C) = 2300; totalPaid = 800(C's deposit).
+      expect(summary.totalBilled).toBe(2300);
       expect(summary.totalPaid).toBe(800);
+      // outstandingTotal = sum of per-flat Payable: A=0, B=1500 (no credit), C=0
+      // (800 charge fully covered by the 800 deposit; the pending Credit doesn't count).
       expect(summary.outstandingTotal).toBe(1500);
-      expect(summary.pendingReviewTotal).toBe(1200);
-      expect(summary.totalBilled).toBe(3500);
-      expect(summary.collectionRatePercent).toBe(23); // round(800/3500*100)
+      expect(summary.pendingReviewTotal).toBe(1200); // C's pending Credit
+      expect(summary.collectionRatePercent).toBe(35); // round(800/2300*100)
     });
   });
 
@@ -147,31 +154,31 @@ describe('admin-dashboard service', () => {
       expect(flatA!.unpaidCount).toBe(0);
     });
 
-    it('sums UNPAID and PENDING_REVIEW together per flat, sorted highest first', async () => {
+    it("surfaces each flat's Payable, sorted highest first, with pending-entry counts", async () => {
       const dues = await getFlatWiseDues(societyId);
       const flatB = dues.find((d) => d.flat.id === flatBId)!;
       const flatC = dues.find((d) => d.flat.id === flatCId)!;
-      expect(flatB.outstandingTotal).toBe(1500);
-      expect(flatB.unpaidCount).toBe(2);
-      expect(flatC.outstandingTotal).toBe(1200);
-      expect(flatC.unpaidCount).toBe(1);
+      expect(flatB.outstandingTotal).toBe(1500); // fully unpaid, no credit
+      expect(flatB.unpaidCount).toBe(0); // no pending LedgerEntry rows
+      expect(flatC.outstandingTotal).toBe(0); // charge fully covered by the approved deposit
+      expect(flatC.unpaidCount).toBe(1); // the pending Credit
 
       const indexB = dues.findIndex((d) => d.flat.id === flatBId);
       const indexC = dues.findIndex((d) => d.flat.id === flatCId);
-      expect(indexB).toBeLessThan(indexC); // 1500 > 1200
+      expect(indexB).toBeLessThan(indexC); // 1500 > 0
     });
   });
 
   describe('getFlaggedFlats', () => {
-    it('flags only flats with an UNPAID record past the grace period', async () => {
+    it('flags only flats with a Payable balance whose oldest charge is past the grace period', async () => {
       const flagged = await getFlaggedFlats(societyId);
       expect(flagged.map((f) => f.flat.id)).toEqual([flatBId]);
     });
 
-    it("computes the flat's full outstanding total, not just the overdue portion", async () => {
+    it("computes the flat's full Payable, not just the overdue portion", async () => {
       const flagged = await getFlaggedFlats(societyId);
       const flatB = flagged.find((f) => f.flat.id === flatBId)!;
-      expect(flatB.outstandingTotal).toBe(1500); // both UNPAID records, not just the overdue one
+      expect(flatB.outstandingTotal).toBe(1500); // both charges, not just the overdue one
       expect(flatB.overdueRecordCount).toBe(1); // only the 30-days-ago one is past the 7-day grace
     });
 
@@ -187,12 +194,17 @@ describe('admin-dashboard service', () => {
     it('respects a shorter custom grace period', async () => {
       const flagged = await getFlaggedFlats(societyId, 1);
       const flatB = flagged.find((f) => f.flat.id === flatBId)!;
-      expect(flatB.overdueRecordCount).toBe(2); // both records are now past a 1-day grace
+      expect(flatB.overdueRecordCount).toBe(2); // both charges are now past a 1-day grace
     });
 
     it('flags nothing with a very long grace period', async () => {
       const flagged = await getFlaggedFlats(societyId, 365);
       expect(flagged).toHaveLength(0);
+    });
+
+    it('never flags a flat with no Payable balance, even with an old charge', async () => {
+      const flagged = await getFlaggedFlats(societyId);
+      expect(flagged.some((f) => f.flat.id === flatCId)).toBe(false);
     });
   });
 });

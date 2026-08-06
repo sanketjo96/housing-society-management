@@ -250,27 +250,29 @@ Task 4.1 builds the real month-level rate calculation on top of it.
 > `CLAUDE.md`'s business rules and `task-prompts-v1` (the current tracker) for the full
 > reasoning. This section describes the *current* schema, not the original one.
 
+> **Pivot note (2026-08-06): `status` removed.** A second pivot (see `CLAUDE.md`'s
+> "Pivot (2026-08-06): resident view moves to a transaction ledger") replaced the
+> record-selection payment model above with a balance-based ledger. Under that model, a
+> `MaintenanceRecord` is always a SYSTEM charge — implicitly "Approved," never
+> individually paid/unpaid — so the `status`/`PaymentStatus` columns below (and the
+> `@@index([status])`) no longer exist. `dueDate` is kept, since escalation
+> (`lib/escalation.ts`) still needs it. Payment against the running balance now lives
+> entirely in the new `LedgerEntry` model, below.
+
 ```prisma
 enum PayerType {
   OWNER
   TENANT
 }
 
-enum PaymentStatus {
-  UNPAID
-  PENDING_REVIEW
-  PAID
-}
-
 model MaintenanceRecord {
-  id        String        @id @default(cuid())
+  id        String   @id @default(cuid())
   period    String
   payerType PayerType
-  amount    Decimal       @db.Decimal(10, 2)
-  status    PaymentStatus @default(UNPAID)
+  amount    Decimal  @db.Decimal(10, 2)
   dueDate   DateTime
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   flatId String
   flat   Flat   @relation(fields: [flatId], references: [id])
@@ -280,7 +282,6 @@ model MaintenanceRecord {
 
   @@unique([flatId, period])
   @@index([flatId])
-  @@index([status])
   @@index([payerId])
 }
 ```
@@ -297,34 +298,31 @@ model MaintenanceRecord {
 > display, audit trail) reads this field, rather than each one re-implementing the
 > majority-of-days-with-tiebreak resolution independently.
 
-- **`MaintenanceRecord` is the sole payable entity.** One row per flat per calendar
-  month (`period` = `"YYYY-MM"`), generated monthly (Task 4.2), payable immediately —
-  no bundling, no waiting for a quarter to close. `status` starts `UNPAID` and
-  `dueDate` is set at generation time (generation date + configured days).
-- **Every record stays a clean binary paid/unpaid state — never partially paid.**
-  "Partial payment" in this system means *selecting a subset of unpaid records* to
-  settle in one payment action (Task 6.x), not splitting a single record's amount.
-  A resident who owes 3 months can pay just 1 of them; that record goes `UNPAID` →
-  `PENDING_REVIEW` → `PAID` on its own, the other 2 stay untouched. This deliberately
-  avoids needing a running "amount remaining" field, multiple proofs against one
-  record, or a `PARTIALLY_PAID` status — every state transition is a clean, atomic,
-  all-or-nothing flip, same principle the original quarterly rule intended, just
-  scoped to "however many records were selected" instead of "always exactly 3."
+- **`MaintenanceRecord` is always a SYSTEM charge under the ledger model.** One row per
+  flat per calendar month (`period` = `"YYYY-MM"`), generated monthly (Task 4.2),
+  contributing its `amount` to the flat's `totalCharges` permanently — it is never
+  individually marked paid. `dueDate` is set at generation time (generation date +
+  configured days) and still drives escalation.
+- **Payment is now balance-based, not per-record.** A resident's Payable is a single
+  running number (`totalCharges` minus approved Deposits minus approved Credits, floored
+  at 0 — see `LedgerEntry` below) — they may pay any amount up to Payable, including
+  less than the full amount (explicit partial payment against the aggregate). This
+  replaces the earlier per-record `UNPAID`/`PENDING_REVIEW`/`PAID` selection flow.
 - **`@@unique([flatId, period])`** enforces "exactly 12 records/flat/year, never
   duplicated" at the database level — backs the idempotency Task 4.2 requires of the
   monthly generation job.
-- **`@@index([status])`** — added because the admin dues-summary (Task 4.6), the
-  escalation job (Task 7.6), and the dashboard widgets (Task 8.1/8.2) all filter
-  heavily on `status = UNPAID`.
 - **`PayerType` is a separate enum from `Role`**, even though both have `OWNER` and
   `TENANT` values — `Role` also has `ADMIN`, which can never be a billing payer.
   Reusing `Role` here would let invalid states (a record billed to `ADMIN`) exist at
   the type level; a dedicated enum makes that impossible.
-- **`PaymentStatus` matches §3 rule 7's flow exactly** (renamed from the original
-  `InvoiceStatus`, same three values): `UNPAID` → (proof uploaded) →
-  `PENDING_REVIEW` → (admin approves) → `PAID`, or (admin rejects) → back to `UNPAID`.
 
-## PaymentProof, NotificationLog, AuditLog
+## LedgerEntry, NotificationLog, AuditLog
+
+> **Pivot note (2026-08-06):** `PaymentProof` (and its implicit many-to-many join to
+> `MaintenanceRecord`) is **replaced** by `LedgerEntry`, described below — see
+> `CLAUDE.md`'s "Pivot (2026-08-06): resident view moves to a transaction ledger" for
+> the full reasoning. The app was still pre-launch/seed-data-only at the time, so the
+> old table was dropped outright rather than data-migrated.
 
 ```prisma
 enum ProofStatus {
@@ -333,87 +331,80 @@ enum ProofStatus {
   REJECTED
 }
 
-model PaymentProof {
-  id         String      @id @default(cuid())
-  fileUrl    String
-  mimeType   String
-  status     ProofStatus @default(PENDING)
+enum LedgerType {
+  DEPOSIT
+  CREDIT
+}
+
+model LedgerEntry {
+  id       String      @id @default(cuid())
+  type     LedgerType
+  amount   Decimal     @db.Decimal(10, 2)
+  status   ProofStatus @default(PENDING)
+  note     String?
+  fileUrl  String?
+  mimeType String?
   adminNote  String?
   reviewedAt DateTime?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  uploadedById String
-  uploadedBy   User   @relation("ProofUploader", fields: [uploadedById], references: [id])
+  flatId String
+  flat   Flat @relation(fields: [flatId], references: [id])
+
+  payerId String
+  payer   User @relation("LedgerPayer", fields: [payerId], references: [id])
 
   reviewedById String?
-  reviewedBy   User?   @relation("ProofReviewer", fields: [reviewedById], references: [id])
+  reviewedBy   User?   @relation("LedgerReviewer", fields: [reviewedById], references: [id])
 
-  maintenanceRecords MaintenanceRecord[]
-
-  @@index([uploadedById])
+  @@index([flatId])
   @@index([status])
+  @@index([type])
 }
 ```
 
-**`fileUrl` is an opaque storage key, not a browsable URL** (added meaning, Phase 6) —
-whatever `StorageAdapter.save()` returned (a relative disk path for the default `local`
-adapter, an S3 object key or Drive file id for a future one). Never rendered as a link
-directly; the file is only ever served through the authenticated
-`GET /api/payment-proofs/:id/file`, which resolves it back through the same adapter.
-See `docs/payments.md`.
+**One row, one flat, one payer — no join table.** Unlike `PaymentProof`, a
+`LedgerEntry` is never linked to specific `MaintenanceRecord`s, because payment is
+against the flat's aggregate balance, not particular months (a partial deposit might
+not exactly cover any one charge). `type` distinguishes a UPI **Deposit** (created when
+a resident pays) from a **Credit** (an advance deposit or expense reimbursement the
+resident logs) — SYSTEM charges are *not* stored here at all; they remain
+`MaintenanceRecord` rows (above), always implicitly "Approved."
 
-**`mimeType` added Phase 6** (`20260806133258_add_payment_proof_mime_type`) — tracked
-explicitly here rather than re-derived from the adapter at read time, so every adapter
-implementation only ever has to deal with raw bytes. This column is the one source of
-truth for `Content-Type` when serving a proof back, regardless of storage backend.
-
-### PaymentProof's many-to-many link to MaintenanceRecord
-
-This is the schema change the pivot actually required. `PaymentProof` doesn't hold a
-single foreign key to one payable entity — it has a **many-to-many relation** to
-`MaintenanceRecord` (the `maintenanceRecords MaintenanceRecord[]` field above, mirrored
-by `paymentProofs PaymentProof[]` on `MaintenanceRecord`). This is an **implicit**
-many-to-many — no join model was written by hand; Prisma generates and manages a
-hidden join table itself (confirmed in the migration SQL:
-`_MaintenanceRecordToPaymentProof`, with `ON DELETE CASCADE` on both sides — deleting
-either a record or a proof cleans up the join row without touching the other real
-table).
-
-**Worked example: one proof covering 2 selected months.**
-
-A resident owes Jan (₹1000) and Feb (₹1000), both `UNPAID`. They select both, pay
-₹2000 via UPI, upload one screenshot:
+**Only `APPROVED` rows count toward the running balances** (computed in
+`ledger.service.ts`'s `balancesFromRows`, reused by both the resident's own Passbook
+and the admin dashboard so the formula lives in exactly one place):
 
 ```
-PaymentProof {
-  fileUrl: "/uploads/proofs/xyz.jpg",
-  status: PENDING,
-  uploadedById: "usr_owner",
-  maintenanceRecords: [jan_record, feb_record]   ← connected via the join table
-}
+totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
+approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
+approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
+
+outstanding   = max(0, totalCharges - approvedDeposits)
+creditBalance = approvedCredits
+payable       = max(0, outstanding - creditBalance)
 ```
 
-Both `jan_record` and `feb_record` flip to `PENDING_REVIEW`. When admin approves:
+`PENDING`/`REJECTED` rows stay visible in the resident's passbook for transparency but
+are excluded from all three sums.
 
-```
-PaymentProof.status → APPROVED
-PaymentProof.reviewedById → "usr_admin"
-PaymentProof.reviewedAt → now()
-jan_record.status → PAID   ┐  cascaded together,
-feb_record.status → PAID   ┘  one transaction (Task 6.5)
-```
+**`fileUrl`/`mimeType` are optional** — unlike the pre-pivot `PaymentProof.fileUrl`
+(required), a proof screenshot is no longer mandatory to submit a Deposit (a real
+reversal of the old rule 7, see `CLAUDE.md`). Same opaque-storage-key contract as
+before otherwise (`StorageAdapter`, `docs/payments.md`) — served only through the
+authenticated `GET /api/ledger-entries/:id/file`.
 
-This is exactly what Task 1.4's test does: creates 2 records, connects both to one
-proof, asserts the proof's `maintenanceRecords` has length 2, transitions
-`PENDING` → `APPROVED`.
+**`note` vs `adminNote`** — `note` is the resident's own text (required for a Credit,
+e.g. "Paid plumber for common area leak"; a short fixed string for a Deposit). `adminNote`
+is the admin's rejection reason (rule 7), set only on reject — distinct fields because
+they're written by different parties at different times.
 
-### Why `uploadedBy`/`reviewedBy` need two named relations to `User`
+### Why `payer`/`reviewedBy` need two named relations to `User`
 
-Same rule as `Flat.owner`/`Flat.currentTenant` (see above) — `PaymentProof` has two
-separate relations to `User`, so both need names (`"ProofUploader"`,
-`"ProofReviewer"`) or Prisma can't tell which foreign key pairs with which back-relation
-field on `User`.
+Same rule as `Flat.owner`/`Flat.currentTenant` (see above) — `LedgerEntry` has two
+separate relations to `User`, so both need names (`"LedgerPayer"`, `"LedgerReviewer"`)
+or Prisma can't tell which foreign key pairs with which back-relation field on `User`.
 
 ### NotificationLog and AuditLog — the polymorphic-lite pattern
 

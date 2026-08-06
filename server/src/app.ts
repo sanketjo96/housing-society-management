@@ -3,14 +3,14 @@ import cors from 'cors';
 import express from 'express';
 import { errorHandler } from './middleware/error-handler';
 import { adminDashboardRouter } from './routes/admin-dashboard.route';
-import { adminPaymentProofsRouter } from './routes/admin-payment-proofs.route';
+import { adminLedgerRouter } from './routes/admin-ledger.route';
 import { adminUsersRouter } from './routes/admin-users.route';
 import { authRouter } from './routes/auth.route';
 import { flatsRouter } from './routes/flats.route';
+import { ledgerRouter } from './routes/ledger.route';
 import { maintenanceRecordsRouter } from './routes/maintenance-records.route';
 import { meRouter } from './routes/me.route';
 import { passwordResetRouter } from './routes/password-reset.route';
-import { paymentProofsRouter } from './routes/payment-proofs.route';
 import { societySettingsRouter } from './routes/society-settings.route';
 
 export const app = express();
@@ -33,14 +33,14 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use(adminDashboardRouter);
-app.use(adminPaymentProofsRouter);
+app.use(adminLedgerRouter);
 app.use(adminUsersRouter);
 app.use(authRouter);
 app.use(flatsRouter);
+app.use(ledgerRouter);
 app.use(maintenanceRecordsRouter);
 app.use(meRouter);
 app.use(passwordResetRouter);
-app.use(paymentProofsRouter);
 app.use(societySettingsRouter);
 
 // Must be registered last (Express's 4-arg-signature error-middleware convention).

@@ -126,19 +126,4 @@ describe('GET /api/admin/maintenance-records', () => {
     expect(res.body.every((r: { flatId: string }) => r.flatId === flatAId)).toBe(true);
   });
 
-  it('filters by status', async () => {
-    const res = await request(app)
-      .get('/api/admin/maintenance-records?status=UNPAID')
-      .set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(4);
-    expect(res.body.every((r: { status: string }) => r.status === 'UNPAID')).toBe(true);
-  });
-
-  it('rejects an invalid status filter with a 400', async () => {
-    const res = await request(app)
-      .get('/api/admin/maintenance-records?status=BOGUS')
-      .set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(400);
-  });
 });

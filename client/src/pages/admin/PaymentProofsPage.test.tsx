@@ -16,14 +16,25 @@ function renderPage() {
   );
 }
 
-const proof = {
-  id: 'proof-1',
+const depositEntry = {
+  id: 'entry-1',
+  type: 'DEPOSIT' as const,
   status: 'PENDING' as const,
+  amount: '2000',
+  note: 'UPI payment - awaiting review',
+  fileUrl: 'some/key.jpg',
   createdAt: '2026-08-01T00:00:00.000Z',
-  uploadedBy: { id: 'owner-1', name: 'Alice Owner', email: 'alice@example.com' },
-  maintenanceRecords: [
-    { id: 'rec-1', period: '2026-07', amount: '2000', flat: { id: 'f1', wing: 'A', flatNumber: '101' } },
-  ],
+  payer: { id: 'owner-1', name: 'Alice Owner', email: 'alice@example.com' },
+  flat: { id: 'f1', wing: 'A', flatNumber: '101' },
+};
+
+const creditEntryNoFile = {
+  ...depositEntry,
+  id: 'entry-2',
+  type: 'CREDIT' as const,
+  amount: '500',
+  note: 'Paid plumber',
+  fileUrl: null,
 };
 
 describe('PaymentProofsPage', () => {
@@ -40,15 +51,27 @@ describe('PaymentProofsPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists pending proofs with flat, uploader, and amount', async () => {
+  it('lists pending entries with flat, payer, type, and amount', async () => {
     const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockResolvedValue({ ok: true, json: async () => [proof] });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntry] });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
     expect(screen.getByText('Alice Owner')).toBeInTheDocument();
+    expect(screen.getByText('Deposit')).toBeInTheDocument();
     expect(screen.getByText('₹2,000')).toBeInTheDocument();
+  });
+
+  it('shows "No file attached" for an entry with no proof, instead of a View button', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [creditEntryNoFile] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Credit')).toBeInTheDocument());
+    expect(screen.getByText(/no file attached/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view proof/i })).not.toBeInTheDocument();
   });
 
   it('shows an empty state when there is nothing pending', async () => {
@@ -60,13 +83,13 @@ describe('PaymentProofsPage', () => {
     await waitFor(() => expect(screen.getByText(/no pending proofs/i)).toBeInTheDocument());
   });
 
-  it('approves a proof', async () => {
+  it('approves an entry', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('/approve')) {
-        return Promise.resolve({ ok: true, json: async () => ({ ...proof, status: 'APPROVED' }) });
+        return Promise.resolve({ ok: true, json: async () => ({ ...depositEntry, status: 'APPROVED' }) });
       }
-      return Promise.resolve({ ok: true, json: async () => [proof] });
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
     });
 
     renderPage();
@@ -77,21 +100,21 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/admin/payment-proofs/proof-1/approve'),
+        expect.stringContaining('/api/admin/ledger-entries/entry-1/approve'),
         expect.objectContaining({ method: 'POST' }),
       );
     });
   });
 
-  it('rejects a proof with a reason', async () => {
+  it('rejects an entry with a reason', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     let rejectBody: string | undefined;
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/reject')) {
         rejectBody = init?.body as string;
-        return Promise.resolve({ ok: true, json: async () => ({ ...proof, status: 'REJECTED' }) });
+        return Promise.resolve({ ok: true, json: async () => ({ ...depositEntry, status: 'REJECTED' }) });
       }
-      return Promise.resolve({ ok: true, json: async () => [proof] });
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
     });
 
     renderPage();
@@ -104,7 +127,7 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/admin/payment-proofs/proof-1/reject'),
+        expect.stringContaining('/api/admin/ledger-entries/entry-1/reject'),
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -117,7 +140,7 @@ describe('PaymentProofsPage', () => {
       if (url.includes('/file')) {
         return Promise.resolve({ ok: true, blob: async () => new Blob(['x']) });
       }
-      return Promise.resolve({ ok: true, json: async () => [proof] });
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
     });
 
     renderPage();

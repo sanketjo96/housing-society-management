@@ -63,7 +63,7 @@ function mockFetch(overrides: Partial<{ pendingProofsCount: number }> = {}) {
     if (url.includes('/api/admin/dashboard/flagged-flats')) {
       return Promise.resolve({ ok: true, json: async () => flaggedFlats });
     }
-    if (url.includes('/api/admin/payment-proofs')) {
+    if (url.includes('/api/admin/ledger-entries')) {
       const count = overrides.pendingProofsCount ?? 3;
       return Promise.resolve({ ok: true, json: async () => Array.from({ length: count }, (_, i) => ({ id: `p${i}` })) });
     }

@@ -92,23 +92,24 @@ endpoint exists precisely to cover this: an admin can trigger generation for the
 missed period by hand, any time after the fact, and it's exactly as idempotent as the
 cron's own run would have been.
 
-## Resident view — `GET /api/me/maintenance-records`
+## Resident view — superseded by `GET /api/me/ledger`
 
-Task 4.5. `OWNER`/`TENANT` only (`403` for `ADMIN` — an admin isn't billed). Returns
-every record where `payerId === req.user.id`, newest period first, each with a `flat`
-summary (`id`/`wing`/`flatNumber`). This *is* "the resident's primary
-outstanding-balance view" (`CLAUDE.md`'s pivot note) — the frontend filters
-`status === 'UNPAID'` and sums `amount` client-side rather than the endpoint
-pre-computing a total, since the full list is needed anyway for Task 6.x's "select any
-combination of unpaid records to pay."
+> **Pivot note (2026-08-06)**: Task 4.5's `GET /api/me/maintenance-records` (below, for
+> history) is **replaced** by `GET /api/me/ledger`, which merges these same records
+> (rendered as always-"Approved" SYSTEM rows) with the flat's `LedgerEntry` rows and
+> returns the three running balances — see `docs/payments.md` and `CLAUDE.md`'s ledger
+> pivot note. `getMaintenanceRecordsForPayer` (the underlying query, `payerId ===
+> req.user.id`, newest period first) still exists as an internal building block
+> `ledger.service.ts` calls; it's no longer exposed as its own top-level route.
 
 ## Admin view — `GET /api/admin/maintenance-records`
 
 Task 4.6 (absorbed the dissolved Task 5.5's dues-summary concern — see `CLAUDE.md`'s
 pivot note). Every record in the society, each with `flat` and `payer` summaries.
-**Optional query filters**: `status` (`UNPAID`/`PENDING_REVIEW`/`PAID`), `period`
-(`YYYY-MM`), `flatId`. `400` for an invalid `status` value. No pagination — a 24-flat
-MVP generates at most 24 records/month, correctness over scale (`CLAUDE.md`).
+**Optional query filters**: `period` (`YYYY-MM`), `flatId`. No pagination — a 24-flat
+MVP generates at most 24 records/month, correctness over scale (`CLAUDE.md`). **No
+`status` filter any more** (2026-08-06 ledger pivot) — every record is always
+"Approved"; payment state lives on `LedgerEntry`, not here.
 
 ## Admin settings — `GET`/`PATCH /api/admin/settings`
 
@@ -138,14 +139,13 @@ rate — applied via a `useEffect` rather than `useForm`'s `defaultValues`, sinc
 settings fetch can resolve after the form has already mounted and `defaultValues` are
 only read once, at mount.
 
-## Frontend — `client/src/pages/MaintenancePage.tsx`
+## Frontend — superseded by `client/src/pages/PassbookPage.tsx`
 
-Task 4.7. A new "Passbook" tab on `/dashboard` (`OWNER`/`TENANT` only, alongside "My
-details" — see `docs/onboarding.md`'s tab table), named to match the shared
-resident-view UI mockup's terminology. Shows the outstanding total (sum of `UNPAID`
-amounts) and every record with a status badge. **Read-only** — no payment action yet;
-that's Phase 6 ("select any combination of unpaid records, pay via QR"). The page says
-so explicitly rather than silently omitting the capability.
+Task 4.7 originally built `MaintenancePage.tsx` as a read-only "Passbook" tab (sum of
+`UNPAID` amounts + a status badge per record, no payment action yet — that came in
+Phase 6). The 2026-08-06 ledger pivot replaced it with `PassbookPage.tsx` — three
+summary cards (Outstanding/Credit balance/Payable), Pay and Add credit actions, and the
+full merged ledger table. See `docs/payments.md` for the current page.
 
 ## Manually verified against the real running stack
 
@@ -162,8 +162,9 @@ curl "http://localhost/api/admin/maintenance-records?period=2099-02" \
 # → 200, all 5 records with flat + payer summaries, correct payerType/amount per flat's
 #   actual occupancy (e.g. A-103/B-201's tenants billed at 1.5x, not the owner)
 
-curl http://localhost/api/me/maintenance-records -H "Authorization: Bearer <aliceToken>"
-# → 200, exactly Alice's own A-101 record for that period
+curl http://localhost/api/me/ledger -H "Authorization: Bearer <aliceToken>"
+# → 200, Alice's merged ledger — her A-101 record appears as a SYSTEM row for that
+#   period, plus totals reflecting it in totalCharges/outstanding/payable
 ```
 
 A distinctive future period (`2099-02`) was used specifically so this check's records
@@ -181,14 +182,16 @@ onto an already-existing, already-in-use society, not just a fresh one.
 
 Generates one `generateMaintenanceRecords` call per period from `2026-01` through
 `previousPeriod()` (whatever "last completed month" resolves to at the moment the seed
-runs — arrears billing, above), for every seeded flat. Every period except the most
-recent is then marked `PAID` directly via one `updateMany` — this is synthetic demo
-history, not a real payment audit trail, so there's no proof-upload/review flow to go
-through — leaving exactly one `UNPAID` period per flat as "the current due," so the
-Passbook/admin views show a believable mix rather than a wall of identical `UNPAID`
-badges. Safe to re-run: `generateMaintenanceRecords` is already idempotent per
-flat+period, and re-running the `PAID` `updateMany` against already-`PAID` rows is a
-no-op.
+runs — arrears billing, above), for every seeded flat. **Updated for the 2026-08-06
+ledger pivot**: since `MaintenanceRecord` no longer has a `status` to flip, "settling"
+the historical periods now means creating one synthetic `APPROVED` `LedgerEntry{type:
+DEPOSIT}` per flat, covering the sum of its historical (all-but-the-most-recent)
+charges — not a real payment audit trail, so there's no QR/proof-upload flow to go
+through — leaving exactly the most recent period's charge uncovered as "the current
+due" (`Payable > 0`), so the Passbook/admin views show a believable mix rather than
+everything outstanding. Safe to re-run: `generateMaintenanceRecords` is already
+idempotent per flat+period, and the backfill skips a flat that already has any
+`DEPOSIT` `LedgerEntry`.
 
 Run via `npx prisma db seed` (`docs/onboarding.md`). Verified against the real running
 stack: 35 records created (5 seeded flats × 7 months, `2026-01`–`2026-07`), each

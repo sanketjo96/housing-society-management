@@ -25,19 +25,22 @@ enum PayerType {
   TENANT
 }
 
-// A MaintenanceRecord's payment state. Renamed from the original InvoiceStatus now
-// that MaintenanceRecord itself is the payable unit (quarterly Invoice bundling was
-// dropped — see CLAUDE.md's pivot note).
-enum PaymentStatus {
-  UNPAID
-  PENDING_REVIEW
-  PAID
-}
-
+// Shared PENDING/APPROVED/REJECTED review status — originally PaymentProof's status,
+// now reused by LedgerEntry (Deposit/Credit rows) after the ledger pivot (see
+// CLAUDE.md's "Pivot (2026-08-06): resident view moves to a transaction ledger").
 enum ProofStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+// A resident-created ledger row. SYSTEM charges are NOT stored here — they remain
+// MaintenanceRecord rows, always implicitly "Approved" (see below). Only DEPOSIT
+// (a UPI payment, pending admin review) and CREDIT (an advance deposit or expense
+// reimbursement the resident logs) live in LedgerEntry.
+enum LedgerType {
+  DEPOSIT
+  CREDIT
 }
 
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
@@ -53,8 +56,8 @@ enum NotificationStatus {
 }
 
 model Society {
-  id   String @id @default(cuid())
-  name String
+  id      String @id @default(cuid())
+  name    String
   address String
 
   // UPI payment address QR codes are generated against (Task 6.1). Required — a
@@ -94,15 +97,15 @@ model User {
   societyId String
   society   Society @relation(fields: [societyId], references: [id])
 
-  ownedFlats         Flat[]              @relation("FlatOwner")
-  currentTenantFlats Flat[]              @relation("FlatCurrentTenant")
-  occupancyChanges   OccupancyChange[]
-  uploadedProofs     PaymentProof[]      @relation("ProofUploader")
-  reviewedProofs     PaymentProof[]      @relation("ProofReviewer")
-  auditLogs           AuditLog[]
-  billedRecords       MaintenanceRecord[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
+  ownedFlats            Flat[]               @relation("FlatOwner")
+  currentTenantFlats    Flat[]               @relation("FlatCurrentTenant")
+  occupancyChanges      OccupancyChange[]
+  ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
+  reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
+  auditLogs             AuditLog[]
+  billedRecords         MaintenanceRecord[]
+  refreshTokens         RefreshToken[]
+  passwordResetTokens   PasswordResetToken[]
 
   @@index([societyId])
 }
@@ -165,6 +168,7 @@ model Flat {
 
   occupancyChanges   OccupancyChange[]
   maintenanceRecords MaintenanceRecord[]
+  ledgerEntries      LedgerEntry[]
 
   @@unique([societyId, wing, flatNumber])
   @@index([societyId])
@@ -190,23 +194,23 @@ model OccupancyChange {
   @@index([tenantId])
 }
 
-// One row per flat per calendar month — the single payable unit (quarterly Invoice
-// bundling was dropped; see CLAUDE.md's pivot note). period is "YYYY-MM". Becomes
-// payable immediately once generated: status starts UNPAID, dueDate is set at
-// generation time (Task 4.2). A resident may select any combination of their UNPAID
-// records to settle in one payment (Task 6.x) — each record stays a clean binary
-// paid/unpaid state, never partially paid. Unique on [flatId, period] enforces
-// "exactly 12 records/flat/year, never duplicated" at the database level, backing up
-// the idempotency Task 4.2 requires of the monthly generation job.
+// One row per flat per calendar month — always a SYSTEM ledger entry, implicitly
+// "Approved" and never individually paid/unpaid (see CLAUDE.md's ledger pivot note).
+// period is "YYYY-MM". dueDate is set at generation time (Task 4.2) and still drives
+// escalation (lib/escalation.ts) even though there's no per-record paid state anymore.
+// Unique on [flatId, period] enforces "exactly 12 records/flat/year, never duplicated"
+// at the database level, backing up the idempotency Task 4.2 requires of the monthly
+// generation job. Every MaintenanceRecord's amount contributes permanently to its
+// flat's totalCharges — payment against the running balance is tracked separately, in
+// LedgerEntry (Deposit/Credit), never by mutating a record here.
 model MaintenanceRecord {
-  id        String        @id @default(cuid())
+  id        String    @id @default(cuid())
   period    String
   payerType PayerType
-  amount    Decimal       @db.Decimal(10, 2)
-  status    PaymentStatus @default(UNPAID)
+  amount    Decimal   @db.Decimal(10, 2)
   dueDate   DateTime
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   flatId String
   flat   Flat   @relation(fields: [flatId], references: [id])
@@ -221,55 +225,61 @@ model MaintenanceRecord {
   payerId String
   payer   User   @relation(fields: [payerId], references: [id])
 
-  paymentProofs PaymentProof[]
-
   @@unique([flatId, period])
   @@index([flatId])
-  @@index([status])
   @@index([payerId])
 }
 
-// One proof can cover multiple resident-selected MaintenanceRecords (implicit
-// many-to-many — Prisma manages the join table). uploadedBy is always the resident;
-// reviewedBy/reviewedAt are set only once an admin acts (approve/reject), so both are
-// optional. adminNote is typically set on reject (a reason), optional either way.
-model PaymentProof {
-  id       String @id @default(cuid())
-  // Opaque storage key, not a browsable URL — the meaning is entirely up to whichever
-  // StorageAdapter wrote it (a relative disk path for LocalStorageAdapter, an S3
-  // object key, a Drive file id...). Never render this directly as a link; the file
-  // is only ever served through GET /api/payment-proofs/:id/file (authenticated,
-  // never public), which resolves it back through the same adapter. See
-  // src/lib/storage/types.ts.
-  fileUrl String
+// A resident-created ledger row — a UPI Deposit (pending admin review) or a Credit
+// (advance deposit / expense reimbursement the resident logs). SYSTEM charges are
+// NOT stored here; they remain MaintenanceRecord rows (see above). Only APPROVED
+// LedgerEntry rows count toward a flat's running balances — PENDING/REJECTED stay
+// visible in the resident's passbook for transparency but are excluded from the sums
+// (CLAUDE.md's ledger pivot note).
+model LedgerEntry {
+  id     String      @id @default(cuid())
+  type   LedgerType
+  amount Decimal     @db.Decimal(10, 2)
+  status ProofStatus @default(PENDING)
 
-  // Tracked explicitly here (not re-derived from the adapter at read time) so every
-  // adapter only ever has to deal with raw bytes — Content-Type for serving the file
-  // back comes from this column, the single source of truth regardless of backend.
-  mimeType String
+  // Required for CREDIT (what the resident is claiming reimbursement/credit for),
+  // unused for DEPOSIT.
+  note String?
 
-  status     ProofStatus @default(PENDING)
+  // Opaque storage key, not a browsable URL — same StorageAdapter contract as the
+  // pre-pivot PaymentProof model (src/lib/storage/types.ts). Optional: unlike the
+  // pre-pivot flow, a proof screenshot is no longer required to submit a Deposit or
+  // Credit (see CLAUDE.md's ledger pivot note) — served only through
+  // GET /api/ledger-entries/:id/file (authenticated, never public).
+  fileUrl  String?
+  mimeType String?
+
+  // Admin's rejection reason (rule 7) — distinct from `note` above (the resident's own
+  // description of a Credit claim).
   adminNote  String?
   reviewedAt DateTime?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  uploadedById String
-  uploadedBy   User   @relation("ProofUploader", fields: [uploadedById], references: [id])
+  flatId String
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  // Always the resident who created this entry (never re-derived from Flat state).
+  payerId String
+  payer   User   @relation("LedgerPayer", fields: [payerId], references: [id])
 
   reviewedById String?
-  reviewedBy   User?   @relation("ProofReviewer", fields: [reviewedById], references: [id])
+  reviewedBy   User?   @relation("LedgerReviewer", fields: [reviewedById], references: [id])
 
-  maintenanceRecords MaintenanceRecord[]
-
-  @@index([uploadedById])
+  @@index([flatId])
   @@index([status])
+  @@index([type])
 }
 
 // channel/recipient/status describe the send attempt itself. relatedEntityType +
 // relatedEntityId are a lightweight polymorphic reference (Postgres has no native
 // polymorphic FK) — a notification can be about a MaintenanceRecord (generated),
-// a PaymentProof (submitted/approved/rejected), etc. No FK constraint on purpose:
+// a LedgerEntry (submitted/approved/rejected), etc. No FK constraint on purpose:
 // the entity type varies per notification.
 model NotificationLog {
   id                String              @id @default(cuid())
@@ -286,7 +296,7 @@ model NotificationLog {
 // actorId is nullable — some audited actions are system-initiated (e.g. the monthly
 // generation cron, Task 4.2), not performed by any human User. entityType/entityId
 // use the same lightweight polymorphic pattern as NotificationLog, for the same
-// reason (audited entities vary: MaintenanceRecord, PaymentProof, etc.).
+// reason (audited entities vary: MaintenanceRecord, LedgerEntry, etc.).
 model AuditLog {
   id         String   @id @default(cuid())
   action     String

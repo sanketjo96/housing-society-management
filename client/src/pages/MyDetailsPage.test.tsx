@@ -41,7 +41,7 @@ const tenantOccupiedFlat = {
 };
 
 function renderPage() {
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -51,7 +51,10 @@ function renderPage() {
   );
 }
 
-function mockAuthAndFlat(user: typeof ownerUser | typeof tenantUser, flatResponse: { ok: boolean; status?: number; json: () => Promise<unknown> }) {
+function mockAuthAndFlat(
+  user: typeof ownerUser | typeof tenantUser,
+  flatResponse: { ok: boolean; status?: number; json: () => Promise<unknown> },
+) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/api/auth/refresh')) {
@@ -79,72 +82,109 @@ describe('MyDetailsPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows flat details (read-only) and the owner’s own profile pre-filled', async () => {
-    mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+  describe('OWNER — combined flat form', () => {
+    it('shows flat details (read-only) and owner details pre-filled', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
 
-    renderPage();
+      renderPage();
 
-    await waitFor(() => expect(screen.getByDisplayValue('A')).toBeInTheDocument());
-    expect(screen.getByDisplayValue('A')).toBeDisabled();
-    expect(screen.getByDisplayValue('101')).toBeDisabled();
-    expect(screen.getByDisplayValue('Alice Owner')).not.toBeDisabled();
-  });
-
-  it('shows "Add tenant" for an owner-occupied flat, with no current tenant', async () => {
-    mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
-
-    renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /add tenant/i })).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByDisplayValue('A')).toBeInTheDocument());
+      expect(screen.getByDisplayValue('A')).toBeDisabled();
+      expect(screen.getByDisplayValue('101')).toBeDisabled();
+      expect(screen.getByDisplayValue('1500')).toBeDisabled();
+      expect(screen.getByDisplayValue('Alice Owner')).not.toBeDisabled();
     });
-    expect(screen.getByText(/owner-occupied/i)).toBeInTheDocument();
-  });
 
-  it('pre-fills and can remove the current tenant for a tenant-occupied flat', async () => {
-    mockAuthAndFlat(ownerUser, { ok: true, json: async () => tenantOccupiedFlat });
+    it('defaults to the owner-occupied toggle when there is no current tenant', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
 
-    renderPage();
-    const user = userEvent.setup();
+      renderPage();
 
-    await waitFor(() => expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /remove tenant/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /owner-occupied/i })).toHaveAttribute('aria-pressed', 'true');
+      });
+      expect(screen.queryByText(/tenant details/i)).not.toBeInTheDocument();
+    });
 
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/me/flat/tenant'),
-        expect.objectContaining({ method: 'DELETE' }),
-      );
+    it('pre-fills tenant details and shows the tenant-occupied toggle as active', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => tenantOccupiedFlat });
+
+      renderPage();
+
+      await waitFor(() => expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /tenant-occupied/i })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('saves the combined form via PUT /api/me/flat', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('Alice Owner')).toBeInTheDocument());
+      await user.clear(screen.getByDisplayValue('Alice Owner'));
+      await user.type(screen.getByLabelText(/owner's full name/i), 'Alice Updated');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/me/flat'),
+          expect.objectContaining({ method: 'PUT' }),
+        );
+      });
+    });
+
+    it('switching to tenant-occupied reveals the tenant details section', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('Alice Owner')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /tenant-occupied/i }));
+
+      expect(screen.getByText(/tenant details/i)).toBeInTheDocument();
     });
   });
 
-  it('does not show the occupancy section for a TENANT role', async () => {
-    mockAuthAndFlat(tenantUser, { ok: true, json: async () => tenantOccupiedFlat });
+  describe('TENANT — read-only flat, own profile only', () => {
+    it('shows flat details read-only and no owner/occupancy editing controls', async () => {
+      mockAuthAndFlat(tenantUser, { ok: true, json: async () => tenantOccupiedFlat });
 
-    renderPage();
+      renderPage();
 
-    await waitFor(() => expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /remove tenant/i })).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByDisplayValue('A')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /owner-occupied/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /tenant-occupied/i })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/owner's full name/i)).not.toBeInTheDocument();
+    });
+
+    it('saves the profile form via PATCH /api/me', async () => {
+      mockAuthAndFlat(tenantUser, { ok: true, json: async () => tenantOccupiedFlat });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument());
+      await user.clear(screen.getByLabelText(/your full name/i));
+      await user.type(screen.getByLabelText(/your full name/i), 'Bob Updated');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/me'),
+          expect.objectContaining({ method: 'PATCH' }),
+        );
+      });
+    });
   });
 
-  it('saves the profile form via PATCH /api/me', async () => {
-    mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+  it('shows the profile form and a note when no flat is linked yet', async () => {
+    mockAuthAndFlat(ownerUser, { ok: false, status: 404, json: async () => ({ error: 'not found' }) });
 
     renderPage();
-    const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByDisplayValue('Alice Owner')).toBeInTheDocument());
-    await user.clear(screen.getByDisplayValue('Alice Owner'));
-    await user.type(screen.getAllByLabelText(/full name/i)[0], 'Alice Updated');
-
-    const saveButtons = screen.getAllByRole('button', { name: /save changes/i });
-    await user.click(saveButtons[0]);
-
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/me'),
-        expect.objectContaining({ method: 'PATCH' }),
-      );
-    });
+    await waitFor(() => expect(screen.getByText(/no flat is linked/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/your full name/i)).toBeInTheDocument();
   });
 });

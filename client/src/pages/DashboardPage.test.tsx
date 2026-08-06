@@ -30,8 +30,14 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.endsWith('/api/auth/me')) {
       return Promise.resolve({ ok: true, json: async () => user });
     }
-    if (url.includes('/api/me/maintenance-records')) {
-      return Promise.resolve({ ok: true, json: async () => [] });
+    if (url.includes('/api/me/ledger')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          entries: [],
+          totals: { totalCharges: 0, approvedDeposits: 0, approvedCredits: 0, outstanding: 0, creditBalance: 0, payable: 0 },
+        }),
+      });
     }
     if (url.includes('/api/me/flat')) {
       return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'not found' }) });
@@ -54,7 +60,7 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/admin/dashboard/flagged-flats')) {
       return Promise.resolve({ ok: true, json: async () => [] });
     }
-    if (url.includes('/api/admin/payment-proofs')) {
+    if (url.includes('/api/admin/ledger-entries')) {
       return Promise.resolve({ ok: true, json: async () => [] });
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
@@ -125,9 +131,8 @@ describe('DashboardPage', () => {
     await user.click(screen.getByRole('tab', { name: /passbook/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/total outstanding/i)).toBeInTheDocument();
+      expect(screen.getByText(/nothing payable right now/i)).toBeInTheDocument();
     });
-    expect(screen.getByText('₹0')).toBeInTheDocument();
   });
 
   it('switches to the My details tab content on click', async () => {
