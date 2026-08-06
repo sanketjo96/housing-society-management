@@ -234,8 +234,20 @@ model MaintenanceRecord {
 // reviewedBy/reviewedAt are set only once an admin acts (approve/reject), so both are
 // optional. adminNote is typically set on reject (a reason), optional either way.
 model PaymentProof {
-  id         String      @id @default(cuid())
-  fileUrl    String
+  id       String @id @default(cuid())
+  // Opaque storage key, not a browsable URL — the meaning is entirely up to whichever
+  // StorageAdapter wrote it (a relative disk path for LocalStorageAdapter, an S3
+  // object key, a Drive file id...). Never render this directly as a link; the file
+  // is only ever served through GET /api/payment-proofs/:id/file (authenticated,
+  // never public), which resolves it back through the same adapter. See
+  // src/lib/storage/types.ts.
+  fileUrl String
+
+  // Tracked explicitly here (not re-derived from the adapter at read time) so every
+  // adapter only ever has to deal with raw bytes — Content-Type for serving the file
+  // back comes from this column, the single source of truth regardless of backend.
+  mimeType String
+
   status     ProofStatus @default(PENDING)
   adminNote  String?
   reviewedAt DateTime?

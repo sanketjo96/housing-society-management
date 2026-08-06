@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Check, QrCode, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ErrorBanner } from '../components/FormField';
 import { authedFetch } from '../lib/api';
 
 interface MaintenanceRecord {
@@ -10,6 +12,12 @@ interface MaintenanceRecord {
   status: 'UNPAID' | 'PENDING_REVIEW' | 'PAID';
   dueDate: string;
   flat: { id: string; wing: string; flatNumber: string };
+}
+
+interface QrResult {
+  amount: number;
+  upiLink: string;
+  qrDataUrl: string;
 }
 
 async function fetchMyRecords(): Promise<MaintenanceRecord[]> {
@@ -38,10 +46,160 @@ function periodLabel(period: string): string {
   return new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
+// Task 6.8's "select a subset, see a QR, pay, upload proof" flow, shown once the
+// resident has selected at least one UNPAID record and clicked "Pay selected".
+function PaymentPanel({
+  selectedIds,
+  selectedRecords,
+  onDone,
+}: {
+  selectedIds: string[];
+  selectedRecords: MaintenanceRecord[];
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+
+  const qrQuery = useQuery({
+    queryKey: ['payment-qr', selectedIds],
+    queryFn: async (): Promise<QrResult> => {
+      const res = await authedFetch('/api/me/maintenance-records/qr', {
+        method: 'POST',
+        body: JSON.stringify({ maintenanceRecordIds: selectedIds }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not generate the payment QR.');
+      return body;
+    },
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error('Choose a screenshot or PDF of your payment first.');
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('maintenanceRecordIds', JSON.stringify(selectedIds));
+      const res = await authedFetch('/api/me/payment-proofs', { method: 'POST', body: formData });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not submit your payment proof.');
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] });
+      onDone();
+    },
+  });
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0] ?? null;
+    setFile(selected);
+    setFileName(selected?.name ?? null);
+  }
+
+  return (
+    <div className="rounded-2xl border border-line bg-white p-6">
+      <button
+        type="button"
+        onClick={onDone}
+        className="mb-4 flex items-center gap-1.5 border-none bg-transparent p-0 text-xs text-muted"
+      >
+        <ArrowLeft size={13} /> Back to passbook
+      </button>
+
+      <h2 className="m-0 mb-1 font-display text-lg text-ink">Pay {selectedRecords.length} record(s)</h2>
+      <p className="m-0 mb-4 text-xs text-muted">
+        {selectedRecords.map((r) => periodLabel(r.period)).join(', ')}
+      </p>
+
+      {qrQuery.isLoading && <p className="text-sm text-muted">Generating QR…</p>}
+      {qrQuery.isError && <ErrorBanner>{(qrQuery.error as Error).message}</ErrorBanner>}
+
+      {qrQuery.data && (
+        <>
+          <div className="mb-5 flex flex-col items-center rounded-xl border border-line bg-paper p-5">
+            <p className="m-0 mb-3 font-mono-brand text-2xl font-semibold text-ink">
+              ₹{qrQuery.data.amount.toLocaleString('en-IN')}
+            </p>
+            <img src={qrQuery.data.qrDataUrl} alt="UPI payment QR code" className="h-48 w-48" />
+            <a
+              href={qrQuery.data.upiLink}
+              className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-teal"
+            >
+              <QrCode size={14} /> Open in a UPI app
+            </a>
+          </div>
+
+          <p className="m-0 mb-2 text-xs font-semibold text-muted">
+            After paying, upload a screenshot or PDF of your payment as proof
+          </p>
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              aria-label="Upload payment proof"
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink"
+            >
+              <Upload size={13} /> Choose file
+            </button>
+            {fileName && <span className="text-xs text-muted">{fileName}</span>}
+          </div>
+
+          {uploadMutation.error && <ErrorBanner>{(uploadMutation.error as Error).message}</ErrorBanner>}
+
+          <button
+            type="button"
+            onClick={() => uploadMutation.mutate()}
+            disabled={!file || uploadMutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+          >
+            {uploadMutation.isPending ? 'Submitting…' : 'Submit proof'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function MaintenancePage() {
   const { data, isLoading, isError } = useQuery({ queryKey: ['my-maintenance-records'], queryFn: fetchMyRecords });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [paying, setPaying] = useState(false);
 
-  const outstanding = data?.filter((r) => r.status === 'UNPAID').reduce((sum, r) => sum + Number(r.amount), 0) ?? 0;
+  const unpaid = data?.filter((r) => r.status === 'UNPAID') ?? [];
+  const outstanding = unpaid.reduce((sum, r) => sum + Number(r.amount), 0);
+  const selectedRecords = unpaid.filter((r) => selected.has(r.id));
+  const selectedTotal = selectedRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function donePaying() {
+    setPaying(false);
+    setSelected(new Set());
+  }
+
+  if (paying) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <PaymentPanel selectedIds={[...selected]} selectedRecords={selectedRecords} onDone={donePaying} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -75,6 +233,7 @@ export function MaintenancePage() {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="w-8 px-4 py-3" />
                   <th className="px-4 py-3 font-semibold">Period</th>
                   <th className="px-4 py-3 font-semibold">Payer</th>
                   <th className="px-4 py-3 text-right font-semibold">Amount</th>
@@ -84,6 +243,16 @@ export function MaintenancePage() {
               <tbody>
                 {data.map((r) => (
                   <tr key={r.id} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3">
+                      {r.status === 'UNPAID' && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${periodLabel(r.period)} for payment`}
+                          checked={selected.has(r.id)}
+                          onChange={() => toggle(r.id)}
+                        />
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono-brand text-ink">{periodLabel(r.period)}</td>
                     <td className="px-4 py-3 text-muted">{r.payerType === 'OWNER' ? 'Owner' : 'Tenant'}</td>
                     <td className="px-4 py-3 text-right font-mono-brand text-ink">
@@ -96,7 +265,7 @@ export function MaintenancePage() {
                 ))}
                 {data.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted">
+                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted">
                       No maintenance records yet.
                     </td>
                   </tr>
@@ -105,9 +274,20 @@ export function MaintenancePage() {
             </table>
           </div>
 
-          <p className="mt-3 text-xs text-muted">
-            Payment (QR code, proof upload) isn&apos;t available yet — coming in a later phase.
-          </p>
+          {selected.size > 0 && (
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-line bg-white p-4">
+              <p className="m-0 text-sm text-ink">
+                {selected.size} selected · <span className="font-mono-brand">₹{selectedTotal.toLocaleString('en-IN')}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setPaying(true)}
+                className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white"
+              >
+                <QrCode size={14} /> Pay selected
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

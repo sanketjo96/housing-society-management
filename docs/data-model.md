@@ -336,6 +336,7 @@ enum ProofStatus {
 model PaymentProof {
   id         String      @id @default(cuid())
   fileUrl    String
+  mimeType   String
   status     ProofStatus @default(PENDING)
   adminNote  String?
   reviewedAt DateTime?
@@ -354,6 +355,18 @@ model PaymentProof {
   @@index([status])
 }
 ```
+
+**`fileUrl` is an opaque storage key, not a browsable URL** (added meaning, Phase 6) —
+whatever `StorageAdapter.save()` returned (a relative disk path for the default `local`
+adapter, an S3 object key or Drive file id for a future one). Never rendered as a link
+directly; the file is only ever served through the authenticated
+`GET /api/payment-proofs/:id/file`, which resolves it back through the same adapter.
+See `docs/payments.md`.
+
+**`mimeType` added Phase 6** (`20260806133258_add_payment_proof_mime_type`) — tracked
+explicitly here rather than re-derived from the adapter at read time, so every adapter
+implementation only ever has to deal with raw bytes. This column is the one source of
+truth for `Content-Type` when serving a proof back, regardless of storage backend.
 
 ### PaymentProof's many-to-many link to MaintenanceRecord
 

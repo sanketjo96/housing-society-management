@@ -26,6 +26,15 @@ services:
       NODE_ENV: production
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE}
+      # Task 6.2/6.3's storage adapter (src/lib/storage) — 'local' writes payment-proof
+      # files under LOCAL_STORAGE_DIR, backed by the uploads_data volume below so files
+      # survive container restarts/redeploys. Swap to 's3'/'gdrive' here once that
+      # adapter is actually implemented (src/lib/storage/index.ts) — no other file in
+      # this compose config would need to change.
+      STORAGE_PROVIDER: local
+      LOCAL_STORAGE_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -58,3 +67,4 @@ services:
 volumes:
   postgres_data:
   frontend_dist:
+  uploads_data:

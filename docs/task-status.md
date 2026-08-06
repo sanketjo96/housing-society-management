@@ -110,15 +110,31 @@ summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 
 ## Phase 6 — QR Payment & Proof Verification (now selection-based across records)
 
-- [ ] 6.1 UPI QR generation endpoint (accepts selected maintenanceRecordIds, not one invoiceId)
-- [ ] 6.2 Payment proof upload endpoint (one proof, many selected records)
-- [ ] 6.3 Authenticated proof view/download endpoint
-- [ ] 6.4 Admin pending proofs list endpoint
-- [ ] 6.5 Approve proof endpoint (cascades N records, not fixed 3)
-- [ ] 6.6 Reject proof endpoint (reverts N records)
-- [ ] 6.7 Manual mark-as-paid fallback (accepts a list of record IDs)
-- [ ] 6.8 Frontend outstanding-balance selection & payment UI (was: invoice QR/upload UI)
-- [ ] 6.9 Frontend admin proof review queue
+- [x] 6.1 UPI QR generation endpoint (`POST /api/me/maintenance-records/qr` — accepts
+      selected maintenanceRecordIds, not one invoiceId; stateless, no DB write)
+- [x] 6.2 Payment proof upload endpoint (`POST /api/me/payment-proofs`, multipart —
+      one proof, many selected records, cascades PENDING_REVIEW in one transaction)
+- [x] 6.3 Authenticated proof view/download endpoint (`GET
+      /api/payment-proofs/:id/file` — uploader or admin only, never public)
+- [x] 6.4 Admin pending proofs list endpoint (`GET /api/admin/payment-proofs`,
+      filterable by status)
+- [x] 6.5 Approve proof endpoint (cascades N records, not fixed 3 — one transaction)
+- [x] 6.6 Reject proof endpoint (reverts N records, stores optional reason)
+- [x] 6.7 Manual mark-as-paid fallback (accepts a list of record IDs, logged
+      distinctly — `MANUAL_MARK_PAID`, one AuditLog row per record)
+- [x] 6.8 Frontend outstanding-balance selection & payment UI
+      (`MaintenancePage.tsx` — checkbox selection, QR panel, proof upload)
+- [x] 6.9 Frontend admin proof review queue (`admin/PaymentProofsPage.tsx` — new
+      "Payment proofs" tab)
+
+**Storage adapter, built alongside 6.2/6.3, not its own numbered task**: proof files
+needed somewhere to live, kept explicitly swappable (`local`/`s3`/`gdrive`) rather than
+hardcoded to disk — see `docs/payments.md` and `server/src/lib/storage/`. Only `local`
+is actually implemented; `s3`/`gdrive` are named extension points.
+
+**Not yet wired**: reject/approve don't send an actual notification yet (rule 7 says
+the resident should be notified) — that's `EmailProvider`, explicitly Phase 7's scope,
+not built here. `docs/payments.md` has the full detail.
 
 ## Phase 7 — Notifications (email only)
 

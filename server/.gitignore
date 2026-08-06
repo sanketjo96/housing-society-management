@@ -5,3 +5,9 @@ dist/
 coverage/
 
 /src/generated/prisma
+
+# LocalStorageAdapter's default target (Task 6.2) — real proof files when running
+# outside Docker; the Docker Compose stack uses a named volume instead
+# (docker-compose.yml's uploads_data), never this path.
+/uploads/
+/test-uploads/

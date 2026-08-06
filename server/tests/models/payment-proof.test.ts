@@ -79,6 +79,7 @@ describe('PaymentProof, NotificationLog, AuditLog models', () => {
     const proof = await prisma.paymentProof.create({
       data: {
         fileUrl: '/uploads/proofs/test.jpg',
+        mimeType: 'image/jpeg',
         uploadedById: owner.id,
         maintenanceRecords: { connect: recordIds.map((id) => ({ id })) },
       },

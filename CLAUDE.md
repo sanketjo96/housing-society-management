@@ -227,7 +227,7 @@ actually consumed by billing logic. Full contract and worked reasoning:
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
 | MaintenanceRecord | flatId, period, payerType, payerId, amount, status, dueDate | Monthly, independently payable — the sole payable entity. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
-| PaymentProof | uploadedBy, fileUrl, status, adminNote, reviewedBy/At | Many-to-many with MaintenanceRecord — one proof can cover several selected records |
+| PaymentProof | uploadedBy, fileUrl, mimeType, status, adminNote, reviewedBy/At | Many-to-many with MaintenanceRecord — one proof can cover several selected records. `fileUrl` is an opaque storage-adapter key, not a browsable URL; `mimeType` added Phase 6 so every adapter only ever deals in raw bytes (see `docs/payments.md`) |
 | NotificationLog | channel, recipient, status, linked entity | |
 | AuditLog | actor, action, entity, timestamp, note | Financial action trail |
 
@@ -275,6 +275,8 @@ existing schema.
 | Scheduling | node-cron (in-process) |
 | Email | Resend or SendGrid, behind a swappable `EmailProvider` interface |
 | QR generation | `qrcode` npm package (no external API) |
+| File upload parsing | `multer` (memory storage — buffers handed to the storage adapter, never written to disk by multer itself) |
+| Proof storage | Swappable `StorageAdapter` interface (`server/src/lib/storage`) — `local` (disk, default) implemented; `s3`/`gdrive` are named extension points, not yet built. See `docs/payments.md` |
 | Test runner | Vitest (backend and frontend) |
 | Deployment | Docker Compose, Nginx reverse proxy, Certbot SSL |
 

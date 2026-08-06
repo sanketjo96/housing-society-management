@@ -42,6 +42,9 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/admin/settings')) {
       return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
     }
+    if (url.includes('/api/admin/payment-proofs')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
 }
@@ -65,14 +68,26 @@ describe('DashboardPage', () => {
     expect(screen.queryByRole('tab', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the Dashboard, Flats and residents, and Settings tabs for an ADMIN', async () => {
+  it('shows only the admin tabs (Dashboard, Flats and residents, Payment proofs, Settings) for an ADMIN', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderDashboard();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: /flats and residents/i })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /^settings$/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /passbook/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /my details/i })).not.toBeInTheDocument();
+  });
+
+  it('switches to the Payment proofs tab', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
+    renderDashboard();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: /payment proofs/i }));
+
+    await waitFor(() => expect(screen.getByText(/no pending proofs/i)).toBeInTheDocument());
   });
 
   it('switches to the Settings tab and shows the current billing defaults', async () => {

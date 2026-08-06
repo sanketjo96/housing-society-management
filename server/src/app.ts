@@ -1,12 +1,15 @@
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
+import { errorHandler } from './middleware/error-handler';
+import { adminPaymentProofsRouter } from './routes/admin-payment-proofs.route';
 import { adminUsersRouter } from './routes/admin-users.route';
 import { authRouter } from './routes/auth.route';
 import { flatsRouter } from './routes/flats.route';
 import { maintenanceRecordsRouter } from './routes/maintenance-records.route';
 import { meRouter } from './routes/me.route';
 import { passwordResetRouter } from './routes/password-reset.route';
+import { paymentProofsRouter } from './routes/payment-proofs.route';
 import { societySettingsRouter } from './routes/society-settings.route';
 
 export const app = express();
@@ -28,10 +31,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use(adminPaymentProofsRouter);
 app.use(adminUsersRouter);
 app.use(authRouter);
 app.use(flatsRouter);
 app.use(maintenanceRecordsRouter);
 app.use(meRouter);
 app.use(passwordResetRouter);
+app.use(paymentProofsRouter);
 app.use(societySettingsRouter);
+
+// Must be registered last (Express's 4-arg-signature error-middleware convention).
+app.use(errorHandler);

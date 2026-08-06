@@ -7,10 +7,15 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 // Without it, the cookie set at login would never be attached to the /api/auth/refresh
 // request that needs it, cross-origin (local dev) or not.
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // A FormData body (Task 6.2's proof upload) must NOT get an explicit Content-Type —
+  // the browser needs to set its own multipart/form-data boundary, which it only does
+  // when the header is left unset entirely. Every other caller still gets the
+  // json default it relied on before.
+  const isFormData = init.body instanceof FormData;
   return fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init.headers },
+    headers: { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...init.headers },
   });
 }
 
