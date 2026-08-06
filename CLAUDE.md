@@ -270,6 +270,7 @@ existing schema.
 | Database | PostgreSQL |
 | Frontend | React + Vite + TypeScript |
 | Data fetching | React Query |
+| Data tables | TanStack Table v8 (headless — `client/src/components/DataTable.tsx` is the one shared table shell every list view uses; `getCoreRowModel` only, no sorting/filtering/pagination row models, deliberately — this is a 24-flat MVP) |
 | Forms/validation | React Hook Form + Zod |
 | Auth | JWT (access + refresh), bcrypt |
 | Scheduling | node-cron (in-process) |

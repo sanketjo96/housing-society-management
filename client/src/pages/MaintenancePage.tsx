@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft, Check, QrCode, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { DataTable } from '../components/DataTable';
 import { ErrorBanner } from '../components/FormField';
 import { authedFetch } from '../lib/api';
 
@@ -193,6 +195,52 @@ export function MaintenancePage() {
     setSelected(new Set());
   }
 
+  const columns = useMemo<ColumnDef<MaintenanceRecord, unknown>[]>(
+    () => [
+      {
+        id: 'select',
+        header: '',
+        meta: { cellClassName: 'w-8' },
+        cell: ({ row }) =>
+          row.original.status === 'UNPAID' && (
+            <input
+              type="checkbox"
+              aria-label={`Select ${periodLabel(row.original.period)} for payment`}
+              checked={selected.has(row.original.id)}
+              onChange={() => toggle(row.original.id)}
+            />
+          ),
+      },
+      {
+        id: 'period',
+        header: 'Period',
+        cell: ({ row }) => <span className="font-mono-brand text-ink">{periodLabel(row.original.period)}</span>,
+      },
+      {
+        id: 'payer',
+        header: 'Payer',
+        cell: ({ row }) => (
+          <span className="text-muted">{row.original.payerType === 'OWNER' ? 'Owner' : 'Tenant'}</span>
+        ),
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono-brand text-ink">₹{Number(row.original.amount).toLocaleString('en-IN')}</span>
+        ),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        meta: { align: 'right' },
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+    ],
+    [selected],
+  );
+
   if (paying) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -229,50 +277,12 @@ export function MaintenancePage() {
             )}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-line bg-white">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="w-8 px-4 py-3" />
-                  <th className="px-4 py-3 font-semibold">Period</th>
-                  <th className="px-4 py-3 font-semibold">Payer</th>
-                  <th className="px-4 py-3 text-right font-semibold">Amount</th>
-                  <th className="px-4 py-3 text-right font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((r) => (
-                  <tr key={r.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-3">
-                      {r.status === 'UNPAID' && (
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${periodLabel(r.period)} for payment`}
-                          checked={selected.has(r.id)}
-                          onChange={() => toggle(r.id)}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono-brand text-ink">{periodLabel(r.period)}</td>
-                    <td className="px-4 py-3 text-muted">{r.payerType === 'OWNER' ? 'Owner' : 'Tenant'}</td>
-                    <td className="px-4 py-3 text-right font-mono-brand text-ink">
-                      ₹{Number(r.amount).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <StatusBadge status={r.status} />
-                    </td>
-                  </tr>
-                ))}
-                {data.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted">
-                      No maintenance records yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            data={data}
+            columns={columns}
+            getRowId={(r) => r.id}
+            emptyMessage="No maintenance records yet."
+          />
 
           {selected.size > 0 && (
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-line bg-white p-4">

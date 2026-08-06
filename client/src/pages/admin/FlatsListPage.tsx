@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload, User, Users } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { DataTable } from '../../components/DataTable';
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
@@ -401,6 +403,62 @@ export function FlatsListPage() {
   // pre-filled even if the admin never opens Settings this session.
   const { data: settings } = useQuery({ queryKey: ['society-settings'], queryFn: fetchSettings });
 
+  const columns = useMemo<ColumnDef<FlatSummary, unknown>[]>(
+    () => [
+      {
+        id: 'flat',
+        header: 'Flat',
+        cell: ({ row }) => (
+          <span className="font-mono-brand text-ink">
+            {row.original.wing}-{row.original.flatNumber}
+          </span>
+        ),
+      },
+      {
+        id: 'owner',
+        header: 'Owner',
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.owner.name}
+            <div className="text-xs text-muted">{row.original.owner.email}</div>
+          </span>
+        ),
+      },
+      {
+        id: 'occupancy',
+        header: 'Occupancy',
+        cell: ({ row }) => <span className="text-muted">{occupancyLabel(row.original)}</span>,
+      },
+      {
+        id: 'tenant',
+        header: 'Tenant',
+        cell: ({ row }) =>
+          row.original.currentTenant ? (
+            <span className="text-ink">
+              {row.original.currentTenant.name}
+              <div className="text-xs text-muted">{row.original.currentTenant.email}</div>
+            </span>
+          ) : (
+            <span className="text-muted">—</span>
+          ),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <button
+            type="button"
+            onClick={() => setEditingId(row.original.id)}
+            className="rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink"
+          >
+            Edit
+          </button>
+        ),
+      },
+    ],
+    [],
+  );
+
   if (editingId === 'new') {
     return (
       <div className="mx-auto max-w-2xl">
@@ -444,59 +502,12 @@ export function FlatsListPage() {
       )}
 
       {data && (
-        <div className="overflow-hidden rounded-2xl border border-line bg-white">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-semibold">Flat</th>
-                <th className="px-4 py-3 font-semibold">Owner</th>
-                <th className="px-4 py-3 font-semibold">Occupancy</th>
-                <th className="px-4 py-3 font-semibold">Tenant</th>
-                <th className="px-4 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((flat) => (
-                <tr key={flat.id} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-mono-brand text-ink">
-                    {flat.wing}-{flat.flatNumber}
-                  </td>
-                  <td className="px-4 py-3 text-ink">
-                    {flat.owner.name}
-                    <div className="text-xs text-muted">{flat.owner.email}</div>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{occupancyLabel(flat)}</td>
-                  <td className="px-4 py-3 text-ink">
-                    {flat.currentTenant ? (
-                      <>
-                        {flat.currentTenant.name}
-                        <div className="text-xs text-muted">{flat.currentTenant.email}</div>
-                      </>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(flat.id)}
-                      className="rounded-md border border-line px-2 py-1 text-xs font-semibold text-ink"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {data.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted">
-                    No flats yet — onboard one above.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          data={data}
+          columns={columns}
+          getRowId={(flat) => flat.id}
+          emptyMessage="No flats yet — onboard one above."
+        />
       )}
     </div>
   );
