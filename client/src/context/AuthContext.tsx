@@ -16,6 +16,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -84,8 +85,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  // Re-fetches the current user and updates local state — for pages that update the
+  // user's own row out-of-band (e.g. MyDetailsPage's PATCH /api/me) and need the
+  // header/anywhere-else-reading-useAuth().user to reflect the change without forcing
+  // a full page reload (which is the only thing that used to refresh it, via the
+  // silent-session-restore effect above running again).
+  async function refreshUser(): Promise<void> {
+    const me = await fetchCurrentUser();
+    setUser(me);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -107,14 +107,27 @@ reading auth state from `AuthContext` (`client/src/context/AuthContext.tsx`).
 | Route | Who can see it |
 |---|---|
 | `/login` | Anyone (no auth required) |
-| `/dashboard` | Any authenticated user — `ADMIN`, `OWNER`, or `TENANT` |
-| `/admin` | `ADMIN` only — a minimal example page; `OWNER`/`TENANT` see "Access denied," not a redirect |
+| `/dashboard` | Any authenticated user — `ADMIN`, `OWNER`, or `TENANT`; a tabbed page, see below |
 | `/` | Redirects to `/dashboard`, which itself redirects to `/login` if you're not signed in |
 
+Task 2.8's original `/admin` demo page (`AdminOnlyPage.tsx`) — a minimal example of
+`ProtectedRoute`'s `allowedRoles` — was removed once Task 3.6's "Flats and residents"
+tab gave `ADMIN` a real role-gated page to land on instead.
+
+**`/dashboard` is a single tabbed page** (`DashboardPage.tsx`), not a separate route per
+feature — which tabs show depends on role, since neither "My details" nor "Flats and
+residents" makes sense for every role:
+
+| Tab | Who sees it | Content |
+|---|---|---|
+| Dashboard | Everyone | Empty placeholder — real widgets are Phase 8 |
+| My details | `OWNER`, `TENANT` | `MyDetailsPage.tsx` — own profile + (owners only) tenant management, Task 3.7/3.8 |
+| Flats and residents | `ADMIN` | `FlatsListPage.tsx` — onboard/edit flats, Tasks 3.1–3.6 |
+
 **To try it locally**: bring the stack up (§2), open `http://<host>/`, log in with any
-seeded account (§5) — e.g. `admin@sunrise.test` / `password123` for full access
-including `/admin`, or `alice@sunrise.test` / `password123` (an `OWNER`) to see
-`/dashboard` work but `/admin` show "Access denied."
+seeded account (§5) — e.g. `admin@sunrise.test` / `password123` to see the "Flats and
+residents" tab, or `alice@sunrise.test` / `password123` (an `OWNER`) to see "My
+details" instead.
 
 **What happens on page load, before you're redirected anywhere**: `AuthContext` tries
 a silent session restore — calls `POST /api/auth/refresh` (using the httpOnly

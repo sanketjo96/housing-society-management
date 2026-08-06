@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { AlertCircle, Building2, Lock, Mail } from 'lucide-react';
+import { Building2, Lock, Mail } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import { ErrorBanner } from '../components/FormField';
 import { useAuth } from '../context/AuthContext';
 
 const loginSchema = z.object({
@@ -68,8 +69,8 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
-  const mutation = useMutation({
-    mutationFn: (values: LoginFormValues) => login(values.email, values.password),
+  const mutation = useMutation<void, Error, LoginFormValues>({
+    mutationFn: (values) => login(values.email, values.password),
     onSuccess: () => {
       navigate('/dashboard');
     },
@@ -137,14 +138,7 @@ export function LoginPage() {
               )}
             </div>
 
-            {mutation.isError && (
-              <div className="flex items-start gap-2 rounded-lg bg-coral-light px-3 py-2.5">
-                <AlertCircle size={14} className="mt-0.5 shrink-0 text-coral" />
-                <p role="alert" className="m-0 text-[12.5px] text-[#5C1F14]">
-                  {(mutation.error as Error).message}
-                </p>
-              </div>
-            )}
+            {mutation.error && <ErrorBanner>{mutation.error.message}</ErrorBanner>}
 
             <button
               type="submit"
