@@ -213,7 +213,9 @@ actually consumed by billing logic. Full contract and worked reasoning:
   `docs/maintenance-records.md`.
 - **MaintenanceRecord due date**: generation date + 15 days (was "Invoice due date"
   pre-pivot — same default value, now attached to the record itself).
-- **Escalation grace period**: 7 days past due date (configurable).
+- **Escalation grace period**: 7 days past due date (configurable — implemented as an
+  optional `?gracePeriodDays=` query param on `GET /api/admin/dashboard/flagged-flats`,
+  Phase 8, rather than a new persisted `Society` setting; see `docs/admin-dashboard.md`).
 - **Test runner**: Vitest for both `server/` and `client/` (Task 0.1 leaves this open;
   chosen for a single toolchain — `client/`'s React Testing Library setup needs Vitest
   anyway).

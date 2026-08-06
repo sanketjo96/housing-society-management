@@ -147,10 +147,22 @@ not built here. `docs/payments.md` has the full detail.
 
 ## Phase 8 — Admin Dashboard
 
-- [ ] 8.1 Outstanding total and collection rate widget (base logic now from 4.6, not removed 5.5)
-- [ ] 8.2 Flat-wise dues table (base logic now from 4.6, not removed 5.5)
-- [ ] 8.3 Pending proofs widget
-- [ ] 8.4 Flagged flats widget
+- [x] 8.1 Outstanding total and collection rate widget (`GET
+      /api/admin/dashboard/summary` — totalBilled/totalPaid/outstandingTotal split
+      from pendingReviewTotal, collectionRatePercent; base logic now from 4.6, not
+      removed 5.5)
+- [x] 8.2 Flat-wise dues table (`GET /api/admin/dashboard/flat-dues` — every flat
+      including zero-due ones, UNPAID+PENDING_REVIEW summed, sorted highest first;
+      base logic now from 4.6, not removed 5.5)
+- [x] 8.3 Pending proofs widget (no new endpoint — reuses `GET
+      /api/admin/payment-proofs?status=PENDING` from Task 6.4, with a click-through to
+      the existing "Payment proofs" tab)
+- [x] 8.4 Flagged flats widget (`GET /api/admin/dashboard/flagged-flats` — rule 8's
+      escalation logic, pure functions in `src/lib/escalation.ts`; configurable grace
+      period via `?gracePeriodDays=`, default 7; message is prepared for the admin to
+      manually copy/share, never auto-sent, per rule 8)
+
+Full contract, design decisions, and manual verification: `docs/admin-dashboard.md`.
 
 ## Phase 9 — Security & Hardening Audit
 

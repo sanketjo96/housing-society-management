@@ -1,6 +1,7 @@
 import { BookOpen, LayoutGrid, ReceiptText, Settings as SettingsIcon, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import { AdminDashboardPage } from './admin/AdminDashboardPage';
 import { FlatsListPage } from './admin/FlatsListPage';
 import { PaymentProofsPage } from './admin/PaymentProofsPage';
 import { SettingsPage } from './admin/SettingsPage';
@@ -87,13 +88,14 @@ export function DashboardPage() {
         </div>
 
         {tab === 'dashboard' && (
-          <div
-            role="tabpanel"
-            id="tabpanel-dashboard"
-            aria-labelledby="tab-dashboard"
-            className="rounded-2xl border border-line bg-white p-10 text-center text-sm text-muted"
-          >
-            Dashboard widgets are coming in a later phase.
+          <div role="tabpanel" id="tabpanel-dashboard" aria-labelledby="tab-dashboard">
+            {user?.role === 'ADMIN' ? (
+              <AdminDashboardPage onNavigateToProofs={() => setTab('payment-proofs')} />
+            ) : (
+              <div className="rounded-2xl border border-line bg-white p-10 text-center text-sm text-muted">
+                Dashboard widgets are coming in a later phase.
+              </div>
+            )}
           </div>
         )}
         {tab === 'passbook' && (

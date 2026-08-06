@@ -42,6 +42,18 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/admin/settings')) {
       return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
     }
+    if (url.includes('/api/admin/dashboard/summary')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ totalBilled: 0, totalPaid: 0, outstandingTotal: 0, pendingReviewTotal: 0, collectionRatePercent: 0 }),
+      });
+    }
+    if (url.includes('/api/admin/dashboard/flat-dues')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
+    if (url.includes('/api/admin/dashboard/flagged-flats')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
     if (url.includes('/api/admin/payment-proofs')) {
       return Promise.resolve({ ok: true, json: async () => [] });
     }

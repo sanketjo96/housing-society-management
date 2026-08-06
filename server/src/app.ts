@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import { errorHandler } from './middleware/error-handler';
+import { adminDashboardRouter } from './routes/admin-dashboard.route';
 import { adminPaymentProofsRouter } from './routes/admin-payment-proofs.route';
 import { adminUsersRouter } from './routes/admin-users.route';
 import { authRouter } from './routes/auth.route';
@@ -31,6 +32,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use(adminDashboardRouter);
 app.use(adminPaymentProofsRouter);
 app.use(adminUsersRouter);
 app.use(authRouter);
