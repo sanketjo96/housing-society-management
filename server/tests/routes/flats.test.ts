@@ -1,0 +1,169 @@
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { app } from '../../src/app';
+import { prisma } from '../../src/db';
+import { createUser } from '../../src/services/admin-users.service';
+import { login } from '../../src/services/auth.service';
+
+describe('Flats admin endpoints', () => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let societyId: string;
+  let adminToken: string;
+  let ownerToken: string;
+  let ownerId: string;
+  const createdUserIds: string[] = [];
+  const createdFlatIds: string[] = [];
+
+  beforeAll(async () => {
+    const society = await prisma.society.create({
+      data: { name: `Test Society ${suffix}`, address: '1 Test St', upiVpa: 'test@okhdfcbank' },
+    });
+    societyId = society.id;
+
+    const adminPassword = 'admin-password-123';
+    const admin = await createUser({
+      name: 'Test Admin',
+      email: `flats-admin-${suffix}@example.com`,
+      password: adminPassword,
+      role: 'ADMIN',
+      societyId,
+    });
+    createdUserIds.push(admin.id);
+    adminToken = (await login({ email: admin.email, password: adminPassword })).accessToken;
+
+    const ownerPassword = 'owner-password-123';
+    const owner = await createUser({
+      name: 'Test Owner',
+      email: `flats-owner-${suffix}@example.com`,
+      password: ownerPassword,
+      role: 'OWNER',
+      societyId,
+    });
+    createdUserIds.push(owner.id);
+    ownerId = owner.id;
+    ownerToken = (await login({ email: owner.email, password: ownerPassword })).accessToken;
+  });
+
+  afterAll(async () => {
+    await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
+    await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.society.delete({ where: { id: societyId } });
+    await prisma.$disconnect();
+  });
+
+  describe('POST /api/admin/flats', () => {
+    it('rejects a request with no access token (401)', async () => {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects a non-admin token (403)', async () => {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+      expect(res.status).toBe(403);
+    });
+
+    it('creates a flat given a valid admin token', async () => {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+
+      expect(res.status).toBe(201);
+      expect(res.body.block).toBe('A');
+      expect(res.body.flatNumber).toBe('101');
+      expect(res.body.ownerId).toBe(ownerId);
+      createdFlatIds.push(res.body.id);
+    });
+
+    it('rejects invalid input with a 400', async () => {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block: '', flatNumber: '101', baseRate: -5, ownerId });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects an ownerId that does not reference an OWNER in this society (400)', async () => {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block: 'A', flatNumber: '105', baseRate: 1500, ownerId: 'nonexistent-id' });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a duplicate block+flatNumber within the same society (409)', async () => {
+      const first = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block: 'F', flatNumber: '901', baseRate: 1500, ownerId });
+      expect(first.status).toBe(201);
+      createdFlatIds.push(first.body.id);
+
+      const second = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block: 'F', flatNumber: '901', baseRate: 1600, ownerId });
+      expect(second.status).toBe(409);
+    });
+  });
+
+  describe('PATCH /api/admin/flats/:id', () => {
+    async function createTestFlat(block: string, flatNumber: string) {
+      const res = await request(app)
+        .post('/api/admin/flats')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ block, flatNumber, baseRate: 1500, ownerId });
+      createdFlatIds.push(res.body.id);
+      return res.body.id as string;
+    }
+
+    it('rejects a request with no access token (401)', async () => {
+      const flatId = await createTestFlat('G', '101');
+      const res = await request(app).patch(`/api/admin/flats/${flatId}`).send({ baseRate: 1600 });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects a non-admin token (403)', async () => {
+      const flatId = await createTestFlat('G', '102');
+      const res = await request(app)
+        .patch(`/api/admin/flats/${flatId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ baseRate: 1600 });
+      expect(res.status).toBe(403);
+    });
+
+    it('updates a flat given a valid admin token', async () => {
+      const flatId = await createTestFlat('G', '103');
+      const res = await request(app)
+        .patch(`/api/admin/flats/${flatId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ baseRate: 1650 });
+
+      expect(res.status).toBe(200);
+      expect(Number(res.body.baseRate)).toBe(1650);
+    });
+
+    it('returns 404 for a nonexistent flat', async () => {
+      const res = await request(app)
+        .patch('/api/admin/flats/nonexistent-id')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ baseRate: 1600 });
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects invalid input with a 400', async () => {
+      const flatId = await createTestFlat('G', '104');
+      const res = await request(app)
+        .patch(`/api/admin/flats/${flatId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ baseRate: -5 });
+      expect(res.status).toBe(400);
+    });
+  });
+});

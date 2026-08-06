@@ -35,7 +35,7 @@ the source of truth for build progress since it lives in git.
 
 ## Phase 3 — Flat & Society Onboarding
 
-- [ ] 3.1 Create/edit flat endpoints
+- [x] 3.1 Create/edit flat endpoints
 - [ ] 3.2 Assign/remove tenant endpoint
 - [ ] 3.3 List flats endpoint
 - [ ] 3.4 CSV bulk import for flats

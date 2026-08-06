@@ -1,15 +1,14 @@
 import bcrypt from 'bcrypt';
 import type { Role } from '../generated/prisma/client';
 import { prisma } from '../db';
+import { DuplicateFieldError } from '../lib/errors';
 import { getUniqueConstraintFields } from '../lib/prisma-errors';
 import { scopedWhere } from '../lib/tenant-scope';
 
-export class DuplicateFieldError extends Error {
-  constructor(public readonly fields: string[]) {
-    super(`${fields.join(', ')} already in use`);
-    this.name = 'DuplicateFieldError';
-  }
-}
+// Re-exported for backward compatibility — existing imports (controllers, tests)
+// reference this module directly; the class itself now lives in lib/errors.ts since
+// flats.service.ts (Task 3.1) needs it too.
+export { DuplicateFieldError };
 
 export interface CreateUserInput {
   name: string;
