@@ -36,7 +36,7 @@ correcting a resident's mistake or acting on their behalf. The new resident-faci
 endpoints are a second, narrower path for the common case (an owner instating their
 own tenant), scoped to `req.user.id === flat.ownerId`, not a general admin capability.
 
-**What stays admin-only, unchanged**: `block`, `flatNumber`, and `baseRate` are set at
+**What stays admin-only, unchanged**: `wing`, `flatNumber`, and `baseRate` are set at
 flat onboarding (Task 3.1) and remain **read-only from the resident side** — a
 resident sees these fields but cannot edit them from their own view (matches the
 mockup: those inputs are rendered `disabled`, with "Set by your society admin and
@@ -71,7 +71,7 @@ Tracked as a Phase 3 addendum in `docs/task-status.md` (outside the original
 ### Addendum (2026-08-06, same day): Task 3.1/3.2 redesigned to match the admin mockup
 
 Confirmed against a second shared UI mockup (`AdminExperience`'s "Flats and
-residents" tab): the real admin flat-onboarding workflow is **one form** — block,
+residents" tab): the real admin flat-onboarding workflow is **one form** — wing,
 flat number, base rate, owner contact, occupancy, tenant contact — saved together,
 with no separate "create the owner's account first" step. Tasks 3.1/3.2 as originally
 built required a pre-existing `ownerId`/`tenantId`; this was confirmed as a genuine
@@ -102,7 +102,7 @@ overdue-dues escalation.
 - **Admin** (committee member): onboards flats, reviews payment proofs, monitors dues.
 - **Owner**: owns a flat, may or may not live in it. Views own dues, pays via QR.
   Manages their own contact details and their flat's current tenant (§ Addition
-  2026-08-06, above) — but not the flat's admin-set fields (block, flat number, base
+  2026-08-06, above) — but not the flat's admin-set fields (wing, flat number, base
   rate), which stay read-only from the resident side.
 - **Tenant**: rents from an owner. Same as owner, but billed at a higher rate while
   occupying. May also update their own contact details.
@@ -147,7 +147,7 @@ overdue-dues escalation.
 10. **Resident self-service** (added 2026-08-06): an `OWNER`/`TENANT` may update their
     own `name`/`phone`/`email` without admin involvement; an `OWNER` may additionally
     create/update/remove their own flat's `TENANT`. Does not extend to admin-set flat
-    fields (`block`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
+    fields (`wing`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
     "Addition (2026-08-06)" section above for the full mechanism and reasoning.
 
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
@@ -177,7 +177,7 @@ overdue-dues escalation.
 |---|---|---|
 | Society | name, address, upiVpa, tenantRateFactor (default 1.5) | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
-| Flat | block, flatNumber, baseRate, ownerId, currentTenantId | |
+| Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
 | MaintenanceRecord | flatId, period, payerType, payerId, amount, status, dueDate | Monthly, independently payable — the sole payable entity. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
 | PaymentProof | uploadedBy, fileUrl, status, adminNote, reviewedBy/At | Many-to-many with MaintenanceRecord — one proof can cover several selected records |

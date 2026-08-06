@@ -47,7 +47,7 @@ describe('GET /api/admin/maintenance-records', () => {
 
     const flatA = await createFlat({
       societyId,
-      block: 'A',
+      wing: 'A',
       flatNumber: '1',
       baseRate: 1000,
       ownerName: 'AMR Owner A',
@@ -58,7 +58,7 @@ describe('GET /api/admin/maintenance-records', () => {
 
     const flatB = await createFlat({
       societyId,
-      block: 'B',
+      wing: 'B',
       flatNumber: '1',
       baseRate: 1200,
       ownerName: 'AMR Owner B',

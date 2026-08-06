@@ -35,7 +35,7 @@ describe('MaintenanceRecord as the payable unit', () => {
 
     const flat = await prisma.flat.create({
       data: {
-        block: 'A',
+        wing: 'A',
         flatNumber: `101-${suffix}`,
         baseRate: 1000,
         societyId: society.id,

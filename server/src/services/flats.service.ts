@@ -57,7 +57,7 @@ interface ContactFields {
 
 export interface CreateFlatInput {
   societyId: string;
-  block: string;
+  wing: string;
   flatNumber: string;
   baseRate: number;
   ownerName: string;
@@ -185,14 +185,14 @@ async function getFlatById(id: string, societyId: string) {
 export async function listFlats(societyId: string) {
   return prisma.flat.findMany({
     where: { societyId },
-    orderBy: [{ block: 'asc' }, { flatNumber: 'asc' }],
+    orderBy: [{ wing: 'asc' }, { flatNumber: 'asc' }],
     include: FLAT_WITH_RESIDENTS_INCLUDE,
   });
 }
 
 // One atomic action: find-or-create the owner's account, create the flat, and (if
 // occupancy is 'tenant') find-or-create the tenant's account and open their
-// OccupancyChange — matching the admin UI's single flat-onboarding form (block,
+// OccupancyChange — matching the admin UI's single flat-onboarding form (wing,
 // flatNumber, baseRate, owner contact, occupancy, tenant contact all saved together).
 export async function createFlat(input: CreateFlatInput) {
   const owner = await findOrCreateUserByEmail(input.societyId, 'OWNER', {
@@ -205,7 +205,7 @@ export async function createFlat(input: CreateFlatInput) {
   try {
     flat = await prisma.flat.create({
       data: {
-        block: input.block,
+        wing: input.wing,
         flatNumber: input.flatNumber,
         baseRate: input.baseRate,
         societyId: input.societyId,
@@ -233,7 +233,7 @@ export async function createFlat(input: CreateFlatInput) {
 
 // Returns null if the flat doesn't exist, or exists but belongs to a different society
 // (Task 2.6 tenant scoping) — same "not found" outcome either way, so a caller can't
-// tell a wrong-society id apart from a nonexistent one. block/flatNumber are
+// tell a wrong-society id apart from a nonexistent one. wing/flatNumber are
 // deliberately not editable here (matches the admin UI's disabled inputs — the
 // onboarding-time identity of a flat doesn't change; see CLAUDE.md's
 // "Addition (2026-08-06)").
@@ -283,7 +283,7 @@ export interface BulkImportResult {
   errors: BulkImportRowError[];
 }
 
-const IMPORT_REQUIRED_COLUMNS = ['block', 'flatnumber', 'baserate', 'ownername', 'owneremail'];
+const IMPORT_REQUIRED_COLUMNS = ['wing', 'flatnumber', 'baserate', 'ownername', 'owneremail'];
 const IMPORT_OPTIONAL_COLUMNS = [
   'ownerphone',
   'occupancy',
@@ -329,13 +329,13 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
   for (let i = 1; i < lines.length; i++) {
     const rowNumber = i + 1; // 1-indexed including the header row, matching what a spreadsheet shows
     const cols = lines[i].split(',').map((c) => c.trim());
-    const block = cell(cols, 'block');
+    const wing = cell(cols, 'wing');
     const flatNumber = cell(cols, 'flatnumber');
     const baseRateRaw = cell(cols, 'baserate');
     const ownerName = cell(cols, 'ownername');
     const ownerEmail = cell(cols, 'owneremail');
 
-    if (!block || !flatNumber || !baseRateRaw || !ownerName || !ownerEmail) {
+    if (!wing || !flatNumber || !baseRateRaw || !ownerName || !ownerEmail) {
       errors.push({ row: rowNumber, message: 'Missing required value(s)' });
       continue;
     }
@@ -353,7 +353,7 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
     try {
       const flat = await createFlat({
         societyId,
-        block,
+        wing,
         flatNumber,
         baseRate,
         ownerName,
@@ -368,7 +368,7 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
       created.push(flat);
     } catch (err) {
       if (err instanceof DuplicateFieldError) {
-        errors.push({ row: rowNumber, message: `${block}-${flatNumber} already exists in this society` });
+        errors.push({ row: rowNumber, message: `${wing}-${flatNumber} already exists in this society` });
       } else if (err instanceof ConflictingRoleError) {
         errors.push({ row: rowNumber, message: err.message });
       } else {

@@ -45,7 +45,7 @@ describe('POST /api/admin/maintenance-records/generate', () => {
 
     const flat = await createFlat({
       societyId,
-      block: 'G',
+      wing: 'G',
       flatNumber: '101',
       baseRate: 1800,
       ownerName: 'Gen Flat Owner',

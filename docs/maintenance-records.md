@@ -78,7 +78,7 @@ cron's own run would have been.
 
 Task 4.5. `OWNER`/`TENANT` only (`403` for `ADMIN` — an admin isn't billed). Returns
 every record where `payerId === req.user.id`, newest period first, each with a `flat`
-summary (`id`/`block`/`flatNumber`). This *is* "the resident's primary
+summary (`id`/`wing`/`flatNumber`). This *is* "the resident's primary
 outstanding-balance view" (`CLAUDE.md`'s pivot note) — the frontend filters
 `status === 'UNPAID'` and sums `amount` client-side rather than the endpoint
 pre-computing a total, since the full list is needed anyway for Task 6.x's "select any

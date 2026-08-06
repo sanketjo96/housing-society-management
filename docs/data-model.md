@@ -121,7 +121,7 @@ MVP since no "delete society" feature is in scope at all (§7, out of scope).
 ```prisma
 model Flat {
   id         String   @id @default(cuid())
-  block      String
+  wing      String
   flatNumber String
   baseRate   Decimal  @db.Decimal(10, 2)
   createdAt  DateTime @default(now())
@@ -138,7 +138,7 @@ model Flat {
 
   occupancyChanges OccupancyChange[]
 
-  @@unique([societyId, block, flatNumber])
+  @@unique([societyId, wing, flatNumber])
   @@index([societyId])
 }
 ```

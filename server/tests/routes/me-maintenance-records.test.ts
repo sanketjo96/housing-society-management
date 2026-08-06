@@ -38,7 +38,7 @@ describe('GET /api/me/maintenance-records', () => {
     const ownerEmail = `mr-me-owner-${suffix}@example.com`;
     const flat = await createFlat({
       societyId,
-      block: 'R',
+      wing: 'R',
       flatNumber: '101',
       baseRate: 1500,
       ownerName: 'MR Me Owner',
@@ -97,7 +97,7 @@ describe('GET /api/me/maintenance-records', () => {
     expect(res.body[0].period).toBe('2026-06');
     expect(res.body[1].period).toBe('2026-05');
     expect(res.body[0].status).toBe('UNPAID');
-    expect(res.body[0].flat.block).toBe('R');
+    expect(res.body[0].flat.wing).toBe('R');
     expect(res.body[0].flat.flatNumber).toBe('101');
   });
 });

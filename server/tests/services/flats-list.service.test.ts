@@ -24,7 +24,7 @@ describe('flats service — listFlats', () => {
 
     const flatA = await createFlat({
       societyId,
-      block: 'L',
+      wing: 'L',
       flatNumber: '101',
       baseRate: 1500,
       ownerName: 'Test Owner',
@@ -39,7 +39,7 @@ describe('flats service — listFlats', () => {
     // each flat having a distinct owner.
     const flatB = await createFlat({
       societyId,
-      block: 'L',
+      wing: 'L',
       flatNumber: '102',
       baseRate: 1600,
       ownerName: 'Test Owner',
@@ -49,7 +49,7 @@ describe('flats service — listFlats', () => {
 
     const otherFlat = await createFlat({
       societyId: otherSocietyId,
-      block: 'L',
+      wing: 'L',
       flatNumber: '101',
       baseRate: 1700,
       ownerName: 'Other Society Owner',

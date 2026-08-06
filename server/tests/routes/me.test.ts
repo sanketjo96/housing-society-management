@@ -62,7 +62,7 @@ describe('/api/me endpoints', () => {
     const flatRes = await request(app)
       .post('/api/admin/flats')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ block: 'M', flatNumber: '101', baseRate: 1500, ownerName: owner.name, ownerEmail: owner.email });
+      .send({ wing: 'M', flatNumber: '101', baseRate: 1500, ownerName: owner.name, ownerEmail: owner.email });
     flatId = flatRes.body.id;
     createdFlatIds.push(flatId);
   });

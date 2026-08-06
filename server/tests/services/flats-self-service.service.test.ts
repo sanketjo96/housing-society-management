@@ -60,7 +60,7 @@ describe('flats service — resident self-service', () => {
     // `ownerId` above stays valid for the rest of this suite's assertions.
     const flat = await createFlat({
       societyId,
-      block: 'S',
+      wing: 'S',
       flatNumber: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       baseRate: 1500,
       ownerName: 'Self-Service Owner',

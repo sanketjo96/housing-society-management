@@ -5,7 +5,7 @@
 // field name(s) via getUniqueConstraintFields() (src/lib/prisma-errors.ts). Originally
 // lived in admin-users.service.ts (Task 2.1); moved here once flats.service.ts (Task
 // 3.1) needed the same error for a different unique constraint
-// (@@unique([societyId, block, flatNumber])) — the shape isn't user-specific.
+// (@@unique([societyId, wing, flatNumber])) — the shape isn't user-specific.
 export class DuplicateFieldError extends Error {
   constructor(public readonly fields: string[]) {
     super(`${fields.join(', ')} already in use`);

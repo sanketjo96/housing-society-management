@@ -32,8 +32,8 @@ describe('seed script', () => {
     });
     expect(flats.length).toBeGreaterThanOrEqual(5);
 
-    const a103 = flats.find((f) => f.block === 'A' && f.flatNumber === '103');
-    const b201 = flats.find((f) => f.block === 'B' && f.flatNumber === '201');
+    const a103 = flats.find((f) => f.wing === 'A' && f.flatNumber === '103');
+    const b201 = flats.find((f) => f.wing === 'B' && f.flatNumber === '201');
     expect(a103).toBeDefined();
     expect(b201).toBeDefined();
 

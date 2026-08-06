@@ -57,7 +57,7 @@ describe('POST/DELETE /api/admin/flats/:id/tenant — tenant scoping', () => {
     tenantInSocietyBId = tenantB.id;
 
     const flatB = await prisma.flat.create({
-      data: { block: 'X', flatNumber: '1', baseRate: 1000, societyId: societyBId, ownerId: ownerB.id },
+      data: { wing: 'X', flatNumber: '1', baseRate: 1000, societyId: societyBId, ownerId: ownerB.id },
     });
     createdFlatIds.push(flatB.id);
     flatInSocietyBId = flatB.id;

@@ -78,7 +78,7 @@ describe('flats service — tenant assignment', () => {
   beforeEach(async () => {
     const flat = await createFlat({
       societyId,
-      block: 'A',
+      wing: 'A',
       flatNumber: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       baseRate: 1500,
       ownerId,

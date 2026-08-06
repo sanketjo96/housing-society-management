@@ -84,7 +84,7 @@ export async function generateMaintenanceRecords(
   return { created: result.count, skipped: records.length - result.count };
 }
 
-const FLAT_SUMMARY_INCLUDE = { flat: { select: { id: true, block: true, flatNumber: true } } } as const;
+const FLAT_SUMMARY_INCLUDE = { flat: { select: { id: true, wing: true, flatNumber: true } } } as const;
 
 // Task 4.5 — a resident's own records (payerId = their user id), newest period first.
 // This is "the resident's primary outstanding-balance view" (see CLAUDE.md's pivot
@@ -116,7 +116,7 @@ export async function listMaintenanceRecordsForSociety(
       ...(filters.period ? { period: filters.period } : {}),
       ...(filters.flatId ? { flatId: filters.flatId } : {}),
     },
-    orderBy: [{ period: 'desc' }, { flat: { block: 'asc' } }, { flat: { flatNumber: 'asc' } }],
+    orderBy: [{ period: 'desc' }, { flat: { wing: 'asc' } }, { flat: { flatNumber: 'asc' } }],
     include: {
       ...FLAT_SUMMARY_INCLUDE,
       payer: { select: { id: true, name: true, email: true } },

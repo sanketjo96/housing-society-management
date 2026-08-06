@@ -67,7 +67,7 @@ describe('Flats admin endpoints', () => {
     it('rejects a request with no access token (401)', async () => {
       const res = await request(app)
         .post('/api/admin/flats')
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
+        .send({ wing: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
       expect(res.status).toBe(401);
     });
 
@@ -75,7 +75,7 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
+        .send({ wing: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
       expect(res.status).toBe(403);
     });
 
@@ -84,10 +84,10 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...owner });
+        .send({ wing: 'A', flatNumber: '101', baseRate: 1500, ...owner });
 
       expect(res.status).toBe(201);
-      expect(res.body.block).toBe('A');
+      expect(res.body.wing).toBe('A');
       expect(res.body.flatNumber).toBe('101');
       expect(res.body.owner.email).toBe(owner.ownerEmail);
       createdFlatIds.push(res.body.id);
@@ -97,32 +97,32 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: '', flatNumber: '101', baseRate: -5, ...ownerFields() });
+        .send({ wing: '', flatNumber: '101', baseRate: -5, ...ownerFields() });
       expect(res.status).toBe(400);
     });
 
-    it('rejects a duplicate block+flatNumber within the same society (409)', async () => {
+    it('rejects a duplicate wing+flatNumber within the same society (409)', async () => {
       const first = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'F', flatNumber: '901', baseRate: 1500, ...ownerFields() });
+        .send({ wing: 'F', flatNumber: '901', baseRate: 1500, ...ownerFields() });
       expect(first.status).toBe(201);
       createdFlatIds.push(first.body.id);
 
       const second = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'F', flatNumber: '901', baseRate: 1600, ...ownerFields() });
+        .send({ wing: 'F', flatNumber: '901', baseRate: 1600, ...ownerFields() });
       expect(second.status).toBe(409);
     });
   });
 
   describe('PATCH /api/admin/flats/:id', () => {
-    async function createTestFlat(block: string, flatNumber: string) {
+    async function createTestFlat(wing: string, flatNumber: string) {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block, flatNumber, baseRate: 1500, ...ownerFields() });
+        .send({ wing, flatNumber, baseRate: 1500, ...ownerFields() });
       createdFlatIds.push(res.body.id);
       return res.body.id as string;
     }

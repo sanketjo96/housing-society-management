@@ -75,7 +75,7 @@ describe('Flat tenant assignment endpoints', () => {
       .post('/api/admin/flats')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        block: 'T',
+        wing: 'T',
         flatNumber,
         baseRate: 1500,
         ownerName: `Flat Owner ${flatNumber}`,

@@ -45,7 +45,7 @@ describe('GET /api/admin/flats', () => {
     const flat = await request(app)
       .post('/api/admin/flats')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ block: 'L', flatNumber: '901', baseRate: 1500, ownerName: 'Flat Owner', ownerEmail: flatOwnerEmail });
+      .send({ wing: 'L', flatNumber: '901', baseRate: 1500, ownerName: 'Flat Owner', ownerEmail: flatOwnerEmail });
     createdFlatIds.push(flat.body.id);
   });
 

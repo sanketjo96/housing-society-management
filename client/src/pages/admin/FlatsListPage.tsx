@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Home, Plus, Save, Upload, User, Users } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload, User, Users } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
@@ -10,7 +10,7 @@ import type { ResidentSummary } from '../../types';
 
 interface FlatSummary {
   id: string;
-  block: string;
+  wing: string;
   flatNumber: string;
   baseRate: string;
   owner: ResidentSummary;
@@ -28,12 +28,12 @@ async function fetchFlats(): Promise<FlatSummary[]> {
   return res.json();
 }
 
-// Always shaped like "create" (block/flatNumber included) — in edit mode they're
+// Always shaped like "create" (wing/flatNumber included) — in edit mode they're
 // rendered disabled and simply excluded from the PATCH payload the mutation sends,
 // rather than needing a second parallel schema/type for the same form.
 const flatFormSchema = z
   .object({
-    block: z.string().min(1, 'Block is required'),
+    wing: z.string().min(1, 'Wing is required'),
     flatNumber: z.string().min(1, 'Flat number is required'),
     baseRate: z.coerce.number().positive('Base rate must be a positive number'),
     ownerName: z.string().min(1, "Owner's name is required"),
@@ -66,7 +66,7 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
   } = useForm<FlatFormInput, unknown, FlatFormValues>({
     resolver: zodResolver(flatFormSchema),
     defaultValues: {
-      block: flat?.block ?? '',
+      wing: flat?.wing ?? '',
       flatNumber: flat?.flatNumber ?? '',
       baseRate: flat ? Number(flat.baseRate) : undefined,
       ownerName: flat?.owner.name ?? '',
@@ -86,7 +86,7 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
     mutationFn: async (values) => {
       const path = isEdit ? `/api/admin/flats/${flat.id}` : '/api/admin/flats';
       const method = isEdit ? 'PATCH' : 'POST';
-      // block/flatNumber are immutable once a flat exists — updateFlat's contract
+      // wing/flatNumber are immutable once a flat exists — updateFlat's contract
       // doesn't accept them, so they're simply not sent in edit mode.
       const body = isEdit
         ? {
@@ -129,7 +129,7 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="m-0 font-display text-lg text-ink">
-            {isEdit ? `Flat ${flat.block}-${flat.flatNumber}` : 'Onboard a flat'}
+            {isEdit ? `Flat ${flat.wing}-${flat.flatNumber}` : 'Onboard a flat'}
           </h1>
           <p className="m-0 mt-0.5 text-xs text-muted">
             {isEdit ? 'Editing existing flat' : "This flat hasn't been onboarded yet"}
@@ -144,9 +144,9 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
 
       <SectionHeader icon={Home} title="Flat details" />
       <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Block">
-          <input className={inputClass} disabled={isEdit} {...register('block')} />
-          {errors.block && <ErrMsg>{errors.block.message}</ErrMsg>}
+        <Field label="Wing">
+          <input className={inputClass} disabled={isEdit} {...register('wing')} />
+          {errors.wing && <ErrMsg>{errors.wing.message}</ErrMsg>}
         </Field>
         <Field label="Flat number">
           <input className={inputClass} disabled={isEdit} {...register('flatNumber')} />
@@ -269,16 +269,32 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
   );
 }
 
-const CSV_PLACEHOLDER =
-  'block,flatNumber,baseRate,ownerName,ownerEmail,occupancy,tenantName,tenantEmail\n' +
+// Header + one worked example row — used both as the downloadable template's content
+// and as the source of the column list shown in the panel's description.
+const CSV_TEMPLATE =
+  'wing,flatNumber,baseRate,ownerName,ownerEmail,occupancy,tenantName,tenantEmail\n' +
   'A,101,2000,Priya Nair,priya@example.com,owner,,\n';
 
+function downloadCsvTemplate() {
+  const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'flats-import-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function CsvImportPanel() {
-  const [csv, setCsv] = useState(CSV_PLACEHOLDER);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<ImportResult, Error, void>({
-    mutationFn: async () => {
+  // Takes the file's raw text as the mutation variable (not component state) — no
+  // textarea to hold it in; the backend still parses CSV text server-side
+  // (src/services/flats.service.ts's bulkImportFlats), only how that text reaches the
+  // request body changed, from "typed into a textarea" to "read from an uploaded file".
+  const mutation = useMutation<ImportResult, Error, string>({
+    mutationFn: async (csv) => {
       const res = await authedFetch('/api/admin/flats/import', {
         method: 'POST',
         body: JSON.stringify({ csv }),
@@ -290,34 +306,52 @@ function CsvImportPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-flats'] }),
   });
 
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file (e.g. re-import after fixing errors)
+    if (!file) return;
+    mutation.mutate(await file.text());
+  }
+
   return (
     <div className="mb-6 rounded-2xl border border-line bg-white p-5">
-      <h2 className="m-0 mb-1.5 font-display text-base text-ink">Bulk import (CSV)</h2>
-      <p className="m-0 mb-3 text-xs text-muted">
-        Columns: block, flatNumber, baseRate, ownerName, ownerEmail, plus optional ownerPhone,
-        occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom.
-      </p>
-      <label htmlFor="csv-import" className="sr-only">
-        CSV data
-      </label>
-      <textarea
-        id="csv-import"
-        value={csv}
-        onChange={(e) => setCsv(e.target.value)}
-        rows={5}
-        className="w-full rounded-lg border border-line p-2 font-mono-brand text-xs text-ink outline-none focus:border-teal"
-      />
-      <button
-        type="button"
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
-        className="mt-2 flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
-      >
-        <Upload size={13} /> {mutation.isPending ? 'Importing…' : 'Import'}
-      </button>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="m-0 mb-1.5 font-display text-base text-ink">Bulk import (CSV)</h2>
+          <p className="m-0 text-xs text-muted">
+            Columns: wing, flatNumber, baseRate, ownerName, ownerEmail, plus optional ownerPhone,
+            occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={downloadCsvTemplate}
+            className="flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink"
+          >
+            <FileSpreadsheet size={13} /> Download template
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            aria-label="Upload CSV file"
+            onChange={(e) => void handleFileSelected(e)}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={mutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+          >
+            <Upload size={13} /> {mutation.isPending ? 'Importing…' : 'Import CSV'}
+          </button>
+        </div>
+      </div>
 
       {mutation.isSuccess && mutation.data && (
-        <p className="mt-2 text-xs text-teal">{mutation.data.created.length} flat(s) created.</p>
+        <p className="mt-3 text-xs text-teal">{mutation.data.created.length} flat(s) created.</p>
       )}
       {mutation.isSuccess && mutation.data && mutation.data.errors.length > 0 && (
         <ul className="mt-1 list-disc pl-4 text-xs text-coral">
@@ -399,7 +433,7 @@ export function FlatsListPage() {
               {data.map((flat) => (
                 <tr key={flat.id} className="border-b border-line last:border-0">
                   <td className="px-4 py-3 font-mono-brand text-ink">
-                    {flat.block}-{flat.flatNumber}
+                    {flat.wing}-{flat.flatNumber}
                   </td>
                   <td className="px-4 py-3 text-ink">
                     {flat.owner.name}

@@ -26,7 +26,7 @@ const occupancyFields = {
 };
 
 const createFlatSchema = z.object({
-  block: z.string().min(1),
+  wing: z.string().min(1),
   flatNumber: z.string().min(1),
   baseRate: z.coerce.number().positive(),
   ownerName: z.string().min(1),

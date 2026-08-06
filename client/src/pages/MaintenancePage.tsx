@@ -9,7 +9,7 @@ interface MaintenanceRecord {
   amount: string;
   status: 'UNPAID' | 'PENDING_REVIEW' | 'PAID';
   dueDate: string;
-  flat: { id: string; block: string; flatNumber: string };
+  flat: { id: string; wing: string; flatNumber: string };
 }
 
 async function fetchMyRecords(): Promise<MaintenanceRecord[]> {

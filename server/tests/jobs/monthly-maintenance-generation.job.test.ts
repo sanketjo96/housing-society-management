@@ -30,7 +30,7 @@ describe('runMonthlyMaintenanceGeneration', () => {
 
     const flatA = await createFlat({
       societyId: societyAId,
-      block: 'J',
+      wing: 'J',
       flatNumber: '101',
       baseRate: 1500,
       ownerName: 'Job Owner A',
@@ -41,7 +41,7 @@ describe('runMonthlyMaintenanceGeneration', () => {
 
     const flatB = await createFlat({
       societyId: societyBId,
-      block: 'J',
+      wing: 'J',
       flatNumber: '101',
       baseRate: 1700,
       ownerName: 'Job Owner B',

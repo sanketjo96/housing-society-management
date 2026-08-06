@@ -21,7 +21,7 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 const untenantedFlat = {
   id: 'flat-1',
-  block: 'A',
+  wing: 'A',
   flatNumber: '101',
   baseRate: '1500',
   owner: { id: 'owner-1', name: 'Alice Owner', email: 'alice@example.com', phone: null },
@@ -30,7 +30,7 @@ const untenantedFlat = {
 
 const tenantedFlat = {
   id: 'flat-2',
-  block: 'A',
+  wing: 'A',
   flatNumber: '102',
   baseRate: '1600',
   owner: { id: 'owner-2', name: 'Carol Owner', email: 'carol@example.com', phone: null },
@@ -91,7 +91,7 @@ describe('FlatsListPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /onboard a flat/i })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /onboard a flat/i }));
 
-    await user.type(screen.getByLabelText(/^block$/i), 'A');
+    await user.type(screen.getByLabelText(/^wing$/i), 'A');
     await user.type(screen.getByLabelText(/flat number/i), '101');
     await user.type(screen.getByLabelText(/base maintenance rate/i), '1500');
     await user.type(screen.getByLabelText(/full name/i), 'Alice Owner');
@@ -123,7 +123,7 @@ describe('FlatsListPage', () => {
     await user.click(screen.getByRole('button', { name: /tenant-occupied/i }));
     expect(screen.getByText(/tenant details/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/^block$/i), 'A');
+    await user.type(screen.getByLabelText(/^wing$/i), 'A');
     await user.type(screen.getByLabelText(/flat number/i), '101');
     await user.type(screen.getByLabelText(/base maintenance rate/i), '1500');
     await user.type(screen.getByPlaceholderText(/owner's full name/i), 'Alice Owner');
@@ -150,10 +150,12 @@ describe('FlatsListPage', () => {
     expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument();
   });
 
-  it('imports a CSV and shows per-row results', async () => {
+  it('uploads a CSV file and shows per-row results', async () => {
     const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockImplementation((url: string) => {
+    let sentBody: string | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/import')) {
+        sentBody = init?.body as string;
         return Promise.resolve({
           ok: true,
           json: async () => ({ created: [{ id: 'x' }], errors: [{ row: 3, message: 'Missing required value(s)' }] }),
@@ -169,11 +171,27 @@ describe('FlatsListPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByText(/bulk import/i)).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /^import$/i }));
+
+    const csvText = 'wing,flatNumber,baseRate,ownerName,ownerEmail\nA,101,1500,Test Owner,test-owner@example.com';
+    const file = new File([csvText], 'flats.csv', { type: 'text/csv' });
+    await user.upload(screen.getByLabelText(/upload csv file/i), file);
 
     await waitFor(() => {
       expect(screen.getByText(/1 flat\(s\) created/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/missing required value/i)).toBeInTheDocument();
+    expect(JSON.parse(sentBody!).csv).toBe(csvText);
+  });
+
+  it('has a template download button, distinct from the upload button', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/bulk import/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /download template/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /import csv/i })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 });

@@ -62,16 +62,16 @@ export async function main() {
 
   // A-101 and A-102: owner-occupied, never had a tenant.
   await prisma.flat.create({
-    data: { block: 'A', flatNumber: '101', baseRate: 1500, societyId: society.id, ownerId: alice.id },
+    data: { wing: 'A', flatNumber: '101', baseRate: 1500, societyId: society.id, ownerId: alice.id },
   });
   await prisma.flat.create({
-    data: { block: 'A', flatNumber: '102', baseRate: 1600, societyId: society.id, ownerId: bob.id },
+    data: { wing: 'A', flatNumber: '102', baseRate: 1600, societyId: society.id, ownerId: bob.id },
   });
 
   // A-103: currently tenant-occupied, single ongoing tenancy (no prior tenant).
   const a103 = await prisma.flat.create({
     data: {
-      block: 'A',
+      wing: 'A',
       flatNumber: '103',
       baseRate: 1400,
       societyId: society.id,
@@ -86,7 +86,7 @@ export async function main() {
   // B-201: mid-history — Frank occupied and moved out, Grace is the current tenant.
   const b201 = await prisma.flat.create({
     data: {
-      block: 'B',
+      wing: 'B',
       flatNumber: '201',
       baseRate: 1800,
       societyId: society.id,
@@ -109,7 +109,7 @@ export async function main() {
   // B-202: had a tenant (Ivan) who moved out — currently reverted to owner-occupied.
   const b202 = await prisma.flat.create({
     data: {
-      block: 'B',
+      wing: 'B',
       flatNumber: '202',
       baseRate: 1550,
       societyId: society.id,

@@ -30,7 +30,7 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
 
     const ownerOccupiedFlat = await createFlat({
       societyId,
-      block: 'M',
+      wing: 'M',
       flatNumber: '101',
       baseRate: 2000,
       ownerName: 'MR Owner One',
@@ -41,7 +41,7 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
 
     const tenantOccupiedFlat = await createFlat({
       societyId,
-      block: 'M',
+      wing: 'M',
       flatNumber: '102',
       baseRate: 2000,
       ownerName: 'MR Owner Two',
@@ -56,7 +56,7 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
 
     const otherFlat = await createFlat({
       societyId: otherSocietyId,
-      block: 'M',
+      wing: 'M',
       flatNumber: '101',
       baseRate: 1000,
       ownerName: 'MR Other Owner',

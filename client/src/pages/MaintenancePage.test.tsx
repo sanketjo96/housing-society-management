@@ -25,7 +25,7 @@ const records = [
     amount: '2000',
     status: 'UNPAID' as const,
     dueDate: '2026-07-16',
-    flat: { id: 'f1', block: 'A', flatNumber: '101' },
+    flat: { id: 'f1', wing: 'A', flatNumber: '101' },
   },
   {
     id: 'r2',
@@ -34,7 +34,7 @@ const records = [
     amount: '1800',
     status: 'PAID' as const,
     dueDate: '2026-06-16',
-    flat: { id: 'f1', block: 'A', flatNumber: '101' },
+    flat: { id: 'f1', wing: 'A', flatNumber: '101' },
   },
 ];
 

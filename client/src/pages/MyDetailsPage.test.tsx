@@ -27,7 +27,7 @@ const tenantUser = {
 
 const ownerOccupiedFlat = {
   id: 'flat-1',
-  block: 'A',
+  wing: 'A',
   flatNumber: '101',
   baseRate: '1500',
   owner: { id: 'owner-1', name: 'Alice Owner', email: 'alice@example.com', phone: null },

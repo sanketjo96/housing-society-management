@@ -10,7 +10,7 @@ import type { ResidentSummary } from '../types';
 
 interface MyFlat {
   id: string;
-  block: string;
+  wing: string;
   flatNumber: string;
   baseRate: string;
   owner: ResidentSummary;
@@ -33,8 +33,8 @@ function FlatDetailsSection({ flat }: { flat: MyFlat }) {
     <section>
       <SectionHeader icon={Home} title="Flat details" />
       <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Block">
-          <input className={inputClass} value={flat.block} disabled />
+        <Field label="Wing">
+          <input className={inputClass} value={flat.wing} disabled />
         </Field>
         <Field label="Flat number">
           <input className={inputClass} value={flat.flatNumber} disabled />

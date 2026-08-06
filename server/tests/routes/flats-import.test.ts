@@ -60,7 +60,7 @@ describe('POST /api/admin/flats/import', () => {
   it('rejects a request with no access token (401)', async () => {
     const res = await request(app)
       .post('/api/admin/flats/import')
-      .send({ csv: `block,flatNumber,baseRate,ownerName,ownerEmail\nI,101,1500,Import Owner,import-owner-101-${suffix}@example.com` });
+      .send({ csv: `wing,flatNumber,baseRate,ownerName,ownerEmail\nI,101,1500,Import Owner,import-owner-101-${suffix}@example.com` });
     expect(res.status).toBe(401);
   });
 
@@ -68,13 +68,13 @@ describe('POST /api/admin/flats/import', () => {
     const res = await request(app)
       .post('/api/admin/flats/import')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ csv: `block,flatNumber,baseRate,ownerName,ownerEmail\nI,101,1500,Import Owner,import-owner-101-${suffix}@example.com` });
+      .send({ csv: `wing,flatNumber,baseRate,ownerName,ownerEmail\nI,101,1500,Import Owner,import-owner-101-${suffix}@example.com` });
     expect(res.status).toBe(403);
   });
 
   it('imports valid rows and reports per-row errors, given a valid admin token', async () => {
     const csv =
-      'block,flatNumber,baseRate,ownerName,ownerEmail\n' +
+      'wing,flatNumber,baseRate,ownerName,ownerEmail\n' +
       `I,201,1500,Import Owner,import-owner-201-${suffix}@example.com\n` +
       'I,202,1500,,';
     const res = await request(app)

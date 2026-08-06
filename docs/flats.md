@@ -3,7 +3,7 @@
 Reference for flat management endpoints, built up through Phase 3. Same route/prefix
 convention as `docs/auth.md`: every path below is mounted under `/api/`.
 
-**Every endpoint under `/api/admin/*` is admin-only.** `block` and `flatNumber` are
+**Every endpoint under `/api/admin/*` is admin-only.** `wing` and `flatNumber` are
 permanently immutable once a flat exists (Task 3.1: never editable, not even by an
 admin — see "Edit a flat" below). Owner/tenant *contact details* (name/phone/email),
 by contrast, are editable by both an admin (via these endpoints) and, since Task 3.7,
@@ -15,7 +15,7 @@ in `docs/auth.md`).
 Tasks 3.1/3.2 originally required `ownerId`/`tenantId` referencing an **already
 existing** User account, created via a separate `POST /api/admin/users` call first.
 Confirmed against a shared admin-view UI mockup (`AdminExperience`'s "Flats and
-residents" tab): the real admin workflow is **one form** — block, flat number, base
+residents" tab): the real admin workflow is **one form** — wing, flat number, base
 rate, owner contact, occupancy, tenant contact — saved together in one action, with no
 separate "create the account first" step. `createFlat`/`updateFlat`
 (`src/services/flats.service.ts`) were redesigned to match: they take owner/tenant
@@ -58,7 +58,7 @@ architecture"):
 
 ```json
 {
-  "block": "string, required",
+  "wing": "string, required",
   "flatNumber": "string, required",
   "baseRate": "number, required, positive",
   "ownerName": "string, required",
@@ -78,15 +78,15 @@ never be created directly into a society other than the caller's own.
 
 **Response**: `201` with the created flat, including `owner` and `currentTenant`
 summaries (`{ id, name, email, phone }` each). `400` on invalid input (Zod failure).
-`409` on a duplicate `block`+`flatNumber` within the same society
-(`@@unique([societyId, block, flatNumber])` — the response names the colliding fields,
+`409` on a duplicate `wing`+`flatNumber` within the same society
+(`@@unique([societyId, wing, flatNumber])` — the response names the colliding fields,
 `societyId` filtered out even though it's technically part of the constraint, since
 it's not a field the admin submitted), *or* `ConflictingRoleError` if `ownerEmail`/
 `tenantEmail` already belongs to a same-society user under a different role.
 
 **`DuplicateFieldError` lives in `src/lib/errors.ts`** (moved there in Task 3.1) — it
 originated in `admin-users.service.ts` (Task 2.1) for the email/phone unique
-constraint, and is generic enough to reuse for the flat's `block`+`flatNumber`
+constraint, and is generic enough to reuse for the flat's `wing`+`flatNumber`
 constraint too. `admin-users.service.ts` re-exports it so no existing import broke.
 
 ## Edit a flat — `PATCH /api/admin/flats/:id`
@@ -96,9 +96,9 @@ Same handler file, `updateFlatHandler`. Tenant-scoped: the flat lookup uses
 to a different society returns `404`, identical to an `:id` that doesn't exist at all.
 
 **Request body**: any subset of `baseRate`, `ownerName`, `ownerPhone`, `ownerEmail`,
-`occupancy`, `tenantName`, `tenantPhone`, `tenantEmail`, `effectiveFrom`. **`block` and
+`occupancy`, `tenantName`, `tenantPhone`, `tenantEmail`, `effectiveFrom`. **`wing` and
 `flatNumber` are not accepted here at all** — a flat's identity is fixed at creation
-(matches the admin UI mockup's disabled block/flat-number inputs on the edit form).
+(matches the admin UI mockup's disabled wing/flat-number inputs on the edit form).
 Setting `occupancy: 'tenant'` with tenant fields **updates the existing tenant's
 contact info in place** if the flat already has one (rather than rejecting, the way the
 id-based `assignTenant`/Task 3.2 does) — or creates a new tenant account if none
@@ -106,9 +106,9 @@ exists yet. Setting `occupancy: 'owner'` closes any open `OccupancyChange`, reve
 to owner-occupied.
 
 **Response**: `200` with the updated flat. `404` if `:id` doesn't exist or belongs to
-another society. `400` on invalid input. `409` on a `block`+`flatNumber` collision
+another society. `400` on invalid input. `409` on a `wing`+`flatNumber` collision
 (only reachable if `baseRate`'s update path somehow collided — in practice this can't
-happen anymore since block/flatNumber aren't editable) or `ConflictingRoleError`.
+happen anymore since wing/flatNumber aren't editable) or `ConflictingRoleError`.
 
 ## Assign a tenant (admin, id-based) — `POST /api/admin/flats/:id/tenant`
 
@@ -141,7 +141,7 @@ Closes the flat's open `OccupancyChange` row (`effectiveEnd` = now) and clears
 
 ## List flats — `GET /api/admin/flats`
 
-Task 3.3. Returns every flat in the caller's society, sorted by `block` then
+Task 3.3. Returns every flat in the caller's society, sorted by `wing` then
 `flatNumber`, each including `owner`/`currentTenant` summaries (one query, no N+1) —
 backs the admin "Flats and residents" list view.
 
@@ -151,7 +151,7 @@ Task 3.4. Body: `{ "csv": "string" }` — CSV text (not a file upload; the front
 reads the file client-side and posts its text content). Hand-rolled parsing, no
 library — the expected fields never contain commas/quotes, so an RFC 4180 parser isn't
 needed for this MVP's actual data. Column-name-based (case-insensitive, any order):
-`block`, `flatNumber`, `baseRate`, `ownerName`, `ownerEmail` required; `ownerPhone`,
+`wing`, `flatNumber`, `baseRate`, `ownerName`, `ownerEmail` required; `ownerPhone`,
 `occupancy`, `tenantName`, `tenantPhone`, `tenantEmail`, `effectiveFrom` optional. Each
 row onboards a flat exactly the way the admin form does (same `createFlat()` call) —
 per-row failures are collected into an `errors` array rather than aborting the whole
@@ -179,12 +179,18 @@ routing table). One component handles both list and onboard/edit, matching the a
 mockup's list ↔ inline-form pattern: the list view and the onboard/edit form
 (`FlatForm`) are two states of the same component, toggled locally — clicking "Onboard
 a flat" or a row's "Edit" swaps the list for the form; "Back to list" swaps back.
-`block`/`flatNumber` render as
+`wing`/`flatNumber` render as
 disabled inputs in edit mode (matches the backend's "not editable after creation"
 rule), and are ordinary text inputs in create mode. The occupancy toggle
 (owner-occupied / tenant-occupied) reveals/hides the tenant sub-form, matching the
-mockup's interaction exactly. CSV import is a panel on the list view (textarea +
-"Import" button), showing a created-count and a per-row error list from the response.
+mockup's interaction exactly. CSV import is a panel on the list view, matching the
+mockup's file-picker pattern exactly (not a textarea): a hidden `<input
+type="file" accept=".csv">` triggered by a visible "Import CSV" button, plus a
+"Download template" button that generates a one-row example CSV client-side (`Blob` +
+a temporary `<a download>`, no server round-trip). The uploaded file's text is read
+client-side (`File.text()`) and posted as-is to the same `{ csv: string }` body the
+backend already expected — only the UI interaction changed, not the request contract.
+Shows a created-count and a per-row error list from the response.
 
 **Known simplifications vs. the full mockup** (which includes Dashboard, Pending
 review, and Settings tabs beyond "Flats and residents"): only the flats/residents
@@ -192,7 +198,7 @@ management surface was built — the other three tabs depend on entities/endpoin
 later phases (`MaintenanceRecord` for Dashboard/Settings' rate preview, `PaymentProof`
 for Pending review) that don't exist yet. The mockup's decorative floor/unit sidebar
 widget (`FacadeMini`) was also not ported — it's a fixed illustrative floor plan
-(6 floors × 4 units) that doesn't correspond to this app's actual `block`/`flatNumber`
+(6 floors × 4 units) that doesn't correspond to this app's actual `wing`/`flatNumber`
 scheme (arbitrary admin-chosen strings, not a numeric grid), and Excel-export /
 CSV-template-download buttons were skipped since they'd need new dependencies
 (`xlsx`, `papaparse`) not otherwise justified by Phase 3's scope.
@@ -207,7 +213,7 @@ curl -X POST http://localhost/api/auth/login \
 
 curl -X POST http://localhost/api/admin/flats \
   -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" \
-  -d '{"block":"Z","flatNumber":"999","baseRate":1234,"ownerName":"Live Test Owner","ownerEmail":"livetest-owner@example.com","occupancy":"tenant","tenantName":"Live Test Tenant","tenantEmail":"livetest-tenant@example.com"}'
+  -d '{"wing":"Z","flatNumber":"999","baseRate":1234,"ownerName":"Live Test Owner","ownerEmail":"livetest-owner@example.com","occupancy":"tenant","tenantName":"Live Test Tenant","tenantEmail":"livetest-tenant@example.com"}'
 # → 201, the created flat, owner + tenant accounts both provisioned inline
 
 curl http://localhost/api/admin/flats -H "Authorization: Bearer <accessToken>"

@@ -60,7 +60,7 @@ describe('flats service', () => {
     const email = `flat-new-owner-${suffix}@example.com`;
     const flat = await createFlat({
       societyId,
-      block: 'A',
+      wing: 'A',
       flatNumber: '101',
       baseRate: 1500,
       ownerName: 'New Owner',
@@ -68,7 +68,7 @@ describe('flats service', () => {
     });
     createdFlatIds.push(flat!.id);
 
-    expect(flat!.block).toBe('A');
+    expect(flat!.wing).toBe('A');
     expect(Number(flat!.baseRate)).toBe(1500);
     expect(flat!.owner.email).toBe(email);
 
@@ -82,7 +82,7 @@ describe('flats service', () => {
     const email = `flat-reused-owner-${suffix}@example.com`;
     const first = await createFlat({
       societyId,
-      block: 'A',
+      wing: 'A',
       flatNumber: '102',
       baseRate: 1500,
       ownerName: 'Owner Original Name',
@@ -93,7 +93,7 @@ describe('flats service', () => {
 
     const second = await createFlat({
       societyId,
-      block: 'A',
+      wing: 'A',
       flatNumber: '103',
       baseRate: 1600,
       ownerName: 'Owner Renamed',
@@ -110,7 +110,7 @@ describe('flats service', () => {
     await expect(
       createFlat({
         societyId,
-        block: 'A',
+        wing: 'A',
         flatNumber: '104',
         baseRate: 1500,
         ownerName: 'Should Fail',
@@ -119,10 +119,10 @@ describe('flats service', () => {
     ).rejects.toBeInstanceOf(ConflictingRoleError);
   });
 
-  it('throws DuplicateFieldError for a duplicate block+flatNumber within the same society', async () => {
+  it('throws DuplicateFieldError for a duplicate wing+flatNumber within the same society', async () => {
     const first = await createFlat({
       societyId,
-      block: 'B',
+      wing: 'B',
       flatNumber: '201',
       baseRate: 1500,
       ownerName: 'Owner B',
@@ -133,7 +133,7 @@ describe('flats service', () => {
     await expect(
       createFlat({
         societyId,
-        block: 'B',
+        wing: 'B',
         flatNumber: '201',
         baseRate: 1600,
         ownerName: 'Owner B2',
@@ -142,24 +142,24 @@ describe('flats service', () => {
     ).rejects.toBeInstanceOf(DuplicateFieldError);
   });
 
-  it('allows the same block+flatNumber combination across two different societies', async () => {
+  it('allows the same wing+flatNumber combination across two different societies', async () => {
     const flat = await createFlat({
       societyId: otherSocietyId,
-      block: 'B',
+      wing: 'B',
       flatNumber: '201',
       baseRate: 1500,
       ownerName: 'Other Society Owner',
       ownerEmail: `flat-other-society-owner-${suffix}@example.com`,
     });
     createdFlatIds.push(flat!.id);
-    expect(flat!.block).toBe('B');
+    expect(flat!.wing).toBe('B');
   });
 
   it('creates a flat with a tenant in one call when occupancy is "tenant"', async () => {
     const tenantEmail = `flat-inline-tenant-${suffix}@example.com`;
     const flat = await createFlat({
       societyId,
-      block: 'C',
+      wing: 'C',
       flatNumber: '301',
       baseRate: 1500,
       ownerName: 'Owner C',
@@ -178,7 +178,7 @@ describe('flats service', () => {
   it('updates a flat’s baseRate', async () => {
     const flat = await createFlat({
       societyId,
-      block: 'D',
+      wing: 'D',
       flatNumber: '401',
       baseRate: 1500,
       ownerName: 'Owner D',
@@ -193,7 +193,7 @@ describe('flats service', () => {
   it('updates the owner’s contact info in place', async () => {
     const flat = await createFlat({
       societyId,
-      block: 'D',
+      wing: 'D',
       flatNumber: '402',
       baseRate: 1500,
       ownerName: 'Owner D2',
@@ -208,7 +208,7 @@ describe('flats service', () => {
   it('returns null updating a flat scoped to a different society (tenant scoping)', async () => {
     const flat = await createFlat({
       societyId,
-      block: 'D',
+      wing: 'D',
       flatNumber: '403',
       baseRate: 1500,
       ownerName: 'Owner D3',
@@ -226,7 +226,7 @@ describe('flats service', () => {
   it('assigns and then removes a tenant via occupancy on update', async () => {
     const flat = await createFlat({
       societyId,
-      block: 'E',
+      wing: 'E',
       flatNumber: '501',
       baseRate: 1500,
       ownerName: 'Owner E',
