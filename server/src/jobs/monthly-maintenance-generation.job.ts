@@ -7,6 +7,10 @@ import { generateMaintenanceRecords } from '../services/maintenance-record.servi
 // tenantRateFactor, a DB hiccup) is logged and doesn't stop the others — a single
 // society's cron failure shouldn't silently skip every other society's billing for
 // the month.
+//
+// No period is passed by the cron caller in src/server.ts, so this defaults (via
+// generateMaintenanceRecords) to previousPeriod() — arrears billing: run on the 1st,
+// generate for the month that just ended, once its occupancy history is fully known.
 export async function runMonthlyMaintenanceGeneration(period?: string): Promise<void> {
   const societies = await prisma.society.findMany({ select: { id: true, name: true } });
 

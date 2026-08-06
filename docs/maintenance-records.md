@@ -32,11 +32,23 @@ decimal places before rounding (e.g. `1000.33 × 1.33 = 1330.4389`).
 
 ## Monthly generation — `src/services/maintenance-record.service.ts`
 
-`generateMaintenanceRecords(societyId, period?)` — `period` defaults to the current
-calendar month (`currentPeriod()`, `'YYYY-MM'`) if omitted. For every flat in the
-society: fetches `OccupancyChange` rows that could overlap the target month (one query
-for all flats, not N+1), calls the pure rate calculator per flat, and bulk-inserts with
-`createMany({ skipDuplicates: true })`.
+`generateMaintenanceRecords(societyId, period?)` — `period` defaults to **the previous
+calendar month** (`previousPeriod()`, `'YYYY-MM'`) if omitted, i.e. arrears billing. For
+every flat in the society: fetches `OccupancyChange` rows that could overlap the target
+month (one query for all flats, not N+1), calls the pure rate calculator per flat, and
+bulk-inserts with `createMany({ skipDuplicates: true })`.
+
+**Arrears billing, not forward billing (revised 2026-08-06)**: generation targets the
+month that just *ended*, not the one just starting. `calculateMonthlyRate`'s
+majority-of-days rule can only be correct once every day of the month has actually
+happened — if generation ran at the *start* of a month, a tenant assigned or removed
+partway through would never be reflected, because generation never re-runs for a period
+once records exist (idempotency, above). Example: cron runs Sept 1 and generates for
+`period: '2026-08'` — by then, any tenant assigned or removed at any point during
+August is already in the DB, so the majority-of-days calculation sees August's complete
+occupancy history. `currentPeriod()` still exists (e.g. for a UI wanting to preview the
+in-progress month) but is no longer what generation defaults to — use `previousPeriod()`
+for that.
 
 **Idempotent by construction, not just convention** (Task 4.2's explicit requirement):
 `@@unique([flatId, period])` plus `skipDuplicates` means a re-run — whether a genuine
@@ -44,14 +56,18 @@ retry, the admin manually re-triggering, or the cron and a manual trigger racing
 can never produce a duplicate record, enforced at the database level.
 
 **`dueDate` = generation time + 15 days** (confirmed decision, `CLAUDE.md`), computed
-once per generation run and applied to every record created in that run.
+once per generation run and applied to every record created in that run. Under arrears
+billing this now reads as "pay for last month within 15 days of it ending" (e.g.
+generated Sept 1 for August → due Sept 16), not "pay for this month while it's still
+happening" as it did under the old forward-billing default.
 
 ## Manual trigger — `POST /api/admin/maintenance-records/generate`
 
 Task 4.3. Admin-only. **Request body**: `{ "period": "YYYY-MM", optional — defaults to
-the current month" }`. **Response**: `200` with
+the previous calendar month (arrears billing, see above)" }`. **Response**: `200` with
 `{ created: number, skipped: number, period: string }`. `400` if `period` is present
-but malformed.
+but malformed. An explicit `period` can still target any month (e.g. backfilling a
+missed run, or generating the in-progress month early if ever genuinely needed).
 
 ## Monthly cron — `src/server.ts`
 
@@ -65,8 +81,10 @@ timezone-rollover edge case at the boundary.
 
 The job iterates every `Society` (this MVP only ever has one — `CLAUDE.md`'s scope
 note — but the loop costs nothing and is what "onboard a second society without a
-schema rewrite" actually requires in practice) and generates for the current period.
-One society's failure is logged and doesn't stop the others.
+schema rewrite" actually requires in practice) and generates for the **previous**
+period (arrears billing, above) — the cron passes no explicit period, so each society
+gets `generateMaintenanceRecords`'s `previousPeriod()` default. One society's failure
+is logged and doesn't stop the others.
 
 **If the server is down at 00:05** (VPS restart, deploy, etc.), that month's automatic
 generation is simply missed — there's no catch-up/backfill logic. Task 4.3's manual
@@ -91,6 +109,34 @@ pivot note). Every record in the society, each with `flat` and `payer` summaries
 **Optional query filters**: `status` (`UNPAID`/`PENDING_REVIEW`/`PAID`), `period`
 (`YYYY-MM`), `flatId`. `400` for an invalid `status` value. No pagination — a 24-flat
 MVP generates at most 24 records/month, correctness over scale (`CLAUDE.md`).
+
+## Admin settings — `GET`/`PATCH /api/admin/settings`
+
+Added 2026-08-06. Admin-only. Exposes `Society.tenantRateFactor` and
+`Society.defaultBaseRate` (`src/services/society-settings.service.ts`). **Response
+shape**: `{ tenantRateFactor: number, defaultBaseRate: number }`. `PATCH` accepts
+either or both fields (partial update — omitted fields are left untouched);
+`tenantRateFactor` must be a positive number `<= 9.99` (matching the column's
+`@db.Decimal(3,2)` headroom), `defaultBaseRate` must be a positive number. `400` on
+validation failure.
+
+**`tenantRateFactor` changes take effect on the very next generation run** —
+`generateMaintenanceRecords` re-fetches the `Society` row fresh every time
+(`prisma.society.findUniqueOrThrow`), never caches it — but never retroactively
+changes an already-generated record's `amount`, same idempotency guarantee as
+everything else in this doc. `defaultBaseRate` only affects the admin flat-onboarding
+form's initial value (`client/src/pages/admin/FlatsListPage.tsx`'s `FlatForm`); it has
+no effect on any existing flat's `baseRate` or on any calculation.
+
+## Frontend settings tab — `client/src/pages/admin/SettingsPage.tsx`
+
+A new "Settings" tab on `/dashboard`, admin-only, alongside "Flats and residents". One
+form, two fields ("Default base rate", "Tenant occupancy factor"), save button disabled
+until the form is dirty. `FlatsListPage`'s "Onboard a flat" form fetches the same
+`['society-settings']` query (one shared cache entry) to pre-fill a new flat's base
+rate — applied via a `useEffect` rather than `useForm`'s `defaultValues`, since the
+settings fetch can resolve after the form has already mounted and `defaultValues` are
+only read once, at mount.
 
 ## Frontend — `client/src/pages/MaintenancePage.tsx`
 
@@ -124,3 +170,29 @@ A distinctive future period (`2099-02`) was used specifically so this check's re
 could be unambiguously identified and deleted afterward — the seeded demo data is also
 under real interactive use (Tasks 3.7/3.8's self-service features), not just automated
 tests, so verification here is deliberately non-destructive and cleans up after itself.
+
+## Seed backfill — `prisma/seed.ts`
+
+Added 2026-08-06 so the demo stack shows real, role-appropriate data instead of an
+empty Passbook/admin dues table. `main()` calls a `backfillMaintenanceRecords()` helper
+**unconditionally** — unlike the rest of `seed.ts`, which no-ops entirely once
+"Sunrise Residency" already exists, this step always runs, because it needs to layer
+onto an already-existing, already-in-use society, not just a fresh one.
+
+Generates one `generateMaintenanceRecords` call per period from `2026-01` through
+`previousPeriod()` (whatever "last completed month" resolves to at the moment the seed
+runs — arrears billing, above), for every seeded flat. Every period except the most
+recent is then marked `PAID` directly via one `updateMany` — this is synthetic demo
+history, not a real payment audit trail, so there's no proof-upload/review flow to go
+through — leaving exactly one `UNPAID` period per flat as "the current due," so the
+Passbook/admin views show a believable mix rather than a wall of identical `UNPAID`
+badges. Safe to re-run: `generateMaintenanceRecords` is already idempotent per
+flat+period, and re-running the `PAID` `updateMany` against already-`PAID` rows is a
+no-op.
+
+Run via `npx prisma db seed` (`docs/onboarding.md`). Verified against the real running
+stack: 35 records created (5 seeded flats × 7 months, `2026-01`–`2026-07`), each
+`payerType`/`amount` correctly reflecting that flat's actual seeded occupancy history —
+e.g. B-202's April is billed to the owner, not tenant Ivan (an exact 15/15-day tie,
+correctly resolved by the last-day-of-month tiebreak, above) even though Ivan occupied
+most of the flat's tenancy elsewhere in the range.

@@ -18,6 +18,7 @@ model Society {
   address          String
   upiVpa           String
   tenantRateFactor Decimal  @default(1.5) @db.Decimal(3, 2)
+  defaultBaseRate  Decimal  @default(1500) @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -25,6 +26,14 @@ model Society {
   flats Flat[]
 }
 ```
+
+> **`defaultBaseRate` added 2026-08-06** (admin Settings tab addendum, `CLAUDE.md`):
+> pre-fills the base-rate field when onboarding a *new* flat via the admin UI. Purely a
+> UI default — `Flat.baseRate` stays the actual per-flat value used in every
+> calculation, independently editable, unaffected by later changes to this field.
+> `GET`/`PATCH /api/admin/settings` (admin-only) expose this and `tenantRateFactor`
+> together as "the two values that drive billing," even though only `tenantRateFactor`
+> is read directly by `calculateMonthlyRate` — see `docs/maintenance-records.md`.
 
 > **Added during the Phase 1 review** (2026-08-05), not the initial Task 1.1 pass —
 > both fields were explicit requirements (`upiVpa`: Epic 2, "UPI VPA for QR

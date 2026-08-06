@@ -76,7 +76,10 @@ npx prisma db seed
 
 Runs `prisma/seed.ts` against whatever `DATABASE_URL` points to. **Idempotent** —
 safe to run repeatedly; if the seed society already exists it logs "already exists,
-skipping" and does nothing further, rather than duplicating data.
+skipping" for user/flat creation. It still runs one further step every time regardless:
+backfilling `MaintenanceRecord`s for `2026-01` through last month, so the demo always
+has real Passbook/admin data — see `docs/maintenance-records.md`'s "Seed backfill"
+section for exactly what that does and why it's safe to re-run.
 
 Creates one society, **"Sunrise Residency"**, with:
 

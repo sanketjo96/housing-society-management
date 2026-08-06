@@ -1,8 +1,65 @@
 import bcrypt from 'bcrypt';
 import { prisma } from '../src/db';
+import { generateMaintenanceRecords, previousPeriod } from '../src/services/maintenance-record.service';
 
 export const SEED_SOCIETY_NAME = 'Sunrise Residency';
 export const SEED_DEFAULT_PASSWORD = 'password123';
+
+// Maintenance-record backfill range (added 2026-08-06, so the seeded demo shows real
+// data for all three roles — an empty Passbook/admin dues table is a poor demo).
+// Starts at January 2026 to match the earliest seeded OccupancyChange (B-201's Frank,
+// Jan 1) and runs through previousPeriod() — the same arrears-billing default
+// generateMaintenanceRecords itself now uses, so this never generates a period the
+// live cron wouldn't also consider "already due" (see CLAUDE.md's 2026-08-06 addendum).
+const BACKFILL_START_PERIOD = '2026-01';
+
+function enumeratePeriods(startPeriod: string, endPeriod: string): string[] {
+  const [startYear, startMonth] = startPeriod.split('-').map(Number);
+  const [endYear, endMonth] = endPeriod.split('-').map(Number);
+  const periods: string[] = [];
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    periods.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return periods;
+}
+
+// Idempotent (generateMaintenanceRecords already is, per flat+period) — safe to call
+// every time the seed script runs, not just on first creation. All periods except the
+// most recent are marked PAID directly (this is synthetic demo history, not a real
+// payment audit trail, so there's no proof-upload/approval flow to go through) so the
+// Passbook/admin views show a believable mix of settled history plus one currently
+// outstanding period, rather than every record sitting UNPAID.
+async function backfillMaintenanceRecords(societyId: string) {
+  const endPeriod = previousPeriod();
+  const periods = enumeratePeriods(BACKFILL_START_PERIOD, endPeriod);
+
+  let created = 0;
+  for (const period of periods) {
+    const result = await generateMaintenanceRecords(societyId, period);
+    created += result.created;
+  }
+
+  const historicalPeriods = periods.slice(0, -1);
+  if (historicalPeriods.length > 0) {
+    await prisma.maintenanceRecord.updateMany({
+      where: { flat: { societyId }, period: { in: historicalPeriods }, status: 'UNPAID' },
+      data: { status: 'PAID' },
+    });
+  }
+
+  console.log(
+    `Backfilled maintenance records for ${SEED_SOCIETY_NAME}: ${created} created across ` +
+      `${periods[0]}..${periods[periods.length - 1]} (${historicalPeriods.length} period(s) marked PAID, ` +
+      `${periods[periods.length - 1]} left UNPAID as the current due).`,
+  );
+}
 
 async function hash(password: string) {
   return bcrypt.hash(password, 10);
@@ -11,7 +68,8 @@ async function hash(password: string) {
 export async function main() {
   const existing = await prisma.society.findFirst({ where: { name: SEED_SOCIETY_NAME } });
   if (existing) {
-    console.log(`Seed data already exists for "${SEED_SOCIETY_NAME}", skipping.`);
+    console.log(`Seed data already exists for "${SEED_SOCIETY_NAME}", skipping user/flat creation.`);
+    await backfillMaintenanceRecords(existing.id);
     return { society: existing, skipped: true };
   }
 
@@ -127,6 +185,7 @@ export async function main() {
   });
 
   console.log(`Seeded society "${society.name}" with 1 admin, 5 owners, 4 tenants, 5 flats.`);
+  await backfillMaintenanceRecords(society.id);
   return { society, admin, skipped: false };
 }
 

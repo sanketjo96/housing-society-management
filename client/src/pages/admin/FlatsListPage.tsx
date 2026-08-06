@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload, User, Users } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
+import { fetchSettings } from './SettingsPage';
 
 interface FlatSummary {
   id: string;
@@ -53,7 +54,15 @@ const flatFormSchema = z
 type FlatFormInput = z.input<typeof flatFormSchema>;
 type FlatFormValues = z.infer<typeof flatFormSchema>;
 
-function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) {
+function FlatForm({
+  flat,
+  defaultBaseRate,
+  onDone,
+}: {
+  flat?: FlatSummary;
+  defaultBaseRate?: number;
+  onDone: () => void;
+}) {
   const queryClient = useQueryClient();
   const isEdit = !!flat;
 
@@ -62,6 +71,7 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FlatFormInput, unknown, FlatFormValues>({
     resolver: zodResolver(flatFormSchema),
@@ -81,6 +91,19 @@ function FlatForm({ flat, onDone }: { flat?: FlatSummary; onDone: () => void }) 
   });
 
   const occupancy = watch('occupancy');
+
+  // New flats are pre-filled from the admin Settings tab's default base rate
+  // (2026-08-06 addendum), purely a starting point still freely editable before
+  // saving. Applied via effect rather than useForm's defaultValues, since the
+  // Settings fetch (in the parent) can resolve after this form has already mounted —
+  // defaultValues are captured once at mount and wouldn't pick up a later value. Only
+  // fires while the field is still untouched, so it can never clobber something the
+  // admin already typed.
+  useEffect(() => {
+    if (!isEdit && defaultBaseRate !== undefined && !getValues('baseRate')) {
+      setValue('baseRate', defaultBaseRate);
+    }
+  }, [isEdit, defaultBaseRate, getValues, setValue]);
 
   const mutation = useMutation<unknown, Error, FlatFormValues>({
     mutationFn: async (values) => {
@@ -374,11 +397,14 @@ function occupancyLabel(flat: FlatSummary) {
 export function FlatsListPage() {
   const [editingId, setEditingId] = useState<string | null | 'new'>(null);
   const { data, isLoading, isError } = useQuery({ queryKey: ['admin-flats'], queryFn: fetchFlats });
+  // Fetched here too (not just on the Settings tab) so a new flat's base rate can be
+  // pre-filled even if the admin never opens Settings this session.
+  const { data: settings } = useQuery({ queryKey: ['society-settings'], queryFn: fetchSettings });
 
   if (editingId === 'new') {
     return (
       <div className="mx-auto max-w-2xl">
-        <FlatForm onDone={() => setEditingId(null)} />
+        <FlatForm defaultBaseRate={settings?.defaultBaseRate} onDone={() => setEditingId(null)} />
       </div>
     );
   }

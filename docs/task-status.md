@@ -78,6 +78,22 @@ Phase 3 complete (3.1–3.8).
       tab) — read-only for now; the "primary payment entry point" framing becomes
       literal once Task 6.8's selection/QR/payment UI lands on top of this same page
 
+**Addendum (2026-08-06)**: two additions beyond the original 4.1–4.7 scope, both
+outside the original tracker numbering:
+
+- **Arrears billing**: generation's default period switched from the current
+  (in-progress) month to the previous (just-completed) one — a real correctness fix,
+  not a style change. See `CLAUDE.md`'s "Addendum (2026-08-06): monthly generation
+  switched to arrears billing" and `docs/maintenance-records.md`.
+- **Admin Settings tab**: `GET`/`PATCH /api/admin/settings` (`tenantRateFactor`,
+  `defaultBaseRate`) plus `client/src/pages/admin/SettingsPage.tsx` — previously
+  `tenantRateFactor` had no admin UI at all. See `docs/maintenance-records.md`'s
+  "Admin settings" section and `docs/data-model.md`'s `Society.defaultBaseRate` note.
+- **Seed backfill**: `prisma/seed.ts` now generates `2026-01`–last-month
+  `MaintenanceRecord`s for the seeded society on every run, so the demo shows real data
+  for all three roles instead of an empty state. See `docs/maintenance-records.md`'s
+  "Seed backfill" section.
+
 ## Phase 5 — [DISSOLVED] Quarterly invoicing
 
 Superseded by the pivot — `MaintenanceRecord` is independently payable, no quarterly

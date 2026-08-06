@@ -9,12 +9,29 @@ export interface GenerateResult {
   skipped: number;
 }
 
-// 'YYYY-MM' for "now" — the default period both the manual-trigger endpoint (Task 4.3)
-// and the monthly cron (Task 4.4) generate for when no explicit period is given.
+// 'YYYY-MM' for "now". Exposed for callers that genuinely want the in-progress month
+// (e.g. an admin previewing current-month occupancy); no longer the generation
+// default — see previousPeriod() below.
 export function currentPeriod(now: Date = new Date()): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
+}
+
+// 'YYYY-MM' for the month immediately before "now" — the default period for both the
+// manual-trigger endpoint (Task 4.3) and the monthly cron (Task 4.4) under arrears
+// billing. Generation deliberately targets the month that just *finished*, not the one
+// in progress: calculateMonthlyRate's "majority of days in the month" rule can only be
+// correct once every day of that month has actually happened and every OccupancyChange
+// affecting it already exists in the DB. Generating for the current (still-unfolding)
+// month would lock in a rate based on incomplete information, permanently — generation
+// is idempotent and never re-runs for a period once records exist, so a mid-month
+// tenant assignment or removal after that would never be reflected.
+export function previousPeriod(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const prevMonth = now.getMonth(); // 0-indexed "this month" == 1-indexed previous month, except January
+  if (prevMonth === 0) return `${year - 1}-12`;
+  return `${year}-${String(prevMonth).padStart(2, '0')}`;
 }
 
 // Idempotent (Task 4.2's explicit requirement): re-running for the same society+period
@@ -24,7 +41,7 @@ export function currentPeriod(now: Date = new Date()): string {
 // either.
 export async function generateMaintenanceRecords(
   societyId: string,
-  period: string = currentPeriod(),
+  period: string = previousPeriod(),
 ): Promise<GenerateResult> {
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
   const flats = await prisma.flat.findMany({ where: { societyId } });

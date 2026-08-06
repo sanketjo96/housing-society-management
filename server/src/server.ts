@@ -16,6 +16,10 @@ app.listen(port, () => {
 // the same wall-clock moment regardless of which timezone the VPS host happens to run
 // in. Task 4.3's manual-trigger endpoint exists precisely so a missed/delayed run
 // (server down at 00:05) can be caught up by hand — see docs/maintenance-records.md.
+//
+// Arrears billing: no period is passed here, so each run generates for the month that
+// just ended (previousPeriod()), not the one just starting — see
+// maintenance-record.service.ts's previousPeriod() for why.
 cron.schedule(
   '5 0 1 * *',
   () => {

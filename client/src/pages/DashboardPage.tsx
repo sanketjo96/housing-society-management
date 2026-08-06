@@ -1,13 +1,14 @@
-import { BookOpen, LayoutGrid, User, Users } from 'lucide-react';
+import { BookOpen, LayoutGrid, Settings as SettingsIcon, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { FlatsListPage } from './admin/FlatsListPage';
+import { SettingsPage } from './admin/SettingsPage';
 import type { AuthUser } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
 import { MaintenancePage } from './MaintenancePage';
 import { MyDetailsPage } from './MyDetailsPage';
 
-type TabKey = 'dashboard' | 'passbook' | 'my-details' | 'flats';
+type TabKey = 'dashboard' | 'passbook' | 'my-details' | 'flats' | 'settings';
 
 interface TabDef {
   key: TabKey;
@@ -19,7 +20,9 @@ interface TabDef {
 // shared UI mockups' shape: a tab bar with "Dashboard" always first. "Passbook" and
 // "My details" are resident-only (an ADMIN has no flat and isn't billed — GET
 // /api/me/flat and /api/me/maintenance-records are both 403 for that role, Tasks
-// 3.7/4.5); "Flats and residents" is admin-only (Task 3.1-3.6). No role sees both.
+// 3.7/4.5); "Flats and residents" and "Settings" are admin-only (Task 3.1-3.6; Settings
+// added 2026-08-06 for the tenant-rate-factor/default-base-rate admin UI). No role sees
+// both resident and admin tabs.
 function tabsForRole(role: AuthUser['role'] | undefined): TabDef[] {
   const tabs: TabDef[] = [{ key: 'dashboard', label: 'Dashboard', icon: LayoutGrid }];
   if (role === 'OWNER' || role === 'TENANT') {
@@ -28,6 +31,7 @@ function tabsForRole(role: AuthUser['role'] | undefined): TabDef[] {
   }
   if (role === 'ADMIN') {
     tabs.push({ key: 'flats', label: 'Flats and residents', icon: Users });
+    tabs.push({ key: 'settings', label: 'Settings', icon: SettingsIcon });
   }
   return tabs;
 }
@@ -102,6 +106,11 @@ export function DashboardPage() {
         {tab === 'flats' && (
           <div role="tabpanel" id="tabpanel-flats" aria-labelledby="tab-flats">
             <FlatsListPage />
+          </div>
+        )}
+        {tab === 'settings' && (
+          <div role="tabpanel" id="tabpanel-settings" aria-labelledby="tab-settings">
+            <SettingsPage />
           </div>
         )}
       </div>

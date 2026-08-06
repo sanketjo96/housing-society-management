@@ -7,6 +7,7 @@ import { flatsRouter } from './routes/flats.route';
 import { maintenanceRecordsRouter } from './routes/maintenance-records.route';
 import { meRouter } from './routes/me.route';
 import { passwordResetRouter } from './routes/password-reset.route';
+import { societySettingsRouter } from './routes/society-settings.route';
 
 export const app = express();
 
@@ -33,3 +34,4 @@ app.use(flatsRouter);
 app.use(maintenanceRecordsRouter);
 app.use(meRouter);
 app.use(passwordResetRouter);
+app.use(societySettingsRouter);

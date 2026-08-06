@@ -82,6 +82,9 @@ describe('FlatsListPage', () => {
       if (url.includes('/api/admin/flats')) {
         return Promise.resolve({ ok: true, json: async () => [] });
       }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
+      }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
 
@@ -108,6 +111,29 @@ describe('FlatsListPage', () => {
     const sentBody = JSON.parse((postCall as RequestInit).body as string);
     expect(sentBody.ownerEmail).toBe('alice@example.com');
     expect(sentBody.occupancy).toBe('owner');
+  });
+
+  it("pre-fills a new flat's base rate from the admin Settings default", async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1750 }) });
+      }
+      if (url.includes('/api/admin/flats')) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /onboard a flat/i })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /onboard a flat/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/base maintenance rate/i)).toHaveValue(1750);
+    });
   });
 
   it('shows tenant fields and requires them when occupancy is switched to tenant', async () => {
@@ -163,6 +189,9 @@ describe('FlatsListPage', () => {
       }
       if (url.includes('/api/admin/flats')) {
         return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });

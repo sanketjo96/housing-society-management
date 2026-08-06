@@ -109,13 +109,18 @@ describe('POST /api/admin/maintenance-records/generate', () => {
     expect(res.body.skipped).toBe(1);
   });
 
-  it('defaults to the current period when none is given', async () => {
+  it('defaults to the previous calendar month when none is given (arrears billing)', async () => {
     const res = await request(app)
       .post('/api/admin/maintenance-records/generate')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
     expect(res.status).toBe(200);
-    expect(res.body.period).toMatch(/^\d{4}-\d{2}$/);
+    const now = new Date();
+    const expected =
+      now.getMonth() === 0
+        ? `${now.getFullYear() - 1}-12`
+        : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, '0')}`;
+    expect(res.body.period).toBe(expected);
   });
 
   it('rejects a malformed period with a 400', async () => {

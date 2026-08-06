@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
-  currentPeriod,
   generateMaintenanceRecords,
   listMaintenanceRecordsForSociety,
+  previousPeriod,
 } from '../services/maintenance-record.service';
 
 const periodField = z
@@ -32,7 +32,7 @@ export async function generateMaintenanceRecordsHandler(req: Request, res: Respo
     return;
   }
 
-  const period = parsed.data.period ?? currentPeriod();
+  const period = parsed.data.period ?? previousPeriod();
   const result = await generateMaintenanceRecords(req.user.societyId, period);
   res.status(200).json({ ...result, period });
 }

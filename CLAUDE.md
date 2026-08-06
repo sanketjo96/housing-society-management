@@ -150,6 +150,53 @@ overdue-dues escalation.
     fields (`wing`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
     "Addition (2026-08-06)" section above for the full mechanism and reasoning.
 
+### Addendum (2026-08-06, same day): monthly generation switched to arrears billing
+
+Confirmed while reviewing the interaction between `calculateMonthlyRate`'s
+majority-of-days rule and the monthly generation cron's original timing. **Was**:
+generation defaulted to the *current* calendar month, run at 00:05 on the 1st (forward
+billing — bill for August on August 1st). **Now**: generation defaults to the
+*previous* calendar month (`previousPeriod()`), run at the same 00:05-on-the-1st cron
+time, but generating for the month that just ended.
+
+**Why this was a real bug, not a style preference**: the majority-of-days rule can only
+be evaluated correctly once every day of the target month has actually happened —
+generating on Aug 1st for August cannot know about a tenant assigned or removed on Aug
+10th, because that hasn't happened yet. Generation never re-runs for a period once
+records exist (idempotency is a hard requirement, above), so that August record would
+have been permanently wrong — locked in at whatever occupancy existed at 00:05 on Aug
+1st, regardless of what actually happened the rest of the month. Arrears billing
+(generate Sept 1st for August) guarantees the full month's `OccupancyChange` history
+already exists in the DB before the rate is calculated.
+
+**Practical effect on `dueDate`**: still generation time + 15 days (unchanged), but the
+meaning shifts — residents now pay for *last* month within 15 days of it ending,
+instead of paying for the *current* month while it's still in progress. `currentPeriod()`
+is kept as a named export (some future caller may legitimately want "the in-progress
+month," e.g. a preview), but `generateMaintenanceRecords`'s default, the manual-trigger
+endpoint's default, and the cron are all now `previousPeriod()`. Full reasoning and a
+worked example: `docs/maintenance-records.md`.
+
+### Addendum (2026-08-06, same day): admin Settings tab for billing-rule values
+
+`Society.tenantRateFactor` (rule 1's configurable multiplier) had a schema column and
+a default value since the Phase 1 review, but **no admin UI to ever change it** —
+confirmed as a real gap, not by design. Added `GET`/`PATCH /api/admin/settings`
+(admin-only) plus a new "Settings" tab on `/dashboard`, alongside "Flats and
+residents". Two fields: **tenant occupancy factor** (`tenantRateFactor`, feeds
+`calculateMonthlyRate` directly — a change takes effect on the very next generation
+run) and **default base rate** (`defaultBaseRate`, a new `Society` column that only
+pre-fills the base-rate field when onboarding a *new* flat in the admin UI).
+
+**Explicitly scoped to avoid a bigger, unrequested change**: `Flat.baseRate` stays
+per-flat, independently editable per flat exactly as it already was (confirmed via
+`AskUserQuestion` before implementing, given a per-flat-vs-society-wide base rate is a
+real fork with different schema implications) — `defaultBaseRate` never overrides an
+existing flat's rate, and calculations never read it. Only `tenantRateFactor` is
+actually consumed by billing logic. Full contract and worked reasoning:
+`docs/maintenance-records.md`'s "Admin settings" section, `docs/data-model.md`'s
+`Society.defaultBaseRate` note.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
@@ -175,7 +222,7 @@ overdue-dues escalation.
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| Society | name, address, upiVpa, tenantRateFactor (default 1.5) | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant |
+| Society | name, address, upiVpa, tenantRateFactor (default 1.5), defaultBaseRate (default 1500) | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |

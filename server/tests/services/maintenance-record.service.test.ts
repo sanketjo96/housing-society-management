@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../src/db';
 import { createFlat } from '../../src/services/flats.service';
-import { currentPeriod, generateMaintenanceRecords } from '../../src/services/maintenance-record.service';
+import {
+  currentPeriod,
+  generateMaintenanceRecords,
+  previousPeriod,
+} from '../../src/services/maintenance-record.service';
 
 describe('maintenance-record service — generateMaintenanceRecords', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -139,5 +143,23 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
   it('defaults to the current calendar period when none is given', () => {
     const now = new Date('2026-03-15T00:00:00Z');
     expect(currentPeriod(now)).toBe('2026-03');
+  });
+
+  it('previousPeriod returns the prior calendar month', () => {
+    expect(previousPeriod(new Date('2026-03-15T00:00:00Z'))).toBe('2026-02');
+  });
+
+  it('previousPeriod rolls back across a year boundary in January', () => {
+    expect(previousPeriod(new Date('2026-01-10T00:00:00Z'))).toBe('2025-12');
+  });
+
+  it('generates for the previous calendar month by default, not the current one', async () => {
+    const result = await generateMaintenanceRecords(societyId);
+    const expectedPeriod = previousPeriod();
+    const record = await prisma.maintenanceRecord.findUnique({
+      where: { flatId_period: { flatId: ownerFlatId, period: expectedPeriod } },
+    });
+    expect(record).not.toBeNull();
+    expect(result.created + result.skipped).toBe(2);
   });
 });
