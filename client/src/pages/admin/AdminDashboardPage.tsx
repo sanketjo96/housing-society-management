@@ -210,7 +210,7 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
       )}
 
       {summaryQuery.data && (
-        <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <SummaryCard
             label="Outstanding total"
             value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}

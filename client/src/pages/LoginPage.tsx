@@ -29,19 +29,19 @@ function decorativeStatus(floor: number, unit: string) {
 
 function BrandPanel() {
   return (
-    <div className="flex min-h-[560px] flex-col justify-between bg-ink px-10 py-12 text-[#EDEFEA]">
+    <div className="flex flex-col justify-between bg-ink px-6 py-8 text-[#EDEFEA] sm:min-h-[560px] sm:px-10 sm:py-12">
       <div>
-        <div className="mb-10 flex items-center gap-2">
+        <div className="mb-6 flex items-center gap-2 sm:mb-10">
           <Building2 size={20} className="text-brass" />
           <span className="font-display text-[19px] tracking-wide">Housing Society</span>
         </div>
 
-        <p className="max-w-[280px] font-display text-[26px] leading-snug">
+        <p className="max-w-[280px] font-display text-[22px] leading-snug sm:text-[26px]">
           Your maintenance, dues, and receipts — all in one passbook.
         </p>
       </div>
 
-      <div>
+      <div className="mt-6 hidden sm:block">
         <div className="mb-5 flex flex-col gap-1.5">
           {FLOORS.map((floor) => (
             <div key={floor} className="flex gap-1.5">
@@ -77,11 +77,11 @@ export function LoginPage() {
   });
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-paper p-6">
+    <main className="flex min-h-dvh items-center justify-center bg-paper p-4 sm:p-6">
       <div className="grid w-full max-w-[660px] overflow-hidden rounded-2xl border border-line bg-white shadow-sm sm:grid-cols-[300px_1fr]">
         <BrandPanel />
 
-        <div className="flex flex-col justify-center px-10 py-12">
+        <div className="flex flex-col justify-center px-6 py-8 sm:px-10 sm:py-12">
           <h1 className="m-0 mb-1.5 font-display text-[22px] text-ink">Log in</h1>
           <p className="m-0 mb-7 text-sm text-muted">
             Access your flat's dues and maintenance passbook.

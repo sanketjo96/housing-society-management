@@ -33,7 +33,7 @@ function FlatDetailsSection({ flat }: { flat: MyFlat }) {
   return (
     <section>
       <SectionHeader icon={Home} title="Flat details" />
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <Field label="Wing">
           <input className={inputClass} value={flat.wing} disabled />
         </Field>
@@ -90,7 +90,7 @@ function ProfileSection() {
         <input aria-label="Your full name" className={inputClass} {...register('name')} />
         {errors.name && <ErrMsg>{errors.name.message}</ErrMsg>}
       </Field>
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <Field label="Phone">
           <input aria-label="Your phone" className={inputClass} {...register('phone')} />
         </Field>

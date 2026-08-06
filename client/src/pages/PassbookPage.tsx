@@ -377,7 +377,7 @@ export function PassbookPage() {
 
       {data && (
         <>
-          <div className="mb-5 grid grid-cols-3 gap-4">
+          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <SummaryCard
               label="Outstanding"
               value={data.totals.outstanding}

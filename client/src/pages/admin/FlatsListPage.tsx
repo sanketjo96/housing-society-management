@@ -169,7 +169,7 @@ function FlatForm({
       </div>
 
       <SectionHeader icon={Home} title="Flat details" />
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <Field label="Wing">
           <input className={inputClass} disabled={isEdit} {...register('wing')} />
           {errors.wing && <ErrMsg>{errors.wing.message}</ErrMsg>}
@@ -265,7 +265,7 @@ function CsvImportPanel() {
             tenantName, tenantPhone, tenantEmail, effectiveFrom.
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
           <button
             type="button"
             onClick={downloadCsvTemplate}

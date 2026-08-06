@@ -45,7 +45,7 @@ export function DashboardPage() {
   const tabs = tabsForRole(user?.role);
 
   return (
-    <main className="min-h-dvh bg-paper p-6">
+    <main className="min-h-dvh bg-paper p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -63,7 +63,11 @@ export function DashboardPage() {
           </button>
         </div>
 
-        <div role="tablist" aria-label="Dashboard sections" className="mb-6 flex gap-1 border-b border-line">
+        <div
+          role="tablist"
+          aria-label="Dashboard sections"
+          className="mb-6 flex gap-1 overflow-x-auto border-b border-line"
+        >
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.key;
@@ -76,7 +80,7 @@ export function DashboardPage() {
                 aria-selected={active}
                 aria-controls={`tabpanel-${t.key}`}
                 onClick={() => setTab(t.key)}
-                className={`mr-5 flex items-center gap-1.5 border-b-2 bg-transparent px-1 py-2 text-sm ${
+                className={`mr-5 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 bg-transparent px-1 py-2 text-sm ${
                   active ? 'border-teal font-semibold text-ink' : 'border-transparent text-muted'
                 }`}
               >

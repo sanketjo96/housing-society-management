@@ -35,7 +35,7 @@ export function OwnerDetailsFields({ register, errors }: OwnerContactFieldsProps
         />
         {errors.ownerName && <ErrMsg>{String(errors.ownerName.message)}</ErrMsg>}
       </Field>
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <Field label="Phone">
           <input
             aria-label="Owner's phone"
@@ -101,7 +101,7 @@ export function OccupancyFields({ register, errors, occupancy, onOccupancyChange
             />
             {errors.tenantName && <ErrMsg>{String(errors.tenantName.message)}</ErrMsg>}
           </Field>
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <Field label="Phone">
               <input
                 aria-label="Tenant's phone"
