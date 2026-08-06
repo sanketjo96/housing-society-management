@@ -121,6 +121,7 @@ residents" makes sense for every role:
 | Tab | Who sees it | Content |
 |---|---|---|
 | Dashboard | Everyone | Empty placeholder — real widgets are Phase 8 |
+| Passbook | `OWNER`, `TENANT` | `MaintenancePage.tsx` — own maintenance records + outstanding total, read-only (payment is Phase 6), Task 4.5/4.7 |
 | My details | `OWNER`, `TENANT` | `MyDetailsPage.tsx` — own profile + (owners only) tenant management, Task 3.7/3.8 |
 | Flats and residents | `ADMIN` | `FlatsListPage.tsx` — onboard/edit flats, Tasks 3.1–3.6 |
 

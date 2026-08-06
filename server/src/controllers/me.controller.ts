@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { DuplicateFieldError } from '../lib/errors';
 import { getMyFlat, NoCurrentTenantError, removeOwnTenant, upsertOwnTenant } from '../services/flats.service';
+import { getMaintenanceRecordsForPayer } from '../services/maintenance-record.service';
 import { updateOwnProfile } from '../services/me.service';
 
 const updateMeSchema = z
@@ -88,6 +89,16 @@ export async function upsertMyTenantHandler(req: Request, res: Response) {
     }
     throw err;
   }
+}
+
+export async function getMyMaintenanceRecordsHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const records = await getMaintenanceRecordsForPayer(req.user.id, req.user.societyId);
+  res.status(200).json(records);
 }
 
 export async function removeMyTenantHandler(req: Request, res: Response) {

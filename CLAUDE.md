@@ -157,7 +157,13 @@ overdue-dues escalation.
   for the *entire* month's single MaintenanceRecord. **On an exact tie** (only possible
   in 28- or 30-day months), **the status active on the last day of the month wins.**
   Example: owner-occupied Aug 1–10, tenant Aug 11–31 → tenant has majority (21 vs 10
-  days) → whole month billed at tenant rate.
+  days) → whole month billed at tenant rate. **Generalized during implementation**
+  (2026-08-06) beyond the owner-vs-tenant framing above, to "whichever specific party
+  — the owner, or any one tenant — occupied the most days": a tenant-to-tenant
+  turnover mid-month (Tenant A moves out, Tenant B moves in the same month) is billed
+  to whichever tenant had the majority of days, same tiebreak logic, rather than
+  needing a special case not covered by the original example. See
+  `docs/maintenance-records.md`.
 - **MaintenanceRecord due date**: generation date + 15 days (was "Invoice due date"
   pre-pivot — same default value, now attached to the record itself).
 - **Escalation grace period**: 7 days past due date (configurable).

@@ -63,13 +63,20 @@ Phase 3 complete (3.1–3.8).
 
 ## Phase 4 — Maintenance Records (monthly, independently payable)
 
-- [ ] 4.1 Rate calculation function
-- [ ] 4.2 Monthly record generation logic (now also sets status=UNPAID + dueDate)
-- [ ] 4.3 Manual trigger endpoint for record generation
-- [ ] 4.4 Monthly cron wiring
-- [ ] 4.5 Resident maintenance records endpoint (now the resident's primary outstanding-balance view)
-- [ ] 4.6 Admin maintenance records endpoint (absorbed dues-summary from removed 5.5)
-- [ ] 4.7 Frontend resident maintenance page (now the primary payment entry point)
+- [x] 4.1 Rate calculation function (`src/lib/rate-calculation.ts`, pure function —
+      generalized to tenant-to-tenant turnover, see `CLAUDE.md`'s confirmed decisions)
+- [x] 4.2 Monthly record generation logic (idempotent — `@@unique([flatId, period])` +
+      `createMany({ skipDuplicates: true })`, sets status=UNPAID + dueDate)
+- [x] 4.3 Manual trigger endpoint for record generation (`POST
+      /api/admin/maintenance-records/generate`)
+- [x] 4.4 Monthly cron wiring (`node-cron`, 00:05 on the 1st, `Asia/Kolkata`)
+- [x] 4.5 Resident maintenance records endpoint (`GET /api/me/maintenance-records`,
+      the resident's primary outstanding-balance view)
+- [x] 4.6 Admin maintenance records endpoint (`GET /api/admin/maintenance-records`,
+      filterable — absorbed dues-summary from removed 5.5)
+- [x] 4.7 Frontend resident maintenance page (`MaintenancePage.tsx`, new "Passbook"
+      tab) — read-only for now; the "primary payment entry point" framing becomes
+      literal once Task 6.8's selection/QR/payment UI lands on top of this same page
 
 ## Phase 5 — [DISSOLVED] Quarterly invoicing
 

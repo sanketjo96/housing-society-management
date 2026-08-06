@@ -1,12 +1,13 @@
-import { LayoutGrid, User, Users } from 'lucide-react';
+import { BookOpen, LayoutGrid, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { FlatsListPage } from './admin/FlatsListPage';
 import type { AuthUser } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
+import { MaintenancePage } from './MaintenancePage';
 import { MyDetailsPage } from './MyDetailsPage';
 
-type TabKey = 'dashboard' | 'my-details' | 'flats';
+type TabKey = 'dashboard' | 'passbook' | 'my-details' | 'flats';
 
 interface TabDef {
   key: TabKey;
@@ -15,12 +16,14 @@ interface TabDef {
 }
 
 // Dashboard is empty (real widgets are Phase 8) but every role sees it, matching both
-// shared UI mockups' shape: a tab bar with "Dashboard" always first. "My details" is
-// resident-only (an ADMIN has no flat — GET /api/me/flat is 403 for that role, Task
-// 3.7); "Flats and residents" is admin-only (Task 3.1-3.6). No role sees both.
+// shared UI mockups' shape: a tab bar with "Dashboard" always first. "Passbook" and
+// "My details" are resident-only (an ADMIN has no flat and isn't billed — GET
+// /api/me/flat and /api/me/maintenance-records are both 403 for that role, Tasks
+// 3.7/4.5); "Flats and residents" is admin-only (Task 3.1-3.6). No role sees both.
 function tabsForRole(role: AuthUser['role'] | undefined): TabDef[] {
   const tabs: TabDef[] = [{ key: 'dashboard', label: 'Dashboard', icon: LayoutGrid }];
   if (role === 'OWNER' || role === 'TENANT') {
+    tabs.push({ key: 'passbook', label: 'Passbook', icon: BookOpen });
     tabs.push({ key: 'my-details', label: 'My details', icon: User });
   }
   if (role === 'ADMIN') {
@@ -84,6 +87,11 @@ export function DashboardPage() {
             className="rounded-2xl border border-line bg-white p-10 text-center text-sm text-muted"
           >
             Dashboard widgets are coming in a later phase.
+          </div>
+        )}
+        {tab === 'passbook' && (
+          <div role="tabpanel" id="tabpanel-passbook" aria-labelledby="tab-passbook">
+            <MaintenancePage />
           </div>
         )}
         {tab === 'my-details' && (

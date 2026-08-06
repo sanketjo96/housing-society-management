@@ -1,0 +1,23 @@
+import { prisma } from '../db';
+import { generateMaintenanceRecords } from '../services/maintenance-record.service';
+
+// Runs generation for every society (this MVP only ever has one — CLAUDE.md's scope
+// note — but the loop costs nothing and is what "onboard a second society without a
+// schema rewrite" actually requires in practice). One society failing (a bad
+// tenantRateFactor, a DB hiccup) is logged and doesn't stop the others — a single
+// society's cron failure shouldn't silently skip every other society's billing for
+// the month.
+export async function runMonthlyMaintenanceGeneration(period?: string): Promise<void> {
+  const societies = await prisma.society.findMany({ select: { id: true, name: true } });
+
+  for (const society of societies) {
+    try {
+      const result = await generateMaintenanceRecords(society.id, period);
+      console.log(
+        `[maintenance-generation] ${society.name}: created=${result.created} skipped=${result.skipped}`,
+      );
+    } catch (err) {
+      console.error(`[maintenance-generation] ${society.name} failed:`, err);
+    }
+  }
+}

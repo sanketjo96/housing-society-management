@@ -55,15 +55,19 @@ describe('flats service — resident self-service', () => {
   });
 
   beforeEach(async () => {
+    // ownerName/ownerEmail (not ownerId) — findOrCreateUserByEmail resolves this back
+    // to the already-created "Self-Service Owner" account (matching email), so
+    // `ownerId` above stays valid for the rest of this suite's assertions.
     const flat = await createFlat({
       societyId,
       block: 'S',
       flatNumber: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       baseRate: 1500,
-      ownerId,
+      ownerName: 'Self-Service Owner',
+      ownerEmail: `ss-owner-${suffix}@example.com`,
     });
-    createdFlatIds.push(flat.id);
-    flatId = flat.id;
+    createdFlatIds.push(flat!.id);
+    flatId = flat!.id;
   });
 
   describe('getMyFlat', () => {

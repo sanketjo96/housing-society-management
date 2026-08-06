@@ -30,6 +30,9 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.endsWith('/api/auth/me')) {
       return Promise.resolve({ ok: true, json: async () => user });
     }
+    if (url.includes('/api/me/maintenance-records')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
     if (url.includes('/api/me/flat')) {
       return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'not found' }) });
     }
@@ -49,11 +52,12 @@ describe('DashboardPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows only the Dashboard and My details tabs for an OWNER', async () => {
+  it('shows Dashboard, Passbook, and My details tabs for an OWNER', async () => {
     mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
     renderDashboard();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: /^dashboard$/i })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /passbook/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /my details/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
@@ -63,7 +67,22 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: /flats and residents/i })).toBeInTheDocument());
+    expect(screen.queryByRole('tab', { name: /passbook/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /my details/i })).not.toBeInTheDocument();
+  });
+
+  it('switches to the Passbook tab content on click', async () => {
+    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
+    renderDashboard();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText(/dashboard widgets are coming/i)).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: /passbook/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/total outstanding/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('₹0')).toBeInTheDocument();
   });
 
   it('switches to the My details tab content on click', async () => {
