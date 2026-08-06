@@ -55,12 +55,24 @@ A web application for a residential housing society's committee to manage flat o
   - Roles: ADMIN, OWNER, TENANT, enforced server-side
   - Society-scoped access on every request
   - Password reset flow
+
+> **Amended (2026-08-06)**: see `CLAUDE.md`'s "Addition (2026-08-06)". A logged-in
+> resident (OWNER/TENANT) may update their own name/phone/email directly — a narrower
+> capability than "no public self-signup" above, which still holds (the account itself
+> is still never opened to the public).
+
 ### Epic 2 — Flat & Society Onboarding
   - Society setup (name, address, block structure, UPI VPA for QR generation)
   - Create/edit flat (block, flat number, owner, base rate)
   - Bulk CSV import for flats
   - Assign/remove current tenant on a flat, with occupancy history tracked
   - Flat list view with owner/tenant/status
+
+> **Amended (2026-08-06)**: see `CLAUDE.md`'s "Addition (2026-08-06)". Flat onboarding
+> itself (create/edit flat, block/flat number/base rate) stays admin-only, unchanged.
+> "Assign/remove current tenant" above is no longer admin-exclusive — an OWNER may now
+> also create/update/remove their own flat's tenant from their own resident view; the
+> admin-only path (Task 3.2) remains available alongside it.
 ### Epic 3 — Maintenance Records (monthly accrual)
   - Monthly generation job (idempotent), rate computed per the occupancy that applied in that specific month
   - Resident view: 12 records/year

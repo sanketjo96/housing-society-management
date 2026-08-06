@@ -22,6 +22,69 @@ paid/unpaid binary; "partial payment" means *selecting a subset of records*, nev
 splitting one record's amount. The business rules below reflect the current (post-pivot)
 design; see `docs/data-model.md`'s pivot note and `task-prompts-v1` for full reasoning.
 
+### Addition (2026-08-06): resident self-service — own profile + tenant management
+
+Confirmed against a shared resident-view UI mockup (`ResidentExperience`'s "My
+details" tab): an authenticated resident (`OWNER` or `TENANT`) may update their own
+`name`/`phone`/`email` directly — no admin action required. Beyond that, an `OWNER`
+may also create, update, or remove the `TENANT` currently associated with their own
+flat, from their own resident view.
+
+**This is additive, not a replacement.** The admin-only endpoints from Task 3.2
+(`POST`/`DELETE /api/admin/flats/:id/tenant`) stay exactly as built — for an admin
+correcting a resident's mistake or acting on their behalf. The new resident-facing
+endpoints are a second, narrower path for the common case (an owner instating their
+own tenant), scoped to `req.user.id === flat.ownerId`, not a general admin capability.
+
+**What stays admin-only, unchanged**: `block`, `flatNumber`, and `baseRate` are set at
+flat onboarding (Task 3.1) and remain **read-only from the resident side** — a
+resident sees these fields but cannot edit them from their own view (matches the
+mockup: those inputs are rendered `disabled`, with "Set by your society admin and
+can't be changed here"). Flat onboarding itself (creating a new `Flat` row at all)
+also stays admin-only.
+
+**Interaction model differs deliberately from the admin endpoints**: Task 3.2's
+`assignTenant` rejects re-assignment if the flat already has a tenant
+(`TenantAlreadyAssignedError`) — an admin must call `removeTenant` first. The
+resident-facing equivalent instead **updates the existing tenant's details in place**
+when one is already assigned, matching the mockup's single "Save changes" button over
+one form (occupancy toggle + tenant fields together) rather than a two-step
+remove-then-assign flow. Removing a tenant entirely (toggling back to owner-occupied)
+still closes the open `OccupancyChange` row, same underlying mechanism as Task 3.2.
+
+**How a self-service-created tenant gets a working login**: when an owner "creates" a
+tenant (name/phone/email in the mockup — no password field), the backend creates a
+real `TENANT` `User` immediately, given a random, unusable password, then triggers the
+same password-reset mechanism Task 2.4 already built (`requestPasswordReset()`,
+currently stubbed to log the reset link rather than email it — Phase 7 replaces the
+stub with a real send). The tenant sets their own password via that link and logs in
+normally afterward. No new account-provisioning subsystem — this reuses two
+already-built pieces (user creation, password reset) instead of inventing an invite
+flow. **Not public self-signup** (still out of scope, unchanged): the account is
+created by an authenticated resident, for a specific person tied to their own flat,
+never open to the public.
+
+**Not yet built** — this is a requirements/scope decision, not an implementation yet.
+Tracked as a Phase 3 addendum in `docs/task-status.md` (outside the original
+`task-prompts-v1` numbering, since this wasn't in the original tracker).
+
+### Addendum (2026-08-06, same day): Task 3.1/3.2 redesigned to match the admin mockup
+
+Confirmed against a second shared UI mockup (`AdminExperience`'s "Flats and
+residents" tab): the real admin flat-onboarding workflow is **one form** — block,
+flat number, base rate, owner contact, occupancy, tenant contact — saved together,
+with no separate "create the owner's account first" step. Tasks 3.1/3.2 as originally
+built required a pre-existing `ownerId`/`tenantId`; this was confirmed as a genuine
+**breaking change** to that already-shipped contract (Task 3.1 had already been
+committed and pushed) rather than a new addition, and applied: `createFlat`/
+`updateFlat` now take owner/tenant **contact fields** and find-or-create the
+underlying accounts inline, reusing the exact same mechanism (`findOrCreateUserByEmail`
+— random unusable password + the existing password-reset stub) established just above
+for resident self-service. The id-based `assignTenant`/`removeTenant` (Task 3.2) were
+kept as a lower-level alternative, not removed, since they still have a legitimate use
+case (linking an already-known account without re-typing its details) and were already
+tested. Full mechanism and the exact request/response contracts: `docs/flats.md`.
+
 ## Project overview
 
 Web app for a single residential housing society's committee: flat onboarding, monthly
@@ -38,8 +101,11 @@ overdue-dues escalation.
 
 - **Admin** (committee member): onboards flats, reviews payment proofs, monitors dues.
 - **Owner**: owns a flat, may or may not live in it. Views own dues, pays via QR.
+  Manages their own contact details and their flat's current tenant (§ Addition
+  2026-08-06, above) — but not the flat's admin-set fields (block, flat number, base
+  rate), which stay read-only from the resident side.
 - **Tenant**: rents from an owner. Same as owner, but billed at a higher rate while
-  occupying.
+  occupying. May also update their own contact details.
 
 ## Core business rules (authoritative — do not deviate without confirming)
 
@@ -78,6 +144,11 @@ overdue-dues escalation.
    and prepares a message; admin manually shares it (no auto-post to WhatsApp — see
    out-of-scope list, compliance risk).
 9. **Notifications are email-only this phase.** WhatsApp Business API is Phase 2.
+10. **Resident self-service** (added 2026-08-06): an `OWNER`/`TENANT` may update their
+    own `name`/`phone`/`email` without admin involvement; an `OWNER` may additionally
+    create/update/remove their own flat's `TENANT`. Does not extend to admin-set flat
+    fields (`block`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
+    "Addition (2026-08-06)" section above for the full mechanism and reasoning.
 
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
@@ -110,6 +181,11 @@ overdue-dues escalation.
 No `Invoice` entity (removed in the pivot). A `PaymentProof` can link to any number of
 `MaintenanceRecord`s a resident selected for one payment; approval cascades `PAID` to
 all of them together, in one transaction.
+
+No schema changes are needed for resident self-service (Addition, 2026-08-06, above) —
+`User.name`/`phone`/`email` and `Flat.currentTenantId`/`OccupancyChange` already model
+everything required; only new route/controller/service logic is needed on top of the
+existing schema.
 
 ## Non-functional requirements
 

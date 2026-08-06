@@ -5,14 +5,21 @@ import { prisma } from '../../src/db';
 import { createUser } from '../../src/services/admin-users.service';
 import { login } from '../../src/services/auth.service';
 
+// Owner is a contact field (name/email), not a pre-existing ownerId — createFlat
+// find-or-creates the account inline (CLAUDE.md's "Addition (2026-08-06)").
 describe('Flats admin endpoints', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
   let adminToken: string;
   let ownerToken: string;
-  let ownerId: string;
   const createdUserIds: string[] = [];
   const createdFlatIds: string[] = [];
+  let ownerCounter = 0;
+
+  function ownerFields() {
+    ownerCounter += 1;
+    return { ownerName: `Test Owner ${ownerCounter}`, ownerEmail: `flats-inline-owner-${ownerCounter}-${suffix}@example.com` };
+  }
 
   beforeAll(async () => {
     const society = await prisma.society.create({
@@ -33,21 +40,25 @@ describe('Flats admin endpoints', () => {
 
     const ownerPassword = 'owner-password-123';
     const owner = await createUser({
-      name: 'Test Owner',
-      email: `flats-owner-${suffix}@example.com`,
+      name: 'Non-Admin Caller',
+      email: `flats-caller-${suffix}@example.com`,
       password: ownerPassword,
       role: 'OWNER',
       societyId,
     });
     createdUserIds.push(owner.id);
-    ownerId = owner.id;
     ownerToken = (await login({ email: owner.email, password: ownerPassword })).accessToken;
   });
 
   afterAll(async () => {
+    await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    const inlineOwnerIds = await prisma.user
+      .findMany({ where: { societyId, email: { contains: `-${suffix}@example.com` } }, select: { id: true } })
+      .then((rows) => rows.map((r) => r.id));
+    await prisma.passwordResetToken.deleteMany({ where: { userId: { in: inlineOwnerIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: [...createdUserIds, ...inlineOwnerIds] } } });
     await prisma.society.delete({ where: { id: societyId } });
     await prisma.$disconnect();
   });
@@ -56,7 +67,7 @@ describe('Flats admin endpoints', () => {
     it('rejects a request with no access token (401)', async () => {
       const res = await request(app)
         .post('/api/admin/flats')
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
       expect(res.status).toBe(401);
     });
 
@@ -64,20 +75,21 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...ownerFields() });
       expect(res.status).toBe(403);
     });
 
-    it('creates a flat given a valid admin token', async () => {
+    it('creates a flat given a valid admin token, provisioning the owner inline', async () => {
+      const owner = ownerFields();
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
+        .send({ block: 'A', flatNumber: '101', baseRate: 1500, ...owner });
 
       expect(res.status).toBe(201);
       expect(res.body.block).toBe('A');
       expect(res.body.flatNumber).toBe('101');
-      expect(res.body.ownerId).toBe(ownerId);
+      expect(res.body.owner.email).toBe(owner.ownerEmail);
       createdFlatIds.push(res.body.id);
     });
 
@@ -85,15 +97,7 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: '', flatNumber: '101', baseRate: -5, ownerId });
-      expect(res.status).toBe(400);
-    });
-
-    it('rejects an ownerId that does not reference an OWNER in this society (400)', async () => {
-      const res = await request(app)
-        .post('/api/admin/flats')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'A', flatNumber: '105', baseRate: 1500, ownerId: 'nonexistent-id' });
+        .send({ block: '', flatNumber: '101', baseRate: -5, ...ownerFields() });
       expect(res.status).toBe(400);
     });
 
@@ -101,14 +105,14 @@ describe('Flats admin endpoints', () => {
       const first = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'F', flatNumber: '901', baseRate: 1500, ownerId });
+        .send({ block: 'F', flatNumber: '901', baseRate: 1500, ...ownerFields() });
       expect(first.status).toBe(201);
       createdFlatIds.push(first.body.id);
 
       const second = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block: 'F', flatNumber: '901', baseRate: 1600, ownerId });
+        .send({ block: 'F', flatNumber: '901', baseRate: 1600, ...ownerFields() });
       expect(second.status).toBe(409);
     });
   });
@@ -118,7 +122,7 @@ describe('Flats admin endpoints', () => {
       const res = await request(app)
         .post('/api/admin/flats')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ block, flatNumber, baseRate: 1500, ownerId });
+        .send({ block, flatNumber, baseRate: 1500, ...ownerFields() });
       createdFlatIds.push(res.body.id);
       return res.body.id as string;
     }

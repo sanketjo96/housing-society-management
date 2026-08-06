@@ -2,17 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DuplicateFieldError } from '../../src/lib/errors';
 import { prisma } from '../../src/db';
 import { createUser } from '../../src/services/admin-users.service';
-import { createFlat, InvalidOwnerError, updateFlat } from '../../src/services/flats.service';
+import { ConflictingRoleError, createFlat, updateFlat } from '../../src/services/flats.service';
 
 // Unlike tests/routes/flats.test.ts, this calls the service directly — no HTTP, no
 // supertest (see tests/services/admin-users.service.test.ts for the same rationale).
+//
+// createFlat/updateFlat find-or-create the owner/tenant User accounts from contact
+// fields (name/phone/email), rather than requiring a pre-existing ownerId/tenantId —
+// see CLAUDE.md's "Addition (2026-08-06)".
 describe('flats service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
   let otherSocietyId: string;
-  let ownerId: string;
-  let otherSocietyOwnerId: string;
-  let tenantId: string;
+  let existingTenantEmail: string;
   const createdUserIds: string[] = [];
   const createdFlatIds: string[] = [];
 
@@ -27,78 +29,116 @@ describe('flats service', () => {
     });
     otherSocietyId = otherSociety.id;
 
-    const owner = await createUser({
-      name: 'Test Owner',
-      email: `flat-owner-${suffix}@example.com`,
-      password: 'password-123',
-      role: 'OWNER',
-      societyId,
-    });
-    createdUserIds.push(owner.id);
-    ownerId = owner.id;
-
-    const otherOwner = await createUser({
-      name: 'Other Society Owner',
-      email: `flat-other-owner-${suffix}@example.com`,
-      password: 'password-123',
-      role: 'OWNER',
-      societyId: otherSocietyId,
-    });
-    createdUserIds.push(otherOwner.id);
-    otherSocietyOwnerId = otherOwner.id;
-
-    const tenant = await createUser({
-      name: 'Test Tenant',
-      email: `flat-tenant-${suffix}@example.com`,
+    const existingTenant = await createUser({
+      name: 'Existing Tenant',
+      email: `flat-existing-tenant-${suffix}@example.com`,
       password: 'password-123',
       role: 'TENANT',
       societyId,
     });
-    createdUserIds.push(tenant.id);
-    tenantId = tenant.id;
+    createdUserIds.push(existingTenant.id);
+    existingTenantEmail = existingTenant.email;
   });
 
+  // Owners/tenants are created dynamically inside createFlat/updateFlat now (not
+  // pre-created and tracked one by one), so cleanup is scoped by society rather than
+  // by an explicit id list.
   afterAll(async () => {
+    const societyIds = [societyId, otherSocietyId];
+    await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
-    await prisma.society.deleteMany({ where: { id: { in: [societyId, otherSocietyId] } } });
+    const userIds = await prisma.user
+      .findMany({ where: { societyId: { in: societyIds } }, select: { id: true } })
+      .then((rows) => rows.map((r) => r.id));
+    await prisma.passwordResetToken.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.society.deleteMany({ where: { id: { in: societyIds } } });
     await prisma.$disconnect();
   });
 
-  it('creates a flat with a valid owner', async () => {
-    const flat = await createFlat({ societyId, block: 'A', flatNumber: '101', baseRate: 1500, ownerId });
-    createdFlatIds.push(flat.id);
+  it('creates a flat, provisioning a brand-new owner account with a working password-reset token', async () => {
+    const email = `flat-new-owner-${suffix}@example.com`;
+    const flat = await createFlat({
+      societyId,
+      block: 'A',
+      flatNumber: '101',
+      baseRate: 1500,
+      ownerName: 'New Owner',
+      ownerEmail: email,
+    });
+    createdFlatIds.push(flat!.id);
 
-    expect(flat.block).toBe('A');
-    expect(flat.flatNumber).toBe('101');
-    expect(flat.ownerId).toBe(ownerId);
-    expect(Number(flat.baseRate)).toBe(1500);
+    expect(flat!.block).toBe('A');
+    expect(Number(flat!.baseRate)).toBe(1500);
+    expect(flat!.owner.email).toBe(email);
+
+    const ownerUser = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(ownerUser.role).toBe('OWNER');
+    const resetToken = await prisma.passwordResetToken.findFirst({ where: { userId: ownerUser.id } });
+    expect(resetToken).not.toBeNull();
   });
 
-  it('throws InvalidOwnerError when ownerId does not exist at all', async () => {
-    await expect(
-      createFlat({ societyId, block: 'A', flatNumber: '102', baseRate: 1500, ownerId: 'nonexistent-id' }),
-    ).rejects.toBeInstanceOf(InvalidOwnerError);
+  it('reuses an existing OWNER account by email, updating their contact info in place', async () => {
+    const email = `flat-reused-owner-${suffix}@example.com`;
+    const first = await createFlat({
+      societyId,
+      block: 'A',
+      flatNumber: '102',
+      baseRate: 1500,
+      ownerName: 'Owner Original Name',
+      ownerEmail: email,
+    });
+    createdFlatIds.push(first!.id);
+    const ownerId = first!.ownerId;
+
+    const second = await createFlat({
+      societyId,
+      block: 'A',
+      flatNumber: '103',
+      baseRate: 1600,
+      ownerName: 'Owner Renamed',
+      ownerEmail: email,
+    });
+    createdFlatIds.push(second!.id);
+
+    expect(second!.ownerId).toBe(ownerId);
+    const ownerUser = await prisma.user.findUniqueOrThrow({ where: { id: ownerId } });
+    expect(ownerUser.name).toBe('Owner Renamed');
   });
 
-  it('throws InvalidOwnerError when ownerId belongs to a different society', async () => {
+  it('throws ConflictingRoleError when ownerEmail already belongs to a non-OWNER user', async () => {
     await expect(
-      createFlat({ societyId, block: 'A', flatNumber: '103', baseRate: 1500, ownerId: otherSocietyOwnerId }),
-    ).rejects.toBeInstanceOf(InvalidOwnerError);
-  });
-
-  it('throws InvalidOwnerError when ownerId references a non-OWNER user (e.g. a tenant)', async () => {
-    await expect(
-      createFlat({ societyId, block: 'A', flatNumber: '104', baseRate: 1500, ownerId: tenantId }),
-    ).rejects.toBeInstanceOf(InvalidOwnerError);
+      createFlat({
+        societyId,
+        block: 'A',
+        flatNumber: '104',
+        baseRate: 1500,
+        ownerName: 'Should Fail',
+        ownerEmail: existingTenantEmail,
+      }),
+    ).rejects.toBeInstanceOf(ConflictingRoleError);
   });
 
   it('throws DuplicateFieldError for a duplicate block+flatNumber within the same society', async () => {
-    const first = await createFlat({ societyId, block: 'B', flatNumber: '201', baseRate: 1500, ownerId });
-    createdFlatIds.push(first.id);
+    const first = await createFlat({
+      societyId,
+      block: 'B',
+      flatNumber: '201',
+      baseRate: 1500,
+      ownerName: 'Owner B',
+      ownerEmail: `flat-b-owner-${suffix}@example.com`,
+    });
+    createdFlatIds.push(first!.id);
 
     await expect(
-      createFlat({ societyId, block: 'B', flatNumber: '201', baseRate: 1600, ownerId }),
+      createFlat({
+        societyId,
+        block: 'B',
+        flatNumber: '201',
+        baseRate: 1600,
+        ownerName: 'Owner B2',
+        ownerEmail: `flat-b2-owner-${suffix}@example.com`,
+      }),
     ).rejects.toBeInstanceOf(DuplicateFieldError);
   });
 
@@ -108,36 +148,101 @@ describe('flats service', () => {
       block: 'B',
       flatNumber: '201',
       baseRate: 1500,
-      ownerId: otherSocietyOwnerId,
+      ownerName: 'Other Society Owner',
+      ownerEmail: `flat-other-society-owner-${suffix}@example.com`,
     });
-    createdFlatIds.push(flat.id);
-    expect(flat.block).toBe('B');
+    createdFlatIds.push(flat!.id);
+    expect(flat!.block).toBe('B');
+  });
+
+  it('creates a flat with a tenant in one call when occupancy is "tenant"', async () => {
+    const tenantEmail = `flat-inline-tenant-${suffix}@example.com`;
+    const flat = await createFlat({
+      societyId,
+      block: 'C',
+      flatNumber: '301',
+      baseRate: 1500,
+      ownerName: 'Owner C',
+      ownerEmail: `flat-c-owner-${suffix}@example.com`,
+      occupancy: 'tenant',
+      tenantName: 'Inline Tenant',
+      tenantEmail,
+    });
+    createdFlatIds.push(flat!.id);
+
+    expect(flat!.currentTenant?.email).toBe(tenantEmail);
+    const occupancy = await prisma.occupancyChange.findFirst({ where: { flatId: flat!.id, effectiveEnd: null } });
+    expect(occupancy?.tenantId).toBe(flat!.currentTenantId);
   });
 
   it('updates a flat’s baseRate', async () => {
-    const flat = await createFlat({ societyId, block: 'C', flatNumber: '301', baseRate: 1500, ownerId });
-    createdFlatIds.push(flat.id);
+    const flat = await createFlat({
+      societyId,
+      block: 'D',
+      flatNumber: '401',
+      baseRate: 1500,
+      ownerName: 'Owner D',
+      ownerEmail: `flat-d-owner-${suffix}@example.com`,
+    });
+    createdFlatIds.push(flat!.id);
 
-    const updated = await updateFlat(flat.id, societyId, { baseRate: 1750 });
+    const updated = await updateFlat(flat!.id, societyId, { baseRate: 1750 });
     expect(Number(updated?.baseRate)).toBe(1750);
   });
 
-  it('returns null updating a flat scoped to a different society (tenant scoping)', async () => {
-    const flat = await createFlat({ societyId, block: 'D', flatNumber: '401', baseRate: 1500, ownerId });
-    createdFlatIds.push(flat.id);
+  it('updates the owner’s contact info in place', async () => {
+    const flat = await createFlat({
+      societyId,
+      block: 'D',
+      flatNumber: '402',
+      baseRate: 1500,
+      ownerName: 'Owner D2',
+      ownerEmail: `flat-d2-owner-${suffix}@example.com`,
+    });
+    createdFlatIds.push(flat!.id);
 
-    const result = await updateFlat(flat.id, otherSocietyId, { baseRate: 1999 });
+    const updated = await updateFlat(flat!.id, societyId, { ownerPhone: '+919000000042' });
+    expect(updated?.owner.phone).toBe('+919000000042');
+  });
+
+  it('returns null updating a flat scoped to a different society (tenant scoping)', async () => {
+    const flat = await createFlat({
+      societyId,
+      block: 'D',
+      flatNumber: '403',
+      baseRate: 1500,
+      ownerName: 'Owner D3',
+      ownerEmail: `flat-d3-owner-${suffix}@example.com`,
+    });
+    createdFlatIds.push(flat!.id);
+
+    const result = await updateFlat(flat!.id, otherSocietyId, { baseRate: 1999 });
     expect(result).toBeNull();
 
-    const stored = await prisma.flat.findUniqueOrThrow({ where: { id: flat.id } });
+    const stored = await prisma.flat.findUniqueOrThrow({ where: { id: flat!.id } });
     expect(Number(stored.baseRate)).toBe(1500);
   });
 
-  it('rejects an update that sets an invalid ownerId', async () => {
-    const flat = await createFlat({ societyId, block: 'E', flatNumber: '501', baseRate: 1500, ownerId });
-    createdFlatIds.push(flat.id);
+  it('assigns and then removes a tenant via occupancy on update', async () => {
+    const flat = await createFlat({
+      societyId,
+      block: 'E',
+      flatNumber: '501',
+      baseRate: 1500,
+      ownerName: 'Owner E',
+      ownerEmail: `flat-e-owner-${suffix}@example.com`,
+    });
+    createdFlatIds.push(flat!.id);
 
-    await expect(updateFlat(flat.id, societyId, { ownerId: tenantId })).rejects.toBeInstanceOf(InvalidOwnerError);
+    const withTenant = await updateFlat(flat!.id, societyId, {
+      occupancy: 'tenant',
+      tenantName: 'Update Tenant',
+      tenantEmail: `flat-e-tenant-${suffix}@example.com`,
+    });
+    expect(withTenant?.currentTenant?.email).toBe(`flat-e-tenant-${suffix}@example.com`);
+
+    const backToOwner = await updateFlat(flat!.id, societyId, { occupancy: 'owner' });
+    expect(backToOwner?.currentTenantId).toBeNull();
   });
 
   it('returns null updating a nonexistent flat', async () => {

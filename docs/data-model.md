@@ -98,6 +98,13 @@ Field decisions worth explaining:
   1.2, once the `Flat` model exists to relate to. Prisma requires both sides of a
   relation declared together, so this is 1.2's job, not 1.1's.
 
+> **Addition (2026-08-06)**: `name`, `phone`, and `email` are also what a resident's
+> planned self-service profile update (`PATCH /api/me`, see `CLAUDE.md`) will write to
+> directly, for their own row — no new field needed. See `docs/auth.md` for how a
+> self-service-created `TENANT` (`role`, `passwordHash`) gets provisioned with a
+> working login without a password field ever being collected from the owner creating
+> them.
+
 ## Migration
 
 ```
@@ -189,6 +196,13 @@ reverts to owner-occupied) and maps directly onto how Task 3.2's endpoints will 
   `effectiveStart` = today, `effectiveEnd` = `null` (open-ended, "still ongoing").
 - **Removing a tenant** closes the *existing* open row by setting its `effectiveEnd` —
   it does not create a new row.
+
+> **Addition (2026-08-06)**: this exact mechanism is also what the planned
+> resident-facing (owner self-service) tenant management reuses — see `CLAUDE.md`'s
+> "Addition (2026-08-06)" and `docs/flats.md`'s "Not yet built" section. The one
+> behavioral difference: the resident-facing version updates the existing tenant's
+> `User` row in place when the flat already has one (matching a single-form "Save"
+> UX), rather than rejecting re-assignment the way Task 3.2's admin endpoint does.
 
 ### Worked example: mid-quarter tenant change
 

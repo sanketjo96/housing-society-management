@@ -35,12 +35,31 @@ the source of truth for build progress since it lives in git.
 
 ## Phase 3 — Flat & Society Onboarding
 
-- [x] 3.1 Create/edit flat endpoints
-- [ ] 3.2 Assign/remove tenant endpoint
-- [ ] 3.3 List flats endpoint
-- [ ] 3.4 CSV bulk import for flats
-- [ ] 3.5 Frontend onboard-flat form
-- [ ] 3.6 Frontend flat list and tenant assignment UI
+- [x] 3.1 Create/edit flat endpoints (redesigned 2026-08-06 — owner/tenant are
+      find-or-create contact fields, not pre-existing ids; see `docs/flats.md`'s
+      "Redesign" section, confirmed against the admin-view UI mockup)
+- [x] 3.2 Assign/remove tenant endpoint (id-based, still admin-only; kept alongside
+      3.1's redesign as a lower-level alternative — `docs/flats.md`)
+- [x] 3.3 List flats endpoint
+- [x] 3.4 CSV bulk import for flats (redesigned alongside 3.1 — same inline
+      owner/tenant contact fields as the form, not a pre-existing-owner lookup)
+- [x] 3.5 Frontend onboard-flat form
+- [x] 3.6 Frontend flat list and tenant assignment UI (3.5+3.6 merged into one page,
+      `FlatsListPage.tsx`, matching the admin mockup's list ↔ inline-form pattern —
+      `docs/flats.md`)
+
+> **3.7/3.8 added 2026-08-06, not in the original `task-prompts-v1` breakdown** — see
+> `CLAUDE.md`'s "Addition (2026-08-06)". Confirmed against a shared resident-view UI
+> mockup (`ResidentExperience`'s "My details" tab): an owner manages their own contact
+> details and their flat's tenant directly, without going through the admin-only
+> endpoints above (3.1/3.2 stay admin-only and remain available for admin-initiated
+> corrections).
+
+- [x] 3.7 Resident self-service endpoints — `PATCH /api/me` (own profile, any role) +
+      `GET/PUT/DELETE /api/me/flat(/tenant)` (`OWNER`/`TENANT`, `docs/auth.md`)
+- [x] 3.8 Frontend "My details" tab (resident view) — `MyDetailsPage.tsx`
+
+Phase 3 complete (3.1–3.8).
 
 ## Phase 4 — Maintenance Records (monthly, independently payable)
 

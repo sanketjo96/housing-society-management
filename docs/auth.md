@@ -347,3 +347,47 @@ handler can trust.
 - Also checked directly against the live Docker stack (not just Vitest): a raw
   `curl` with no token against `/api/admin/users` returns `401`; the same request
   with the seeded admin's real token returns `201`.
+
+## Resident self-service (Task 3.7) — `/api/me`, `/api/me/flat`, `/api/me/flat/tenant`
+
+Built per `CLAUDE.md`'s "Addition (2026-08-06)". Handlers live in
+`src/controllers/me.controller.ts`, routed from `src/routes/me.route.ts`; the
+profile-update logic is `src/services/me.service.ts`'s `updateOwnProfile()`, while the
+flat/tenant logic reuses `src/services/flats.service.ts` (`getMyFlat()`,
+`upsertOwnTenant()`, `removeOwnTenant()` — see `docs/flats.md` for those).
+
+### `PATCH /api/me` — own profile update, any role
+
+Any authenticated user updates their own `name`/`phone`/`email` directly, no admin
+involvement. `req.user.id` (from `requireRole`) identifies which row to update — no
+`:id` param or `societyId` body field, since a user can only ever update themselves.
+**Request body**: any subset of `name`, `phone`, `email` (at least one required).
+**Response**: `200` with the updated user (no `passwordHash`). `409`
+(`DuplicateFieldError`) if the new email/phone is already in use by someone else.
+
+### `GET /api/me/flat` — `OWNER`/`TENANT` only
+
+Returns the caller's own flat: for an `OWNER`, the flat they own; for a `TENANT`, the
+flat they currently occupy (via `Flat.currentTenantId`), plus `occupancyEffectiveFrom`
+(the open `OccupancyChange`'s `effectiveStart`, if any). `403` for an `ADMIN` (route is
+`requireRole(['OWNER', 'TENANT'])` — admins aren't residents). `404` if the caller has
+no associated flat yet (e.g. a `TENANT` before any owner has assigned them).
+
+### `PUT`/`DELETE /api/me/flat/tenant` — `OWNER` only
+
+The resident-facing equivalent of `docs/flats.md`'s admin `PATCH /api/admin/flats/:id`
+`occupancy` field, scoped to `req.user.id === flat.ownerId` instead of `requireRole
+(['ADMIN'])`. `PUT` upserts: updates the existing tenant's contact info in place if the
+flat already has one (**not** the id-based admin `assignTenant`'s reject-on-existing
+behavior — see `docs/flats.md`), or creates a new `TENANT` account if none exists yet.
+`DELETE` closes the open `OccupancyChange` and clears `currentTenantId`, returning
+`409` (`NoCurrentTenantError`) if the flat is already owner-occupied.
+
+**How a self-service-created tenant gets a working login without the owner ever
+entering a password for them**: the backend creates the `TENANT` `User` with a random,
+unusable password, then calls the *same* `requestPasswordReset()` this task already
+built (§ "Password reset" above), currently stubbed to log the reset link. The tenant
+follows that link to set their own real password and logs in normally — reuses this
+task's existing token/email mechanics rather than building a separate invite-token
+system. The identical `findOrCreateUserByEmail()` pattern was later reused by Task
+3.1/3.2's redesigned admin flat-onboarding endpoints too (`docs/flats.md`).

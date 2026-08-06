@@ -4,6 +4,7 @@ import express from 'express';
 import { adminUsersRouter } from './routes/admin-users.route';
 import { authRouter } from './routes/auth.route';
 import { flatsRouter } from './routes/flats.route';
+import { meRouter } from './routes/me.route';
 import { passwordResetRouter } from './routes/password-reset.route';
 
 export const app = express();
@@ -28,4 +29,5 @@ app.get('/api/health', (_req, res) => {
 app.use(adminUsersRouter);
 app.use(authRouter);
 app.use(flatsRouter);
+app.use(meRouter);
 app.use(passwordResetRouter);
