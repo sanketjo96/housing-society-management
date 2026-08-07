@@ -33,16 +33,15 @@ collectionRatePercent }`, computed across every flat in the society (all periods
 just the current one). Internals: `getBalancesByFlat` fetches every `MaintenanceRecord`
 and `LedgerEntry` for the society in two bulk queries (not N+1), groups by `flatId`, and
 calls `ledger.service.ts`'s `balancesFromRows` per flat — the exact same formula the
-resident's own Passbook uses (`docs/payments.md`), never duplicated.
+resident's own Dashboard uses (`docs/payments.md`), never duplicated.
 
 - `totalBilled` = sum of every flat's `totalCharges`.
 - `totalPaid` = sum of every flat's `approvedDeposits`.
-- `outstandingTotal` = **sum of each flat's own `payable`** — summed per flat, not
+- `outstandingTotal` = **sum of each flat's own `outstanding`** — summed per flat, not
   computed as one global subtraction, since a flat that has overpaid must never offset
   another flat's balance (each `max(0, ...)` is per-flat).
-- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` amounts (Deposits
-  and Credits together) — neither "confirmed collected" nor "still owed with no action
-  taken."
+- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` (Deposit) amounts —
+  neither "confirmed collected" nor "still owed with no action taken."
 - `collectionRatePercent` = `round(totalPaid / totalBilled * 100)`, `0` when
   `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
 
@@ -53,19 +52,18 @@ scanning the table needs to see "this flat is fully settled" as a positive absen
 debt, not have the flat silently missing. Each row: `{ flat: {id, wing, flatNumber},
 owner, currentTenant, outstandingTotal, unpaidCount }`.
 
-- `outstandingTotal` = the flat's **Payable** (net of approved credit) — the primary
-  "what they owe right now" figure under the ledger model, replacing the old
-  UNPAID+PENDING_REVIEW sum.
+- `outstandingTotal` = the flat's **Outstanding** — the primary "what they owe right
+  now" figure under the ledger model, replacing the old UNPAID+PENDING_REVIEW sum.
 - `unpaidCount` = the number of `PENDING` `LedgerEntry` rows for that flat (a rough
-  "how much activity is in flight" signal, distinct from Payable).
+  "how much activity is in flight" signal, distinct from Outstanding).
 - Sorted `outstandingTotal` descending, so the admin's highest-priority flats surface
   first without any client-side sorting needed (`DataTable` has no sort model, per
   CLAUDE.md's tech-stack table — deliberately minimal for a 24-flat MVP).
 
 ## `getFlaggedFlats(societyId, gracePeriodDays?)` — `GET /api/admin/dashboard/flagged-flats`
 
-Task 8.4 (rule 8's escalation widget). Response: one row per flat with `Payable > 0`
-whose **oldest** `MaintenanceRecord.dueDate` is past `dueDate + gracePeriodDays`:
+Task 8.4 (rule 8's escalation widget). Response: one row per flat with `Outstanding
+> 0` whose **oldest** `MaintenanceRecord.dueDate` is past `dueDate + gracePeriodDays`:
 `{ flat, recipient, outstandingTotal, oldestDueDate, overdueRecordCount, message }`.
 
 - **Redefined for the ledger model**: since a Deposit is no longer tied to specific
@@ -77,9 +75,9 @@ whose **oldest** `MaintenanceRecord.dueDate` is past `dueDate + gracePeriodDays`
 - **`gracePeriodDays` is still the "configurable" knob from rule 8** — exposed as an
   optional query param (`?gracePeriodDays=N`, positive integer, `zod`-validated, `400`
   on a non-numeric value), unchanged mechanism from before the pivot.
-- **`outstandingTotal` is the flat's full Payable, not just the overdue portion** —
-  rule 8's exact wording: "computes outstanding total (across all that flat's unpaid
-  records)."
+- **`outstandingTotal` is the flat's full Outstanding, not just the overdue portion**
+  — rule 8's exact wording: "computes outstanding total (across all that flat's
+  unpaid records)."
 - **`overdueRecordCount`** = how many of the flat's SYSTEM charges have individually
   passed `dueDate + gracePeriodDays`, by calendar time — there's no per-charge
   paid/unpaid state to count under the ledger model, but this is still a meaningful

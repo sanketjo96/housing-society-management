@@ -147,13 +147,16 @@ rate — applied via a `useEffect` rather than `useForm`'s `defaultValues`, sinc
 settings fetch can resolve after the form has already mounted and `defaultValues` are
 only read once, at mount.
 
-## Frontend — superseded by `client/src/pages/PassbookPage.tsx`
+## Frontend — superseded by `client/src/pages/ResidentDashboardOverview.tsx`
 
 Task 4.7 originally built `MaintenancePage.tsx` as a read-only "Passbook" tab (sum of
 `UNPAID` amounts + a status badge per record, no payment action yet — that came in
 Phase 6). The 2026-08-06 ledger pivot replaced it with `PassbookPage.tsx` — three
-summary cards (Outstanding/Credit balance/Payable), Pay and Add credit actions, and the
-full merged ledger table. See `docs/payments.md` for the current page.
+summary cards (Outstanding/Credit balance/Payable), Pay and Add credit actions, and
+the full merged ledger table. Later split into `ResidentDashboardOverview.tsx`
+(Deposit-only ledger, a single Outstanding card, Pay) and `MaintenanceBookPage.tsx`
+(SYSTEM charges only); Credit was removed from the product entirely on 2026-08-07.
+See `docs/payments.md` for the current pages.
 
 ## Manually verified against the real running stack
 
@@ -172,7 +175,7 @@ curl "http://localhost/api/admin/maintenance-records?period=2099-02" \
 
 curl http://localhost/api/me/ledger -H "Authorization: Bearer <aliceToken>"
 # → 200, Alice's merged ledger — her A-101 record appears as a SYSTEM row for that
-#   period, plus totals reflecting it in totalCharges/outstanding/payable
+#   period, plus totals reflecting it in totalCharges/outstanding
 ```
 
 A distinctive future period (`2099-02`) was used specifically so this check's records
@@ -196,8 +199,8 @@ the historical periods now means creating one synthetic `APPROVED` `LedgerEntry{
 DEPOSIT}` per flat, covering the sum of its historical (all-but-the-most-recent)
 charges — not a real payment audit trail, so there's no QR/proof-upload flow to go
 through — leaving exactly the most recent period's charge uncovered as "the current
-due" (`Payable > 0`), so the Passbook/admin views show a believable mix rather than
-everything outstanding. Safe to re-run: `generateMaintenanceRecords` is already
+due" (`Outstanding > 0`), so the resident/admin views show a believable mix rather
+than everything outstanding. Safe to re-run: `generateMaintenanceRecords` is already
 idempotent per flat+period, and the backfill skips a flat that already has any
 `DEPOSIT` `LedgerEntry`.
 

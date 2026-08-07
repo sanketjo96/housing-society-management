@@ -3,19 +3,23 @@ import { prisma } from '../../src/db';
 import { createFlat } from '../../src/services/flats.service';
 import {
   approveLedgerEntry,
+  cancelPaymentIntent,
   computeFlatBalances,
-  createCredit,
   createDeposit,
-  generateDepositQr,
+  createOrReplacePaymentIntent,
   getLedgerEntryFileForViewing,
   getLedgerForResident,
-  InvalidAmountError,
+  getOpenPaymentIntent,
   InvalidDepositAmountError,
   LedgerEntryAlreadyReviewedError,
   listPendingLedgerEntries,
   manualDeposit,
+  NoOpenPaymentIntentError,
   rejectLedgerEntry,
+  submitPaymentIntent,
 } from '../../src/services/ledger.service';
+
+const fakeProofFile = { buffer: Buffer.from('fake-image-bytes'), mimeType: 'image/png', extension: '.png' };
 
 describe('ledger service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -55,7 +59,7 @@ describe('ledger service', () => {
     adminId = admin.id;
 
     // Two SYSTEM charges — always implicitly "Approved," always contributing to
-    // totalCharges (CLAUDE.md's ledger pivot note).
+    // totalCharges.
     await prisma.maintenanceRecord.createMany({
       data: [
         { flatId, period: '2026-01', payerType: 'OWNER', amount: 1000, dueDate: new Date('2026-01-15'), payerId: ownerId },
@@ -78,14 +82,11 @@ describe('ledger service', () => {
   });
 
   describe('computeFlatBalances / balances formula', () => {
-    it('starts with the full charge total outstanding and payable, nothing approved yet', async () => {
+    it('starts with the full charge total outstanding, nothing approved yet', async () => {
       const balances = await computeFlatBalances(flatId);
       expect(balances.totalCharges).toBe(2000);
       expect(balances.approvedDeposits).toBe(0);
-      expect(balances.approvedCredits).toBe(0);
       expect(balances.outstanding).toBe(2000);
-      expect(balances.creditBalance).toBe(0);
-      expect(balances.payable).toBe(2000);
     });
   });
 
@@ -94,7 +95,7 @@ describe('ledger service', () => {
       await expect(createDeposit(ownerId, flatId, societyId, { amount: 0 })).rejects.toThrow(InvalidDepositAmountError);
     });
 
-    it('rejects an amount greater than the current payable', async () => {
+    it('rejects an amount greater than the current outstanding', async () => {
       await expect(createDeposit(ownerId, flatId, societyId, { amount: 5000 })).rejects.toThrow(
         InvalidDepositAmountError,
       );
@@ -103,18 +104,17 @@ describe('ledger service', () => {
     it('creates a PENDING deposit with no proof file required', async () => {
       const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 500 });
       expect(deposit.status).toBe('PENDING');
-      expect(deposit.type).toBe('DEPOSIT');
       expect(Number(deposit.amount)).toBe(500);
       expect(deposit.fileUrl).toBeNull();
 
       // A PENDING deposit doesn't move the balance yet.
       const balances = await computeFlatBalances(flatId);
-      expect(balances.payable).toBe(2000);
+      expect(balances.outstanding).toBe(2000);
     });
   });
 
   describe('approveLedgerEntry / rejectLedgerEntry', () => {
-    it('approving a deposit reduces Payable by its amount', async () => {
+    it('approving a deposit reduces Outstanding by its amount', async () => {
       const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 300 });
       await approveLedgerEntry(deposit.id, societyId, adminId);
 
@@ -138,7 +138,7 @@ describe('ledger service', () => {
       expect(rejected!.adminNote).toBe('blurry screenshot');
 
       const after = await computeFlatBalances(flatId);
-      expect(after.payable).toBe(before.payable);
+      expect(after.outstanding).toBe(before.outstanding);
     });
 
     it('returns null for an entry in a different society', async () => {
@@ -151,40 +151,46 @@ describe('ledger service', () => {
     });
   });
 
-  describe('createCredit', () => {
-    it('requires a positive amount', async () => {
-      await expect(createCredit(ownerId, flatId, societyId, { amount: 0, note: 'x' })).rejects.toThrow(
-        InvalidAmountError,
+  describe('payment intents', () => {
+    it('getOpenPaymentIntent returns null when none exists', async () => {
+      expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
+    });
+
+    it('rejects locking an amount above the current outstanding', async () => {
+      const balances = await computeFlatBalances(flatId);
+      await expect(
+        createOrReplacePaymentIntent(flatId, ownerId, societyId, balances.outstanding + 1),
+      ).rejects.toThrow(InvalidDepositAmountError);
+    });
+
+    it('creates an intent, replaces it on a second lock, and cancel clears it', async () => {
+      const first = await createOrReplacePaymentIntent(flatId, ownerId, societyId, 10);
+      expect(first.amount).toBe(10);
+      expect(first.upiLink).toContain('upi://pay');
+      expect(first.qrDataUrl).toContain('data:image/png;base64,');
+
+      const replaced = await createOrReplacePaymentIntent(flatId, ownerId, societyId, 20);
+      expect(replaced.amount).toBe(20);
+
+      const open = await getOpenPaymentIntent(flatId, societyId);
+      expect(open?.amount).toBe(20);
+
+      await cancelPaymentIntent(flatId);
+      expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
+    });
+
+    it('submitPaymentIntent throws when there is nothing open', async () => {
+      await expect(submitPaymentIntent(flatId, ownerId, societyId, fakeProofFile)).rejects.toThrow(
+        NoOpenPaymentIntentError,
       );
     });
 
-    it('creates a PENDING credit, and approving it increases credit balance / reduces payable', async () => {
-      const before = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, { amount: 200, note: 'Paid lift technician' });
-      expect(credit.status).toBe('PENDING');
-      expect(credit.note).toBe('Paid lift technician');
-
-      await approveLedgerEntry(credit.id, societyId, adminId);
-      const after = await computeFlatBalances(flatId);
-      expect(after.creditBalance).toBe(before.creditBalance + 200);
-      expect(after.payable).toBe(Math.max(0, before.payable - 200));
-    });
-  });
-
-  describe('generateDepositQr', () => {
-    it('rejects an amount above the current payable', async () => {
-      const balances = await computeFlatBalances(flatId);
-      await expect(generateDepositQr(flatId, societyId, balances.payable + 1)).rejects.toThrow(
-        InvalidDepositAmountError,
-      );
-    });
-
-    it('returns a QR + UPI link for a valid amount', async () => {
-      const balances = await computeFlatBalances(flatId);
-      const result = await generateDepositQr(flatId, societyId, Math.min(1, balances.payable) || 1);
-      expect(result.amount).toBeGreaterThan(0);
-      expect(result.upiLink).toContain('upi://pay');
-      expect(result.qrDataUrl).toContain('data:image/png;base64,');
+    it('submitPaymentIntent finalizes into a PENDING deposit and clears the intent', async () => {
+      await createOrReplacePaymentIntent(flatId, ownerId, societyId, 15);
+      const entry = await submitPaymentIntent(flatId, ownerId, societyId, fakeProofFile);
+      expect((entry as { status: string }).status).toBe('PENDING');
+      expect((entry as { fileUrl: string | null }).fileUrl).not.toBeNull();
+      expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
     });
   });
 
@@ -193,15 +199,31 @@ describe('ledger service', () => {
       const ledger = await getLedgerForResident(flatId);
       expect(ledger.entries.some((e) => e.type === 'SYSTEM')).toBe(true);
       expect(ledger.entries.some((e) => e.type === 'DEPOSIT')).toBe(true);
-      expect(ledger.entries.some((e) => e.type === 'CREDIT')).toBe(true);
       expect(ledger.totals.totalCharges).toBe(2000);
+      expect(ledger.availableYears).toContain(2026);
+    });
+
+    it('scopes entries and yearTotals to the given year; totals/availableYears stay lifetime regardless', async () => {
+      const allTime = await getLedgerForResident(flatId);
+      const scoped = await getLedgerForResident(flatId, 2026);
+      expect(scoped.yearTotals.totalCharges).toBe(2000);
+      expect(scoped.entries.every((e) => e.type !== 'SYSTEM' || e.period?.startsWith('2026'))).toBe(true);
+      expect(scoped.availableYears).toEqual(allTime.availableYears);
+      // Outstanding is current financial state, not a per-year concept — it must be
+      // identical (lifetime) no matter which year is asked for.
+      expect(scoped.totals).toEqual(allTime.totals);
+
+      const otherYear = await getLedgerForResident(flatId, 1999);
+      expect(otherYear.yearTotals.totalCharges).toBe(0);
+      expect(otherYear.totals).toEqual(allTime.totals);
+      expect(otherYear.entries).toHaveLength(0);
     });
   });
 
   describe('listPendingLedgerEntries', () => {
-    it('filters by status and type', async () => {
-      const pendingDeposits = await listPendingLedgerEntries(societyId, { status: 'PENDING', type: 'DEPOSIT' });
-      expect(pendingDeposits.every((e) => e.status === 'PENDING' && e.type === 'DEPOSIT')).toBe(true);
+    it('filters by status', async () => {
+      const pendingDeposits = await listPendingLedgerEntries(societyId, { status: 'PENDING' });
+      expect(pendingDeposits.every((e) => e.status === 'PENDING')).toBe(true);
     });
   });
 

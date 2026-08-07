@@ -23,7 +23,7 @@ async function getBalancesByFlat(societyId: string) {
     prisma.maintenanceRecord.findMany({ where: { flat: { societyId } }, select: { flatId: true, amount: true } }),
     prisma.ledgerEntry.findMany({
       where: { flat: { societyId } },
-      select: { flatId: true, type: true, status: true, amount: true },
+      select: { flatId: true, status: true, amount: true },
     }),
   ]);
 
@@ -41,12 +41,11 @@ async function getBalancesByFlat(societyId: string) {
 
 // Task 8.1 — society-wide, all-time (every MaintenanceRecord/LedgerEntry ever
 // generated, not scoped to a period) since no date-range picker was asked for.
-// "Outstanding" is the sum of each flat's own Payable (net of that flat's approved
-// credit) — summed per flat, not computed as one global subtraction, since a flat that
-// has overpaid must never offset another flat's balance (each Math.max(0, ...) is
-// per-flat, per the ledger pivot's formula). pendingReviewTotal covers both pending
-// Deposits and pending Credits together — neither "confirmed collected" nor "still
-// owed with no action taken."
+// "Outstanding" is the sum of each flat's own Outstanding — summed per flat, not
+// computed as one global subtraction, since a flat that has overpaid must never
+// offset another flat's balance (each Math.max(0, ...) is per-flat, per the ledger
+// formula). pendingReviewTotal covers pending Deposits still awaiting review —
+// neither "confirmed collected" nor "still owed with no action taken."
 export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
   const byFlat = await getBalancesByFlat(societyId);
 
@@ -57,7 +56,7 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
   for (const { balances, pendingEntries } of byFlat) {
     totalBilled += balances.totalCharges;
     totalPaid += balances.approvedDeposits;
-    outstandingTotal += balances.payable;
+    outstandingTotal += balances.outstanding;
     pendingReviewTotal += pendingEntries.reduce((sum, e) => sum + Number(e.amount), 0);
   }
   const collectionRatePercent = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
@@ -75,10 +74,10 @@ export interface FlatDues {
 
 // Task 8.2 — every flat, not just the ones with dues (a settled flat showing ₹0 is
 // itself useful information for an admin scanning the table), sorted highest-owed
-// first. outstandingTotal here is each flat's Payable (net of approved credit) — the
-// primary "what they owe right now" figure under the ledger model.
-// unpaidCount is the number of pending Deposit/Credit rows still awaiting review for
-// that flat (a rough "how much activity is in flight" signal, distinct from Payable).
+// first. outstandingTotal here is each flat's Outstanding — the primary "what they
+// owe right now" figure. unpaidCount is the number of pending Deposit rows still
+// awaiting review for that flat (a rough "how much activity is in flight" signal,
+// distinct from Outstanding).
 export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
   const byFlat = await getBalancesByFlat(societyId);
 
@@ -87,7 +86,7 @@ export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
       flat: { id: flat.id, wing: flat.wing, flatNumber: flat.flatNumber },
       owner: flat.owner,
       currentTenant: flat.currentTenant,
-      outstandingTotal: balances.payable,
+      outstandingTotal: balances.outstanding,
       unpaidCount: pendingEntries.length,
     }))
     .sort((a, b) => b.outstandingTotal - a.outstandingTotal);
@@ -102,15 +101,15 @@ export interface FlaggedFlat {
   message: string;
 }
 
-// Task 8.4 — rule 8's escalation. Under the ledger pivot, a Deposit is no longer tied
-// to specific charges (payment is against the aggregate balance), so there's no
-// per-charge paid/unpaid state to check directly any more. A flat is flagged when it
-// still has something Payable AND its OLDEST SYSTEM charge's dueDate is past
-// dueDate + gracePeriodDays (default 7, CLAUDE.md's confirmed decision; query-param
-// overridable) — the natural generalization of "you still owe money and your oldest
-// bill has been sitting a while." outstandingTotal is the flat's full Payable (rule
-// 8's "computes outstanding total... across all that flat's unpaid records"), not
-// just whatever portion happens to be technically overdue.
+// Task 8.4 — rule 8's escalation. A Deposit is not tied to specific charges (payment
+// is against the aggregate balance), so there's no per-charge paid/unpaid state to
+// check directly. A flat is flagged when it still has something Outstanding AND its
+// OLDEST SYSTEM charge's dueDate is past dueDate + gracePeriodDays (default 7,
+// CLAUDE.md's confirmed decision; query-param overridable) — the natural
+// generalization of "you still owe money and your oldest bill has been sitting a
+// while." outstandingTotal is the flat's full Outstanding (rule 8's "computes
+// outstanding total... across all that flat's unpaid records"), not just whatever
+// portion happens to be technically overdue.
 export async function getFlaggedFlats(
   societyId: string,
   gracePeriodDays: number = DEFAULT_GRACE_PERIOD_DAYS,
@@ -128,7 +127,7 @@ export async function getFlaggedFlats(
 
   const flagged: FlaggedFlat[] = [];
   for (const { flat, balances } of byFlat) {
-    if (balances.payable <= 0) continue;
+    if (balances.outstanding <= 0) continue;
     const dueDates = dueDatesByFlat.get(flat.id) ?? [];
     if (dueDates.length === 0) continue;
     const oldestDueDate = dueDates.reduce((oldest, d) => (d < oldest ? d : oldest));
@@ -147,14 +146,14 @@ export async function getFlaggedFlats(
     flagged.push({
       flat: { id: flat.id, wing: flat.wing, flatNumber: flat.flatNumber },
       recipient,
-      outstandingTotal: balances.payable,
+      outstandingTotal: balances.outstanding,
       oldestDueDate,
       overdueRecordCount,
       message: buildEscalationMessage({
         recipientName: recipient.name,
         wing: flat.wing,
         flatNumber: flat.flatNumber,
-        outstandingTotal: balances.payable,
+        outstandingTotal: balances.outstanding,
         oldestDueDate,
         societyName: society.name,
       }),

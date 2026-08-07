@@ -11,7 +11,6 @@ import {
 
 const listQuerySchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
-  type: z.enum(['DEPOSIT', 'CREDIT']).optional(),
 });
 
 export async function listLedgerEntriesHandler(req: Request, res: Response) {

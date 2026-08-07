@@ -18,7 +18,6 @@ function renderPage() {
 
 const depositEntry = {
   id: 'entry-1',
-  type: 'DEPOSIT' as const,
   status: 'PENDING' as const,
   amount: '2000',
   note: 'UPI payment - awaiting review',
@@ -28,12 +27,10 @@ const depositEntry = {
   flat: { id: 'f1', wing: 'A', flatNumber: '101' },
 };
 
-const creditEntryNoFile = {
+const depositEntryNoFile = {
   ...depositEntry,
   id: 'entry-2',
-  type: 'CREDIT' as const,
   amount: '500',
-  note: 'Paid plumber',
   fileUrl: null,
 };
 
@@ -51,7 +48,7 @@ describe('PaymentProofsPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists pending entries with flat, payer, type, and amount', async () => {
+  it('lists pending entries with flat, payer, and amount', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntry] });
 
@@ -59,17 +56,16 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
     expect(screen.getByText('Alice Owner')).toBeInTheDocument();
-    expect(screen.getByText('Deposit')).toBeInTheDocument();
     expect(screen.getByText('₹2,000')).toBeInTheDocument();
   });
 
   it('shows "No file attached" for an entry with no proof, instead of a View button', async () => {
     const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockResolvedValue({ ok: true, json: async () => [creditEntryNoFile] });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntryNoFile] });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Credit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
     expect(screen.getByText(/no file attached/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /view proof/i })).not.toBeInTheDocument();
   });

@@ -90,10 +90,10 @@ describe('/api/admin/ledger-entries*', () => {
 
     it('lists pending entries for the admin', async () => {
       const created = await request(app)
-        .post('/api/me/ledger/credits')
+        .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '100')
-        .field('note', 'test credit');
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(created.status).toBe(201);
 
       const res = await request(app)
@@ -114,10 +114,10 @@ describe('/api/admin/ledger-entries*', () => {
 
     it('approves a pending entry', async () => {
       const created = await request(app)
-        .post('/api/me/ledger/credits')
+        .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .field('note', 'approve-me');
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
@@ -128,10 +128,10 @@ describe('/api/admin/ledger-entries*', () => {
 
     it('returns 409 on a second approve of the same entry', async () => {
       const created = await request(app)
-        .post('/api/me/ledger/credits')
+        .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .field('note', 'twice');
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -146,10 +146,10 @@ describe('/api/admin/ledger-entries*', () => {
   describe('POST /api/admin/ledger-entries/:id/reject', () => {
     it('rejects a pending entry and stores the reason', async () => {
       const created = await request(app)
-        .post('/api/me/ledger/credits')
+        .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .field('note', 'reject-me');
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/reject`)

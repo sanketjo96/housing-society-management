@@ -121,8 +121,10 @@ summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 > resident view moves to a transaction ledger") — `PaymentProof` → `LedgerEntry`,
 > `/api/me/maintenance-records/qr` → `/api/me/ledger/deposits/qr`,
 > `/api/me/payment-proofs` → `/api/me/ledger/deposits` (proof now optional) +
-> `/api/me/ledger/credits` (new), `/api/admin/payment-proofs*` →
-> `/api/admin/ledger-entries*`, `MaintenancePage.tsx` → `PassbookPage.tsx`. The tasks
+> `/api/me/ledger/credits` (new; **later removed entirely, 2026-08-07** — Credit was
+> dropped from the product, see `docs/payments.md`), `/api/admin/payment-proofs*` →
+> `/api/admin/ledger-entries*`, `MaintenancePage.tsx` → `PassbookPage.tsx` (later
+> split into `ResidentDashboardOverview.tsx`/`MaintenanceBookPage.tsx`). The tasks
 > below are kept checked (the underlying capability — QR pay, proof review, manual
 > mark-paid — still exists) with their original endpoint names for history; see
 > `docs/payments.md` for the current contract.
@@ -166,7 +168,7 @@ not built here. `docs/payments.md` has the full detail.
 
 > **Pivot note (2026-08-06)**: internals rewritten against the ledger model — see the
 > Phase 6 pivot note above and `docs/admin-dashboard.md`. `outstandingTotal` (8.1/8.2)
-> is now each flat's Payable (net of approved credit), not a UNPAID/PENDING_REVIEW sum;
+> is now each flat's Outstanding, not a UNPAID/PENDING_REVIEW sum;
 > the pending-proofs widget (8.3) now queries `/api/admin/ledger-entries`; 8.4's
 > "unpaid records" now means "SYSTEM charges past due," since there's no per-charge
 > paid state under the ledger model.

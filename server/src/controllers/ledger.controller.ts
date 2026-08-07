@@ -3,14 +3,17 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { getMyFlat } from '../services/flats.service';
 import {
-  createCredit,
+  cancelPaymentIntent,
   createDeposit,
+  createOrReplacePaymentIntent,
   ForbiddenLedgerEntryAccessError,
-  generateDepositQr,
   getLedgerEntryFileForViewing,
   getLedgerForResident,
+  getOpenPaymentIntent,
   InvalidAmountError,
   InvalidDepositAmountError,
+  NoOpenPaymentIntentError,
+  submitPaymentIntent,
 } from '../services/ledger.service';
 
 // Every handler here resolves "my flat" the same way — requireRole already guarantees
@@ -28,7 +31,33 @@ function amountErrorResponse(res: Response, err: unknown): boolean {
   return false;
 }
 
+const yearQuerySchema = z.object({ year: z.coerce.number().int().optional() });
+
 export async function getMyLedgerHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const parsedQuery = yearQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsedQuery.error.flatten() });
+    return;
+  }
+
+  const flatId = await resolveMyFlatId(req.user.id, req.user.societyId, req.user.role as 'OWNER' | 'TENANT');
+  if (!flatId) {
+    res.status(404).json({ error: 'No flat associated with your account' });
+    return;
+  }
+
+  const ledger = await getLedgerForResident(flatId, parsedQuery.data.year);
+  res.status(200).json(ledger);
+}
+
+const amountSchema = z.object({ amount: z.coerce.number().positive() });
+
+export async function getPaymentIntentHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
     return;
@@ -40,13 +69,11 @@ export async function getMyLedgerHandler(req: Request, res: Response) {
     return;
   }
 
-  const ledger = await getLedgerForResident(flatId);
-  res.status(200).json(ledger);
+  const intent = await getOpenPaymentIntent(flatId, req.user.societyId);
+  res.status(200).json({ intent });
 }
 
-const amountSchema = z.object({ amount: z.coerce.number().positive() });
-
-export async function generateDepositQrHandler(req: Request, res: Response) {
+export async function createPaymentIntentHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
     return;
@@ -65,12 +92,61 @@ export async function generateDepositQrHandler(req: Request, res: Response) {
   }
 
   try {
-    const result = await generateDepositQr(flatId, req.user.societyId, parsed.data.amount);
-    res.status(200).json(result);
+    const intent = await createOrReplacePaymentIntent(flatId, req.user.id, req.user.societyId, parsed.data.amount);
+    res.status(201).json({ intent });
   } catch (err) {
     if (amountErrorResponse(res, err)) return;
     throw err;
   }
+}
+
+export async function submitPaymentIntentHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const flatId = await resolveMyFlatId(req.user.id, req.user.societyId, req.user.role as 'OWNER' | 'TENANT');
+  if (!flatId) {
+    res.status(404).json({ error: 'No flat associated with your account' });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: 'A payment screenshot is required' });
+    return;
+  }
+
+  try {
+    const entry = await submitPaymentIntent(flatId, req.user.id, req.user.societyId, {
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      extension: path.extname(req.file.originalname),
+    });
+    res.status(201).json(entry);
+  } catch (err) {
+    if (err instanceof NoOpenPaymentIntentError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function cancelPaymentIntentHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const flatId = await resolveMyFlatId(req.user.id, req.user.societyId, req.user.role as 'OWNER' | 'TENANT');
+  if (!flatId) {
+    res.status(404).json({ error: 'No flat associated with your account' });
+    return;
+  }
+
+  await cancelPaymentIntent(flatId);
+  res.status(204).end();
 }
 
 export async function createDepositHandler(req: Request, res: Response) {
@@ -94,41 +170,6 @@ export async function createDepositHandler(req: Request, res: Response) {
   try {
     const entry = await createDeposit(req.user.id, flatId, req.user.societyId, {
       amount: parsed.data.amount,
-      file: req.file
-        ? { buffer: req.file.buffer, mimeType: req.file.mimetype, extension: path.extname(req.file.originalname) }
-        : undefined,
-    });
-    res.status(201).json(entry);
-  } catch (err) {
-    if (amountErrorResponse(res, err)) return;
-    throw err;
-  }
-}
-
-const creditSchema = z.object({ amount: z.coerce.number().positive(), note: z.string().min(1) });
-
-export async function createCreditHandler(req: Request, res: Response) {
-  if (!req.user) {
-    res.status(401).json({ error: 'Unauthenticated' });
-    return;
-  }
-
-  const parsed = creditSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-    return;
-  }
-
-  const flatId = await resolveMyFlatId(req.user.id, req.user.societyId, req.user.role as 'OWNER' | 'TENANT');
-  if (!flatId) {
-    res.status(404).json({ error: 'No flat associated with your account' });
-    return;
-  }
-
-  try {
-    const entry = await createCredit(req.user.id, flatId, req.user.societyId, {
-      amount: parsed.data.amount,
-      note: parsed.data.note,
       file: req.file
         ? { buffer: req.file.buffer, mimeType: req.file.mimetype, extension: path.extname(req.file.originalname) }
         : undefined,

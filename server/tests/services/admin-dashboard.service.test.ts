@@ -14,7 +14,7 @@ describe('admin-dashboard service', () => {
   let societyId: string;
   let flatAId: string; // no records or ledger entries at all
   let flatBId: string; // two SYSTEM charges, an old overdue one and a recent one, nothing paid
-  let flatCId: string; // one SYSTEM charge settled by an approved Deposit, plus a pending Credit
+  let flatCId: string; // one SYSTEM charge settled by an approved Deposit, plus a second pending Deposit
   const createdFlatIds: string[] = [];
 
   beforeAll(async () => {
@@ -100,7 +100,6 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
-          type: 'DEPOSIT',
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
@@ -108,10 +107,9 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
-          type: 'CREDIT',
           status: 'PENDING',
           amount: 1200,
-          note: 'Pending expense reimbursement claim',
+          note: 'Second deposit, still awaiting review',
         },
       ],
     });
@@ -137,10 +135,10 @@ describe('admin-dashboard service', () => {
       // totalBilled = 1000(B) + 500(B) + 800(C) = 2300; totalPaid = 800(C's deposit).
       expect(summary.totalBilled).toBe(2300);
       expect(summary.totalPaid).toBe(800);
-      // outstandingTotal = sum of per-flat Payable: A=0, B=1500 (no credit), C=0
-      // (800 charge fully covered by the 800 deposit; the pending Credit doesn't count).
+      // outstandingTotal = sum of per-flat Outstanding: A=0, B=1500, C=0 (800 charge
+      // fully covered by the approved deposit; the second pending deposit doesn't count).
       expect(summary.outstandingTotal).toBe(1500);
-      expect(summary.pendingReviewTotal).toBe(1200); // C's pending Credit
+      expect(summary.pendingReviewTotal).toBe(1200); // C's pending deposit
       expect(summary.collectionRatePercent).toBe(35); // round(800/2300*100)
     });
   });
@@ -154,14 +152,14 @@ describe('admin-dashboard service', () => {
       expect(flatA!.unpaidCount).toBe(0);
     });
 
-    it("surfaces each flat's Payable, sorted highest first, with pending-entry counts", async () => {
+    it("surfaces each flat's Outstanding, sorted highest first, with pending-entry counts", async () => {
       const dues = await getFlatWiseDues(societyId);
       const flatB = dues.find((d) => d.flat.id === flatBId)!;
       const flatC = dues.find((d) => d.flat.id === flatCId)!;
-      expect(flatB.outstandingTotal).toBe(1500); // fully unpaid, no credit
+      expect(flatB.outstandingTotal).toBe(1500); // fully unpaid
       expect(flatB.unpaidCount).toBe(0); // no pending LedgerEntry rows
       expect(flatC.outstandingTotal).toBe(0); // charge fully covered by the approved deposit
-      expect(flatC.unpaidCount).toBe(1); // the pending Credit
+      expect(flatC.unpaidCount).toBe(1); // the second, pending deposit
 
       const indexB = dues.findIndex((d) => d.flat.id === flatBId);
       const indexC = dues.findIndex((d) => d.flat.id === flatCId);
@@ -170,12 +168,12 @@ describe('admin-dashboard service', () => {
   });
 
   describe('getFlaggedFlats', () => {
-    it('flags only flats with a Payable balance whose oldest charge is past the grace period', async () => {
+    it('flags only flats with an Outstanding balance whose oldest charge is past the grace period', async () => {
       const flagged = await getFlaggedFlats(societyId);
       expect(flagged.map((f) => f.flat.id)).toEqual([flatBId]);
     });
 
-    it("computes the flat's full Payable, not just the overdue portion", async () => {
+    it("computes the flat's full Outstanding, not just the overdue portion", async () => {
       const flagged = await getFlaggedFlats(societyId);
       const flatB = flagged.find((f) => f.flat.id === flatBId)!;
       expect(flatB.outstandingTotal).toBe(1500); // both charges, not just the overdue one
@@ -202,7 +200,7 @@ describe('admin-dashboard service', () => {
       expect(flagged).toHaveLength(0);
     });
 
-    it('never flags a flat with no Payable balance, even with an old charge', async () => {
+    it('never flags a flat with no Outstanding balance, even with an old charge', async () => {
       const flagged = await getFlaggedFlats(societyId);
       expect(flagged.some((f) => f.flat.id === flatCId)).toBe(false);
     });

@@ -1,4 +1,4 @@
-import type { LedgerType, ProofStatus, Role } from '../generated/prisma/client';
+import type { ProofStatus, Role } from '../generated/prisma/client';
 import { prisma } from '../db';
 import { getStorageAdapter } from '../lib/storage';
 import { buildUpiDeepLink, generateQrDataUrl } from '../lib/upi';
@@ -20,8 +20,8 @@ export class ForbiddenLedgerEntryAccessError extends Error {
 }
 
 export class InvalidDepositAmountError extends Error {
-  constructor(public readonly payable: number) {
-    super(`Amount must be greater than 0 and at most the current payable amount (${payable})`);
+  constructor(public readonly outstanding: number) {
+    super(`Amount must be greater than 0 and at most the current outstanding amount (${outstanding})`);
     this.name = 'InvalidDepositAmountError';
   }
 }
@@ -33,53 +33,72 @@ export class InvalidAmountError extends Error {
   }
 }
 
+export class NoOpenPaymentIntentError extends Error {
+  constructor() {
+    super('No pending payment to submit');
+    this.name = 'NoOpenPaymentIntentError';
+  }
+}
+
 export interface FlatBalances {
   totalCharges: number;
   approvedDeposits: number;
-  approvedCredits: number;
   outstanding: number;
-  creditBalance: number;
-  payable: number;
 }
 
-// The ledger pivot's core formula (exact match to the resident-experience mockup's
-// PassbookTab): only APPROVED rows count. SYSTEM charges (MaintenanceRecord) are
-// always implicitly "Approved" — every one contributes to totalCharges unconditionally.
-// PENDING/REJECTED LedgerEntry rows stay visible in the resident's passbook for
-// transparency but are excluded from all three running numbers (CLAUDE.md's ledger
-// pivot note). Pure/DB-free so callers who already have the rows in hand (e.g.
-// admin-dashboard.service.ts, computing every flat in a society from two bulk queries
-// rather than N+1) can reuse the exact same formula without a redundant per-flat query.
+// The core formula: only APPROVED Deposits count. SYSTEM charges (MaintenanceRecord)
+// are always implicitly "Approved" — every one contributes to totalCharges
+// unconditionally. PENDING/REJECTED LedgerEntry rows stay visible in the resident's
+// dashboard for transparency but are excluded from the running total. Pure/DB-free
+// so callers who already have the rows in hand (e.g. admin-dashboard.service.ts,
+// computing every flat in a society from two bulk queries rather than N+1) can reuse
+// the exact same formula without a redundant per-flat query. Credit was removed
+// from this system entirely (2026-08-07) — there is no separate "Payable" anymore,
+// Outstanding is directly the amount due.
 export function balancesFromRows(
   records: { amount: unknown }[],
-  entries: { type: LedgerType; status: ProofStatus; amount: unknown }[],
+  entries: { status: ProofStatus; amount: unknown }[],
 ): FlatBalances {
   const totalCharges = records.reduce((sum, r) => sum + Number(r.amount), 0);
   const approvedDeposits = entries
-    .filter((e) => e.type === 'DEPOSIT' && e.status === 'APPROVED')
-    .reduce((sum, e) => sum + Number(e.amount), 0);
-  const approvedCredits = entries
-    .filter((e) => e.type === 'CREDIT' && e.status === 'APPROVED')
+    .filter((e) => e.status === 'APPROVED')
     .reduce((sum, e) => sum + Number(e.amount), 0);
 
   const outstanding = Math.max(0, totalCharges - approvedDeposits);
-  const creditBalance = approvedCredits;
-  const payable = Math.max(0, outstanding - creditBalance);
 
-  return { totalCharges, approvedDeposits, approvedCredits, outstanding, creditBalance, payable };
+  return { totalCharges, approvedDeposits, outstanding };
 }
 
-export async function computeFlatBalances(flatId: string): Promise<FlatBalances> {
+function maintenanceRecordYearFilter(year?: number) {
+  return year ? { period: { startsWith: `${year}-` } } : {};
+}
+
+function ledgerEntryYearFilter(year?: number) {
+  return year ? { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {};
+}
+
+// `year` scopes both sides of the formula to a calendar year (MaintenanceRecord by
+// its `period`'s year, LedgerEntry by `createdAt`'s year) — used wherever a
+// resident is acting against the balance shown for a specific year on their
+// Dashboard (creating a payment intent, etc). Omitted = the original all-time
+// behavior, still used by admin-dashboard.service.ts's bulk per-flat calc.
+export async function computeFlatBalances(flatId: string, year?: number): Promise<FlatBalances> {
   const [records, entries] = await Promise.all([
-    prisma.maintenanceRecord.findMany({ where: { flatId }, select: { amount: true } }),
-    prisma.ledgerEntry.findMany({ where: { flatId }, select: { type: true, status: true, amount: true } }),
+    prisma.maintenanceRecord.findMany({
+      where: { flatId, ...maintenanceRecordYearFilter(year) },
+      select: { amount: true },
+    }),
+    prisma.ledgerEntry.findMany({
+      where: { flatId, ...ledgerEntryYearFilter(year) },
+      select: { status: true, amount: true },
+    }),
   ]);
   return balancesFromRows(records, entries);
 }
 
 export interface LedgerRow {
   id: string;
-  type: 'SYSTEM' | LedgerType;
+  type: 'SYSTEM' | 'DEPOSIT';
   period?: string;
   date: string;
   payer: string;
@@ -91,25 +110,49 @@ export interface LedgerRow {
 export interface LedgerForResident {
   entries: LedgerRow[];
   totals: FlatBalances;
+  yearTotals: FlatBalances;
+  availableYears: number[];
 }
 
-// The resident's Passbook — MaintenanceRecord rows (SYSTEM, always "Approved") merged
-// with the flat's LedgerEntry rows (Deposit/Credit, real status), newest first. Never
-// stored as a union — computed fresh from both tables every time.
-export async function getLedgerForResident(flatId: string): Promise<LedgerForResident> {
-  const [records, entries] = await Promise.all([
+function availableYearsFromRows(records: { period: string }[], entries: { createdAt: Date }[]): number[] {
+  const years = new Set<number>();
+  for (const r of records) years.add(Number(r.period.split('-')[0]));
+  for (const e of entries) years.add(e.createdAt.getFullYear());
+  return [...years].sort((a, b) => b - a);
+}
+
+// The resident's Dashboard — MaintenanceRecord rows (SYSTEM, always "Approved")
+// merged with the flat's LedgerEntry rows (Deposit, real status), newest first.
+// Never stored as a union — computed fresh from both tables every time. `year`
+// scopes the returned `entries` to a calendar year; omitted returns every row ever
+// (what Maintenance Book relies on when showing full history). Two separate totals
+// are returned: `totals` is always lifetime/all-time — Outstanding is current
+// financial state, not a per-year concept, so it must never change just because a
+// resident is browsing a different year's entries (also what a payment intent locks
+// against, see createOrReplacePaymentIntent — a resident should never be able to
+// underpay by switching to a smaller-year view first). `yearTotals` is scoped to
+// `year` (or equal to `totals` when `year` is omitted) — used for numbers that
+// *are* naturally "sum over a period," e.g. the Dashboard's "Total Paid (year)" row.
+export async function getLedgerForResident(flatId: string, year?: number): Promise<LedgerForResident> {
+  const [allRecords, allEntries] = await Promise.all([
     prisma.maintenanceRecord.findMany({ where: { flatId } }),
     prisma.ledgerEntry.findMany({ where: { flatId } }),
   ]);
-  const totals = balancesFromRows(records, entries);
+
+  const records = year ? allRecords.filter((r) => r.period.startsWith(`${year}-`)) : allRecords;
+  const entries = year ? allEntries.filter((e) => e.createdAt.getFullYear() === year) : allEntries;
+
+  const totals = balancesFromRows(allRecords, allEntries);
+  const yearTotals = year ? balancesFromRows(records, entries) : totals;
+  const availableYears = availableYearsFromRows(allRecords, allEntries);
 
   const systemRows: LedgerRow[] = records.map((r) => {
-    const [year, month] = r.period.split('-').map(Number);
+    const [recordYear, recordMonth] = r.period.split('-').map(Number);
     return {
       id: r.id,
       type: 'SYSTEM',
       period: r.period,
-      date: new Date(year, month - 1, 1).toISOString(),
+      date: new Date(recordYear, recordMonth - 1, 1).toISOString(),
       payer: r.payerType === 'OWNER' ? 'Owner' : 'Tenant',
       amount: Number(r.amount),
       status: 'APPROVED',
@@ -118,7 +161,7 @@ export async function getLedgerForResident(flatId: string): Promise<LedgerForRes
 
   const ledgerRows: LedgerRow[] = entries.map((e) => ({
     id: e.id,
-    type: e.type,
+    type: 'DEPOSIT',
     date: e.createdAt.toISOString(),
     payer: 'You',
     amount: Number(e.amount),
@@ -130,27 +173,103 @@ export async function getLedgerForResident(flatId: string): Promise<LedgerForRes
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 
-  return { entries: merged, totals };
+  return { entries: merged, totals, yearTotals, availableYears };
 }
 
-export interface DepositQrResult {
+export interface PaymentIntentResult {
+  id: string;
   amount: number;
   upiLink: string;
   qrDataUrl: string;
+  createdAt: string;
 }
 
-// Same shape as the pre-pivot generatePaymentQr — stateless, no DB write — but keyed on
-// a resident-chosen amount rather than specific selected record ids, re-validated
-// server-side against the current payable (never trust the client's cap).
-export async function generateDepositQr(flatId: string, societyId: string, amount: number): Promise<DepositQrResult> {
-  const balances = await computeFlatBalances(flatId);
-  if (!(amount > 0) || amount > balances.payable) throw new InvalidDepositAmountError(balances.payable);
-
+async function buildPaymentIntentResult(
+  intent: { id: string; amount: unknown; createdAt: Date },
+  societyId: string,
+): Promise<PaymentIntentResult> {
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+  const amount = Number(intent.amount);
   const upiLink = buildUpiDeepLink({ vpa: society.upiVpa, payeeName: society.name, amount, note: 'Maintenance deposit' });
   const qrDataUrl = await generateQrDataUrl(upiLink);
+  return { id: intent.id, amount, upiLink, qrDataUrl, createdAt: intent.createdAt.toISOString() };
+}
 
-  return { amount, upiLink, qrDataUrl };
+// Re-derives the QR/UPI link fresh every call rather than storing them on the row —
+// they're cheap/deterministic from `amount` alone, so there's nothing to keep in
+// sync, and a resident revisiting a QR on a later day still gets a valid one.
+export async function getOpenPaymentIntent(flatId: string, societyId: string): Promise<PaymentIntentResult | null> {
+  const intent = await prisma.paymentIntent.findUnique({ where: { flatId } });
+  if (!intent) return null;
+  return buildPaymentIntentResult(intent, societyId);
+}
+
+// "Amount locked" — one open intent per flat (`flatId` unique), replaced wholesale
+// if the resident starts over with a different amount before submitting. Always
+// caps against the flat's lifetime outstanding (never a year-scoped one) —
+// Outstanding is current financial state, not a per-year concept, so a resident
+// can't underpay by switching to a smaller-year view before tapping Pay.
+export async function createOrReplacePaymentIntent(
+  flatId: string,
+  payerId: string,
+  societyId: string,
+  amount: number,
+): Promise<PaymentIntentResult> {
+  const balances = await computeFlatBalances(flatId);
+  if (!(amount > 0) || amount > balances.outstanding) throw new InvalidDepositAmountError(balances.outstanding);
+
+  const intent = await prisma.paymentIntent.upsert({
+    where: { flatId },
+    create: { flatId, payerId, amount },
+    update: { payerId, amount, createdAt: new Date() },
+  });
+  return buildPaymentIntentResult(intent, societyId);
+}
+
+export async function cancelPaymentIntent(flatId: string): Promise<void> {
+  await prisma.paymentIntent.deleteMany({ where: { flatId } });
+}
+
+// Finalizes an open intent into a real, reviewable Deposit — same shape as
+// `createDeposit` below (transaction creating the LedgerEntry + audit log), plus
+// clearing the intent row in the same transaction ("intent clears" on submit). File
+// is required here (unlike the lower-level `createDeposit` below) — the whole point
+// of the intent flow is "come back once you have a screenshot".
+export async function submitPaymentIntent(
+  flatId: string,
+  payerId: string,
+  societyId: string,
+  file: ProofFileInput,
+): Promise<unknown> {
+  const intent = await prisma.paymentIntent.findUnique({ where: { flatId } });
+  if (!intent) throw new NoOpenPaymentIntentError();
+
+  const saved = await getStorageAdapter().save({ buffer: file.buffer, societyId, extension: file.extension });
+
+  return prisma.$transaction(async (tx) => {
+    const entry = await tx.ledgerEntry.create({
+      data: {
+        flatId,
+        payerId,
+        status: 'PENDING',
+        amount: intent.amount,
+        note: 'UPI payment - awaiting review',
+        fileUrl: saved.key,
+        mimeType: file.mimeType,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: payerId,
+        action: 'SUBMIT_DEPOSIT',
+        entityType: 'LedgerEntry',
+        entityId: entry.id,
+        note: `Deposit of ${intent.amount}`,
+      },
+    });
+    await tx.paymentIntent.delete({ where: { flatId } });
+    return entry;
+  });
 }
 
 interface ProofFileInput {
@@ -170,7 +289,9 @@ export interface CreateDepositInput {
 // for Pay only requires the amount field.
 export async function createDeposit(payerId: string, flatId: string, societyId: string, input: CreateDepositInput) {
   const balances = await computeFlatBalances(flatId);
-  if (!(input.amount > 0) || input.amount > balances.payable) throw new InvalidDepositAmountError(balances.payable);
+  if (!(input.amount > 0) || input.amount > balances.outstanding) {
+    throw new InvalidDepositAmountError(balances.outstanding);
+  }
 
   let fileUrl: string | undefined;
   let mimeType: string | undefined;
@@ -189,7 +310,6 @@ export async function createDeposit(payerId: string, flatId: string, societyId: 
       data: {
         flatId,
         payerId,
-        type: 'DEPOSIT',
         status: 'PENDING',
         amount: input.amount,
         note: 'UPI payment - awaiting review',
@@ -210,73 +330,18 @@ export async function createDeposit(payerId: string, flatId: string, societyId: 
   });
 }
 
-export interface CreateCreditInput {
-  amount: number;
-  note: string;
-  file?: ProofFileInput;
-}
-
-// Covers both "advance deposit" and "expense reimbursement" (rule spec: one action for
-// both). Amount/note required; screenshot optional (the mockup's "Screenshot" control
-// is a decorative, unwired <div>, not a real file input) but the frontend still
-// presents it prominently.
-export async function createCredit(payerId: string, flatId: string, societyId: string, input: CreateCreditInput) {
-  if (!(input.amount > 0)) throw new InvalidAmountError();
-
-  let fileUrl: string | undefined;
-  let mimeType: string | undefined;
-  if (input.file) {
-    const saved = await getStorageAdapter().save({
-      buffer: input.file.buffer,
-      societyId,
-      extension: input.file.extension,
-    });
-    fileUrl = saved.key;
-    mimeType = input.file.mimeType;
-  }
-
-  return prisma.$transaction(async (tx) => {
-    const entry = await tx.ledgerEntry.create({
-      data: {
-        flatId,
-        payerId,
-        type: 'CREDIT',
-        status: 'PENDING',
-        amount: input.amount,
-        note: input.note,
-        fileUrl,
-        mimeType,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorId: payerId,
-        action: 'SUBMIT_CREDIT',
-        entityType: 'LedgerEntry',
-        entityId: entry.id,
-        note: input.note,
-      },
-    });
-    return entry;
-  });
-}
-
 const LEDGER_ENTRY_LIST_INCLUDE = {
   payer: { select: { id: true, name: true, email: true } },
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;
 
-// Admin review queue — optionally filtered by status/type (defaults to every entry,
+// Admin review queue — optionally filtered by status (defaults to every entry,
 // though the frontend queue only ever asks for PENDING).
-export async function listPendingLedgerEntries(
-  societyId: string,
-  filters: { status?: ProofStatus; type?: LedgerType } = {},
-) {
+export async function listPendingLedgerEntries(societyId: string, filters: { status?: ProofStatus } = {}) {
   return prisma.ledgerEntry.findMany({
     where: {
       flat: { societyId },
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.type ? { type: filters.type } : {}),
     },
     include: LEDGER_ENTRY_LIST_INCLUDE,
     orderBy: { createdAt: 'desc' },
@@ -284,8 +349,8 @@ export async function listPendingLedgerEntries(
 }
 
 // Approve/reject a single LedgerEntry row directly — much simpler than the pre-pivot
-// PaymentProof flow, since a Deposit/Credit is never linked to specific
-// MaintenanceRecords anymore (payment is against the aggregate balance).
+// PaymentProof flow, since a Deposit is never linked to specific MaintenanceRecords
+// (payment is against the aggregate balance).
 export async function approveLedgerEntry(id: string, societyId: string, adminId: string) {
   const entry = await prisma.ledgerEntry.findFirst({ where: { id, flat: { societyId } } });
   if (!entry) return null;
@@ -300,7 +365,7 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: entry.type === 'DEPOSIT' ? 'APPROVE_DEPOSIT' : 'APPROVE_CREDIT',
+        action: 'APPROVE_DEPOSIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: `Amount ${entry.amount}`,
@@ -324,7 +389,7 @@ export async function rejectLedgerEntry(id: string, societyId: string, adminId: 
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: entry.type === 'DEPOSIT' ? 'REJECT_DEPOSIT' : 'REJECT_CREDIT',
+        action: 'REJECT_DEPOSIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: reason ?? `Amount ${entry.amount} rejected`,
@@ -349,7 +414,6 @@ export async function manualDeposit(societyId: string, adminId: string, flatId: 
       data: {
         flatId,
         payerId: flat.currentTenantId ?? flat.ownerId,
-        type: 'DEPOSIT',
         status: 'APPROVED',
         amount,
         note: 'Manual deposit (cash/bank transfer)',

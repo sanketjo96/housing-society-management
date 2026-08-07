@@ -107,7 +107,7 @@ const FLAT_SUMMARY_INCLUDE = { flat: { select: { id: true, wing: true, flatNumbe
 // first. Under the ledger pivot (see CLAUDE.md), every MaintenanceRecord is always an
 // implicitly-"Approved" SYSTEM row — this is a building block for
 // ledger.service.ts:getLedgerForResident, which merges these with the flat's
-// LedgerEntry (Deposit/Credit) rows and computes the running balances; it's no longer
+// LedgerEntry (Deposit) rows and computes the running balances; it's no longer
 // exposed as its own top-level resident endpoint. Scoped by societyId via the flat
 // relation too, even though payerId alone already can't cross a society boundary —
 // defense-in-depth, consistent with every other query in this codebase (Task 2.6).

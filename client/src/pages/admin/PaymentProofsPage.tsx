@@ -7,7 +7,6 @@ import { authedFetch } from '../../lib/api';
 
 interface LedgerEntryListItem {
   id: string;
-  type: 'DEPOSIT' | 'CREDIT';
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   amount: string;
   note: string | null;
@@ -161,16 +160,6 @@ export function PaymentProofsPage() {
           <span className="text-ink">
             {row.original.flat.wing}-{row.original.flat.flatNumber}
             <div className="text-xs text-muted">{row.original.payer.name}</div>
-          </span>
-        ),
-      },
-      {
-        id: 'type',
-        header: 'Type',
-        cell: ({ row }) => (
-          <span className="text-ink">
-            {row.original.type === 'DEPOSIT' ? 'Deposit' : 'Credit'}
-            {row.original.note && <div className="text-xs text-muted">{row.original.note}</div>}
           </span>
         ),
       },

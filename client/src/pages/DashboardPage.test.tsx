@@ -30,12 +30,17 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.endsWith('/api/auth/me')) {
       return Promise.resolve({ ok: true, json: async () => user });
     }
+    if (url.includes('/api/me/ledger/deposits/intent')) {
+      return Promise.resolve({ ok: true, json: async () => ({ intent: null }) });
+    }
     if (url.includes('/api/me/ledger')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
           entries: [],
-          totals: { totalCharges: 0, approvedDeposits: 0, approvedCredits: 0, outstanding: 0, creditBalance: 0, payable: 0 },
+          totals: { totalCharges: 0, approvedDeposits: 0, outstanding: 0 },
+          yearTotals: { totalCharges: 0, approvedDeposits: 0, outstanding: 0 },
+          availableYears: [new Date().getFullYear()],
         }),
       });
     }
@@ -84,12 +89,12 @@ describe('DashboardPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows Dashboard, Passbook, and My details tabs for an OWNER', async () => {
+  it('shows Dashboard, Maintenance Book, and My details tabs for an OWNER', async () => {
     mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
     renderDashboard();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: /^dashboard$/i })).toBeInTheDocument());
-    expect(screen.getByRole('tab', { name: /passbook/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /maintenance book/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /my details/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
@@ -101,7 +106,7 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /flats and residents/i })).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /^settings$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /passbook/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /my details/i })).not.toBeInTheDocument();
   });
 
@@ -130,16 +135,25 @@ describe('DashboardPage', () => {
     expect(screen.getByDisplayValue('1.5')).toBeInTheDocument();
   });
 
-  it('switches to the Passbook tab content on click', async () => {
+  it('shows the Dashboard tab content (Passbook content moved here) by default', async () => {
+    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument();
+    });
+  });
+
+  it('switches to the Maintenance Book tab content on click', async () => {
     mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
     renderDashboard();
     const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByText(/dashboard widgets are coming/i)).toBeInTheDocument());
-    await user.click(screen.getByRole('tab', { name: /passbook/i }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: /maintenance book/i })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: /maintenance book/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/nothing payable right now/i)).toBeInTheDocument();
+      expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument();
     });
   });
 
@@ -148,7 +162,7 @@ describe('DashboardPage', () => {
     renderDashboard();
     const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByText(/dashboard widgets are coming/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('tab', { name: /my details/i })).toBeInTheDocument());
     await user.click(screen.getByRole('tab', { name: /my details/i }));
 
     await waitFor(() => {

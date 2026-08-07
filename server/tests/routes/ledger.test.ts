@@ -114,23 +114,74 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
     });
   });
 
-  describe('POST /api/me/ledger/deposits/qr', () => {
-    it('returns a QR for a valid amount within payable', async () => {
+  describe('payment intent endpoints', () => {
+    it('GET returns null when nothing is open', async () => {
       const res = await request(app)
-        .post('/api/me/ledger/deposits/qr')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ amount: 500 });
+        .get('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.amount).toBe(500);
-      expect(res.body.qrDataUrl).toContain('data:image/png;base64,');
+      expect(res.body.intent).toBeNull();
     });
 
-    it('rejects an amount above payable (400)', async () => {
+    it('POST rejects an amount above payable (400)', async () => {
       const res = await request(app)
-        .post('/api/me/ledger/deposits/qr')
+        .post('/api/me/ledger/deposits/intent')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({ amount: 999999 });
       expect(res.status).toBe(400);
+    });
+
+    it('POST locks an amount and returns a QR/UPI link; GET then reflects it', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 500 });
+      expect(created.status).toBe(201);
+      expect(created.body.intent.amount).toBe(500);
+      expect(created.body.intent.qrDataUrl).toContain('data:image/png;base64,');
+
+      const fetched = await request(app)
+        .get('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(fetched.body.intent.amount).toBe(500);
+    });
+
+    it('submit without a file is rejected (400)', async () => {
+      const res = await request(app)
+        .post('/api/me/ledger/deposits/intent/submit')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(400);
+    });
+
+    it('submit with a file finalizes into a PENDING deposit and clears the intent', async () => {
+      const submitted = await request(app)
+        .post('/api/me/ledger/deposits/intent/submit')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(submitted.status).toBe(201);
+      expect(submitted.body.status).toBe('PENDING');
+
+      const fetched = await request(app)
+        .get('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(fetched.body.intent).toBeNull();
+    });
+
+    it('DELETE cancels an open intent', async () => {
+      await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 10 });
+
+      const cancelled = await request(app)
+        .delete('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(cancelled.status).toBe(204);
+
+      const fetched = await request(app)
+        .get('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(fetched.body.intent).toBeNull();
     });
   });
 
@@ -142,7 +193,6 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .field('amount', '250');
       expect(res.status).toBe(201);
       expect(res.body.status).toBe('PENDING');
-      expect(res.body.type).toBe('DEPOSIT');
     });
 
     it('accepts an optional proof file', async () => {
@@ -155,34 +205,12 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
     });
   });
 
-  describe('POST /api/me/ledger/credits', () => {
-    it('requires a note', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '50');
-      expect(res.status).toBe(400);
-    });
-
-    it('creates a PENDING credit', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '50')
-        .field('note', 'Paid plumber');
-      expect(res.status).toBe(201);
-      expect(res.body.status).toBe('PENDING');
-      expect(res.body.type).toBe('CREDIT');
-    });
-  });
-
   describe('GET /api/ledger-entries/:id/file', () => {
     it('404s for an entry with no file attached', async () => {
       const created = await request(app)
-        .post('/api/me/ledger/credits')
+        .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '10')
-        .field('note', 'no file');
+        .field('amount', '10');
       const res = await request(app)
         .get(`/api/ledger-entries/${created.body.id}/file`)
         .set('Authorization', `Bearer ${ownerToken}`);

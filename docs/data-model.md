@@ -303,10 +303,10 @@ model MaintenanceRecord {
   contributing its `amount` to the flat's `totalCharges` permanently — it is never
   individually marked paid. `dueDate` is set at generation time (generation date +
   configured days) and still drives escalation.
-- **Payment is now balance-based, not per-record.** A resident's Payable is a single
-  running number (`totalCharges` minus approved Deposits minus approved Credits, floored
-  at 0 — see `LedgerEntry` below) — they may pay any amount up to Payable, including
-  less than the full amount (explicit partial payment against the aggregate). This
+- **Payment is now balance-based, not per-record.** A resident's Outstanding is a
+  single running number (`totalCharges` minus approved Deposits, floored at 0 — see
+  `LedgerEntry` below) — they may pay any amount up to Outstanding, including less
+  than the full amount (explicit partial payment against the aggregate). This
   replaces the earlier per-record `UNPAID`/`PENDING_REVIEW`/`PAID` selection flow.
 - **`@@unique([flatId, period])`** enforces "exactly 12 records/flat/year, never
   duplicated" at the database level — backs the idempotency Task 4.2 requires of the
@@ -323,6 +323,15 @@ model MaintenanceRecord {
 > `CLAUDE.md`'s "Pivot (2026-08-06): resident view moves to a transaction ledger" for
 > the full reasoning. The app was still pre-launch/seed-data-only at the time, so the
 > old table was dropped outright rather than data-migrated.
+>
+> **Pivot note (2026-08-07): Credit removed entirely.** `LedgerEntry` originally had
+> a `type` column (`DEPOSIT`/`CREDIT`) — Credit (an advance deposit or expense
+> reimbursement the resident logs, separately from a UPI payment) has been dropped
+> from the product entirely (confirmed decision: the society will never use it). The
+> `type` column and `LedgerType` enum are gone — `LedgerEntry` only ever represents a
+> Deposit now. This also collapsed the balance formula from three numbers
+> (Outstanding/Credit balance/Payable) down to one (Outstanding), since Payable was
+> only ever Outstanding minus Credit.
 
 ```prisma
 enum ProofStatus {
@@ -331,14 +340,8 @@ enum ProofStatus {
   REJECTED
 }
 
-enum LedgerType {
-  DEPOSIT
-  CREDIT
-}
-
 model LedgerEntry {
   id       String      @id @default(cuid())
-  type     LedgerType
   amount   Decimal     @db.Decimal(10, 2)
   status   ProofStatus @default(PENDING)
   note     String?
@@ -360,34 +363,29 @@ model LedgerEntry {
 
   @@index([flatId])
   @@index([status])
-  @@index([type])
 }
 ```
 
 **One row, one flat, one payer — no join table.** Unlike `PaymentProof`, a
 `LedgerEntry` is never linked to specific `MaintenanceRecord`s, because payment is
 against the flat's aggregate balance, not particular months (a partial deposit might
-not exactly cover any one charge). `type` distinguishes a UPI **Deposit** (created when
-a resident pays) from a **Credit** (an advance deposit or expense reimbursement the
-resident logs) — SYSTEM charges are *not* stored here at all; they remain
-`MaintenanceRecord` rows (above), always implicitly "Approved."
+not exactly cover any one charge). A `LedgerEntry` row always represents a UPI
+**Deposit** (created when a resident pays) — SYSTEM charges are *not* stored here at
+all; they remain `MaintenanceRecord` rows (above), always implicitly "Approved."
 
-**Only `APPROVED` rows count toward the running balances** (computed in
-`ledger.service.ts`'s `balancesFromRows`, reused by both the resident's own Passbook
+**Only `APPROVED` rows count toward the running balance** (computed in
+`ledger.service.ts`'s `balancesFromRows`, reused by both the resident's own Dashboard
 and the admin dashboard so the formula lives in exactly one place):
 
 ```
 totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
-approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
-approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
+approvedDeposits = sum(LedgerEntry.amount) where status=APPROVED
 
-outstanding   = max(0, totalCharges - approvedDeposits)
-creditBalance = approvedCredits
-payable       = max(0, outstanding - creditBalance)
+outstanding = max(0, totalCharges - approvedDeposits)
 ```
 
-`PENDING`/`REJECTED` rows stay visible in the resident's passbook for transparency but
-are excluded from all three sums.
+`PENDING`/`REJECTED` rows stay visible in the resident's dashboard for transparency
+but are excluded from the sum.
 
 **`fileUrl`/`mimeType` are optional** — unlike the pre-pivot `PaymentProof.fileUrl`
 (required), a proof screenshot is no longer mandatory to submit a Deposit (a real
@@ -395,9 +393,9 @@ reversal of the old rule 7, see `CLAUDE.md`). Same opaque-storage-key contract a
 before otherwise (`StorageAdapter`, `docs/payments.md`) — served only through the
 authenticated `GET /api/ledger-entries/:id/file`.
 
-**`note` vs `adminNote`** — `note` is the resident's own text (required for a Credit,
-e.g. "Paid plumber for common area leak"; a short fixed string for a Deposit). `adminNote`
-is the admin's rejection reason (rule 7), set only on reject — distinct fields because
+**`note` vs `adminNote`** — `note` is a short fixed string set by the server (e.g.
+"UPI payment - awaiting review"), not resident-authored input. `adminNote` is the
+admin's rejection reason (rule 7), set only on reject — distinct fields because
 they're written by different parties at different times.
 
 ### Why `payer`/`reviewedBy` need two named relations to `User`

@@ -26,21 +26,12 @@ enum PayerType {
 }
 
 // Shared PENDING/APPROVED/REJECTED review status — originally PaymentProof's status,
-// now reused by LedgerEntry (Deposit/Credit rows) after the ledger pivot (see
-// CLAUDE.md's "Pivot (2026-08-06): resident view moves to a transaction ledger").
+// now reused by LedgerEntry (Deposit rows) after the ledger pivot (see CLAUDE.md's
+// "Pivot (2026-08-06): resident view moves to a transaction ledger").
 enum ProofStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-// A resident-created ledger row. SYSTEM charges are NOT stored here — they remain
-// MaintenanceRecord rows, always implicitly "Approved" (see below). Only DEPOSIT
-// (a UPI payment, pending admin review) and CREDIT (an advance deposit or expense
-// reimbursement the resident logs) live in LedgerEntry.
-enum LedgerType {
-  DEPOSIT
-  CREDIT
 }
 
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
@@ -104,6 +95,7 @@ model User {
   reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
   auditLogs             AuditLog[]
   billedRecords         MaintenanceRecord[]
+  paymentIntents        PaymentIntent[]
   refreshTokens         RefreshToken[]
   passwordResetTokens   PasswordResetToken[]
 
@@ -169,6 +161,7 @@ model Flat {
   occupancyChanges   OccupancyChange[]
   maintenanceRecords MaintenanceRecord[]
   ledgerEntries      LedgerEntry[]
+  paymentIntent      PaymentIntent?
 
   @@unique([societyId, wing, flatNumber])
   @@index([societyId])
@@ -202,7 +195,7 @@ model OccupancyChange {
 // at the database level, backing up the idempotency Task 4.2 requires of the monthly
 // generation job. Every MaintenanceRecord's amount contributes permanently to its
 // flat's totalCharges — payment against the running balance is tracked separately, in
-// LedgerEntry (Deposit/Credit), never by mutating a record here.
+// LedgerEntry (Deposit), never by mutating a record here.
 model MaintenanceRecord {
   id        String    @id @default(cuid())
   period    String
@@ -230,32 +223,24 @@ model MaintenanceRecord {
   @@index([payerId])
 }
 
-// A resident-created ledger row — a UPI Deposit (pending admin review) or a Credit
-// (advance deposit / expense reimbursement the resident logs). SYSTEM charges are
-// NOT stored here; they remain MaintenanceRecord rows (see above). Only APPROVED
-// LedgerEntry rows count toward a flat's running balances — PENDING/REJECTED stay
-// visible in the resident's passbook for transparency but are excluded from the sums
-// (CLAUDE.md's ledger pivot note).
+// A resident-created Deposit row (a UPI payment, pending admin review). SYSTEM
+// charges are NOT stored here — they remain MaintenanceRecord rows, always
+// implicitly "Approved" (see below). Credit was removed from this system entirely
+// (2026-08-07) — LedgerEntry only ever represents a Deposit now.
 model LedgerEntry {
   id     String      @id @default(cuid())
-  type   LedgerType
   amount Decimal     @db.Decimal(10, 2)
   status ProofStatus @default(PENDING)
-
-  // Required for CREDIT (what the resident is claiming reimbursement/credit for),
-  // unused for DEPOSIT.
-  note String?
+  note   String?
 
   // Opaque storage key, not a browsable URL — same StorageAdapter contract as the
-  // pre-pivot PaymentProof model (src/lib/storage/types.ts). Optional: unlike the
-  // pre-pivot flow, a proof screenshot is no longer required to submit a Deposit or
-  // Credit (see CLAUDE.md's ledger pivot note) — served only through
+  // pre-pivot PaymentProof model (src/lib/storage/types.ts). Optional — a proof
+  // screenshot is not required to submit a Deposit — served only through
   // GET /api/ledger-entries/:id/file (authenticated, never public).
   fileUrl  String?
   mimeType String?
 
-  // Admin's rejection reason (rule 7) — distinct from `note` above (the resident's own
-  // description of a Credit claim).
+  // Admin's rejection reason (rule 7) — distinct from `note` above.
   adminNote  String?
   reviewedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -273,7 +258,24 @@ model LedgerEntry {
 
   @@index([flatId])
   @@index([status])
-  @@index([type])
+}
+
+// A resident's "I intend to pay this amount" step, ahead of actually submitting a
+// screenshot — see CLAUDE.md's resident-view restructure note. Deliberately just an
+// amount + who + when, not a full LedgerEntry: no `status` needed since existence of
+// the row IS the "open" state, and submitting a screenshot deletes it in the same
+// transaction that creates the resulting LedgerEntry(DEPOSIT). One row per flat at
+// most (`flatId` unique) — creating a new intent while one is open replaces it.
+model PaymentIntent {
+  id        String   @id @default(cuid())
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  flatId String @unique
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  payerId String
+  payer   User   @relation(fields: [payerId], references: [id])
 }
 
 // channel/recipient/status describe the send attempt itself. relatedEntityType +

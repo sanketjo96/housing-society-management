@@ -7,11 +7,18 @@
 > transaction ledger" for the full reasoning, including why proof upload is now
 > optional and why partial payment is now explicitly allowed. This doc describes the
 > *current* flow only; the original design is visible in git history.
+>
+> **Pivot note (2026-08-07): Credit removed entirely.** Credit (an advance
+> deposit/expense reimbursement a resident could log separately from a UPI payment)
+> is gone from the product — the society will never use it. `LedgerEntry` only ever
+> represents a Deposit now; `POST /api/me/ledger/credits` no longer exists, and the
+> balance formula collapsed from three numbers (Outstanding/Credit balance/Payable)
+> to one (Outstanding).
 
 Reference for the ledger flow: balance computation, UPI QR generation for a
-resident-chosen amount, optional proof upload, Credit logging, admin review, and the
-manual mark-as-paid fallback. Same route/prefix convention as `docs/auth.md` — every
-path below is mounted under `/api/`.
+resident-chosen amount, optional proof upload, admin review, and the manual
+mark-as-paid fallback. Same route/prefix convention as `docs/auth.md` — every path
+below is mounted under `/api/`.
 
 ## Storage adapter — `src/lib/storage/`
 
@@ -43,17 +50,14 @@ wraps the `qrcode` npm package and returns a base64 PNG data URL.
 
 ## Balance formula — `src/services/ledger.service.ts`'s `balancesFromRows`
 
-The one place this formula is computed — reused by both the resident's own Passbook
+The one place this formula is computed — reused by both the resident's own Dashboard
 (below) and the admin dashboard (`docs/admin-dashboard.md`), so it's never duplicated:
 
 ```
 totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
-approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
-approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
+approvedDeposits = sum(LedgerEntry.amount) where status=APPROVED
 
-outstanding   = max(0, totalCharges - approvedDeposits)
-creditBalance = approvedCredits
-payable       = max(0, outstanding - creditBalance)
+outstanding = max(0, totalCharges - approvedDeposits)
 ```
 
 `computeFlatBalances(flatId)` fetches a single flat's rows and applies the formula;
@@ -65,36 +69,33 @@ duplicating the math.
 
 `OWNER`/`TENANT` only. Replaces the old `GET /api/me/maintenance-records`. Merges the
 caller's flat's `MaintenanceRecord`s (rendered as `type: 'SYSTEM'`, always
-`status: 'APPROVED'`) with its `LedgerEntry` rows (`DEPOSIT`/`CREDIT`, real status),
-sorted newest-first. Response: `{ entries: LedgerRow[], totals: FlatBalances }`.
+`status: 'APPROVED'`) with its `LedgerEntry` rows (`type: 'DEPOSIT'`, real status),
+sorted newest-first. Response: `{ entries: LedgerRow[], totals: FlatBalances,
+yearTotals: FlatBalances, availableYears: number[] }` — `totals` is always
+lifetime; `yearTotals` is scoped to an optional `?year=` query param (see
+`docs/admin-dashboard.md` and `CLAUDE.md`'s resident-view restructure note).
 
 ## Resident QR generation — `POST /api/me/ledger/deposits/qr`
 
-Replaces `POST /api/me/maintenance-records/qr`. **Request**: `{ amount: number }` —
-a resident-chosen amount, not a list of record ids. **Response**: `{ amount, upiLink,
-qrDataUrl }`. Re-validated server-side as `0 < amount <= payable` (never trust the
-client's cap) — `400` if out of range. Stateless, no DB write, same as before.
+Lower-level, one-shot primitive — kept unremoved even though the resident-facing Pay
+UI now goes through the payment-intent endpoints (`POST`/`GET`/`DELETE
+/api/me/ledger/deposits/intent`, `POST .../intent/submit` — see
+`docs/maintenance-records.md`/`CLAUDE.md`'s resident-view restructure note for the
+full intent-lock flow). **Request**: `{ amount: number }` — a resident-chosen
+amount, not a list of record ids. **Response**: `{ amount, upiLink, qrDataUrl }`.
+Re-validated server-side as `0 < amount <= outstanding` (never trust the client's
+cap) — `400` if out of range. Stateless, no DB write.
 
 ## Resident Deposit submission — `POST /api/me/ledger/deposits`
 
-Replaces `POST /api/me/payment-proofs`. `multipart/form-data`: an `amount` field, plus
-an **optional** `file` field (image/PDF, same server-side validation as before —
-`src/middleware/proof-upload.ts`, unchanged). **Proof is no longer mandatory** — a
-deliberate reversal of the pre-pivot rule; the resident-experience mockup's "Upload
-payment proof" button is decorative/unwired, and the written spec's Pay flow only
-requires the amount.
+Lower-level, one-shot primitive (same precedent as the QR endpoint above) —
+`multipart/form-data`: an `amount` field, plus an **optional** `file` field
+(image/PDF, same server-side validation — `src/middleware/proof-upload.ts`). Proof is
+not mandatory here.
 
-Creates one `LedgerEntry{type: DEPOSIT, status: PENDING}`, one `AuditLog` row
-(`action: 'SUBMIT_DEPOSIT'`). **Does not touch any `MaintenanceRecord`** — unlike the
-pre-pivot flow, there's nothing to cascade to `PENDING_REVIEW`; the balance simply
-doesn't move until an admin approves.
-
-## Resident Credit submission — `POST /api/me/ledger/credits`
-
-New — covers "advance deposit" and "expense reimbursement" in one action (the written
-spec's explicit requirement). `multipart/form-data`: `amount` and `note` required, `file`
-optional. Creates one `LedgerEntry{type: CREDIT, status: PENDING}`, one `AuditLog` row
-(`action: 'SUBMIT_CREDIT'`).
+Creates one `LedgerEntry{status: PENDING}`, one `AuditLog` row
+(`action: 'SUBMIT_DEPOSIT'`). **Does not touch any `MaintenanceRecord`** — there's
+nothing to cascade; the balance simply doesn't move until an admin approves.
 
 ## Authenticated file access — `GET /api/ledger-entries/:id/file`
 
@@ -105,24 +106,24 @@ nor the entry's own payer.
 
 ## Admin review queue — `GET /api/admin/ledger-entries`
 
-Replaces `GET /api/admin/payment-proofs`. Admin-only. Optional `?status=`/`?type=`
-filters. Each entry includes `payer` (id/name/email) and `flat` (id/wing/flatNumber) —
+Replaces `GET /api/admin/payment-proofs`. Admin-only. Optional `?status=` filter.
+Each entry includes `payer` (id/name/email) and `flat` (id/wing/flatNumber) —
 simpler than before, since an entry is never linked to multiple records.
 
 ## Approve — `POST /api/admin/ledger-entries/:id/approve`
 
 Admin-only. `404` if not found/wrong society, `409` if not currently `PENDING`. **Much
 simpler than the pre-pivot flow**: flips one row's `status` → `APPROVED`
-(`reviewedById`/`reviewedAt` set), one `AuditLog` row (`APPROVE_DEPOSIT` or
-`APPROVE_CREDIT`, by entry type) — no cascade to any `MaintenanceRecord`, since there's
-nothing linked. The balance simply reflects the newly-approved amount on the next read.
+(`reviewedById`/`reviewedAt` set), one `AuditLog` row (`action: 'APPROVE_DEPOSIT'`) —
+no cascade to any `MaintenanceRecord`, since there's nothing linked. The balance
+simply reflects the newly-approved amount on the next read.
 
 ## Reject — `POST /api/admin/ledger-entries/:id/reject`
 
 Admin-only. **Request**: `{ reason?: string }` → stored as `adminNote`. Same `404`/`409`
-cases as approve. Flips `status` → `REJECTED`, one `AuditLog` row (`REJECT_DEPOSIT` or
-`REJECT_CREDIT`). No revert-to-`UNPAID` step needed (there's no record cascade) — the
-resident simply sees the rejected row and may submit a new Deposit/Credit.
+cases as approve. Flips `status` → `REJECTED`, one `AuditLog` row
+(`action: 'REJECT_DEPOSIT'`). No revert-to-`UNPAID` step needed (there's no record
+cascade) — the resident simply sees the rejected row and may submit a new Deposit.
 
 **Not yet wired to an actual notification** — same gap as pre-pivot, still Phase 7's
 scope, not built here.
@@ -131,31 +132,28 @@ scope, not built here.
 
 Admin-only, for cash/bank-transfer edge cases — no proof involved. **Request**:
 `{ flatId: string, amount: number }`. Directly creates an already-`APPROVED`
-`LedgerEntry{type: DEPOSIT}`, `payerId` = the flat's current tenant (or owner if
-owner-occupied) — matching the recipient logic used elsewhere (escalation messages,
-etc.). **Logged as `MANUAL_MARK_PAID`**, same distinct audit action name as the
-pre-pivot flow (rule 7's explicit requirement that this stay distinguishable from
-QR-flow approvals), one `AuditLog` row.
+`LedgerEntry`, `payerId` = the flat's current tenant (or owner if owner-occupied) —
+matching the recipient logic used elsewhere (escalation messages, etc.). **Logged as
+`MANUAL_MARK_PAID`**, same distinct audit action name as the pre-pivot flow (rule 7's
+explicit requirement that this stay distinguishable from QR-flow approvals), one
+`AuditLog` row.
 
-## Frontend — resident payment flow (`client/src/pages/PassbookPage.tsx`)
+## Frontend — resident payment flow (`client/src/pages/ResidentDashboardOverview.tsx`)
 
-Replaces `MaintenancePage.tsx`. Three summary cards — Outstanding, Credit balance,
-**Payable** (visually emphasized, dark/inverted card) — above a card showing "You owe
-₹X after approved credit" (or "Nothing payable right now"), with **Add credit**
-(always visible, opens a modal — `client/src/components/Modal.tsx`, new) and **Pay**
-(only when Payable > 0, expands an inline panel: QR for the entered amount, pre-filled
-with the full Payable but freely editable down to any smaller amount, an optional file
-input, "Submit payment"). Below: the merged ledger as a `DataTable`
-(`client/src/components/DataTable.tsx`) — Date / Payer / Type / Amount / Status, with
-`TypeBadge` (System/Deposit/Credit) and `ApprovalBadge` (Approved/Pending/Rejected)
-pills using this app's existing color tokens.
+A single **Outstanding** card (emphasized, dark/inverted) above a row showing "You
+owe ₹X" (or "Nothing outstanding right now") and, when Outstanding > 0, a **Pay**
+button that locks the full Outstanding amount as a payment intent (no editable
+amount field — see `docs/maintenance-records.md`'s intent-lock flow). Below: the
+merged Deposit-only ledger as a `DataTable` (`client/src/components/DataTable.tsx`)
+— Date / Amount / Status, with `ApprovalBadge` (Approved/Pending/Rejected) pills, and
+a "Total Paid (year)" row underneath.
 
 ## Frontend — admin review queue (`client/src/pages/admin/PaymentProofsPage.tsx`)
 
 Same "Payment proofs" tab, now querying `/api/admin/ledger-entries*`. Table of pending
-entries (flat, payer, type, amount, note), "View proof" only shown when `fileUrl` is
-set (shows "No file attached" otherwise — a real, valid state now that proof is
-optional), "Approve", and "Reject" (inline optional-reason field, unchanged pattern).
+entries (flat, payer, amount), "View proof" only shown when `fileUrl` is set (shows
+"No file attached" otherwise — a real, valid state now that proof is optional),
+"Approve", and "Reject" (inline optional-reason field, unchanged pattern).
 Simpler than before: no `maintenanceRecords` list to render per row, since an entry is
 never linked to multiple records.
 
@@ -164,8 +162,8 @@ never linked to multiple records.
 ```sh
 # Resident's merged ledger
 curl http://localhost/api/me/ledger -H "Authorization: Bearer <ownerToken>"
-# → 200, { entries: [...], totals: { totalCharges, approvedDeposits, approvedCredits,
-#          outstanding, creditBalance, payable } }
+# → 200, { entries: [...], totals: { totalCharges, approvedDeposits, outstanding },
+#          yearTotals: {...}, availableYears: [...] }
 
 # QR for a partial amount
 curl -X POST http://localhost/api/me/ledger/deposits/qr \
@@ -181,7 +179,7 @@ curl -X POST http://localhost/api/me/ledger/deposits \
 # Admin approves
 curl -X POST http://localhost/api/admin/ledger-entries/<entryId>/approve \
   -H "Authorization: Bearer <adminToken>"
-# → 200, { status: "APPROVED", ... }; the resident's Payable drops by 500 on next read
+# → 200, { status: "APPROVED", ... }; the resident's Outstanding drops by 500 on next read
 ```
 
 Read-only/throwaway-data verification — no seeded demo data was left mutated.
