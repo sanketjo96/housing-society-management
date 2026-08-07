@@ -36,12 +36,16 @@ calls `ledger.service.ts`'s `balancesFromRows` per flat — the exact same formu
 resident's own Dashboard uses (`docs/payments.md`), never duplicated.
 
 - `totalBilled` = sum of every flat's `totalCharges`.
-- `totalPaid` = sum of every flat's `approvedDeposits`.
-- `outstandingTotal` = **sum of each flat's own `outstanding`** — summed per flat, not
+- `totalPaid` = sum of every flat's `approvedDeposits` — **deliberately excludes
+  `approvedCredits`** (2026-08-07): a Credit is a real adjustment reducing what's
+  owed, but it isn't collected cash, so it must not inflate the collection rate below.
+- `outstandingTotal` = **sum of each flat's own `outstanding`** (which does already
+  fold in Credit — see `docs/payments.md`'s balance formula) — summed per flat, not
   computed as one global subtraction, since a flat that has overpaid must never offset
   another flat's balance (each `max(0, ...)` is per-flat).
-- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` (Deposit) amounts —
-  neither "confirmed collected" nor "still owed with no action taken."
+- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` (Deposit *and*
+  Credit, since 2026-08-07) amounts — neither "confirmed collected" nor "still owed
+  with no action taken."
 - `collectionRatePercent` = `round(totalPaid / totalBilled * 100)`, `0` when
   `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
 
@@ -54,8 +58,9 @@ owner, currentTenant, outstandingTotal, unpaidCount }`.
 
 - `outstandingTotal` = the flat's **Outstanding** — the primary "what they owe right
   now" figure under the ledger model, replacing the old UNPAID+PENDING_REVIEW sum.
-- `unpaidCount` = the number of `PENDING` `LedgerEntry` rows for that flat (a rough
-  "how much activity is in flight" signal, distinct from Outstanding).
+- `unpaidCount` = the number of `PENDING` `LedgerEntry` rows for that flat — Deposit
+  *and* Credit since 2026-08-07, both are "activity in flight" the admin should know
+  about (a rough signal, distinct from Outstanding).
 - Sorted `outstandingTotal` descending, so the admin's highest-priority flats surface
   first without any client-side sorting needed (`DataTable` has no sort model, per
   CLAUDE.md's tech-stack table — deliberately minimal for a 24-flat MVP).
@@ -63,25 +68,33 @@ owner, currentTenant, outstandingTotal, unpaidCount }`.
 ## `getFlaggedFlats(societyId, gracePeriodDays?)` — `GET /api/admin/dashboard/flagged-flats`
 
 Task 8.4 (rule 8's escalation widget). Response: one row per flat with `Outstanding
-> 0` whose **oldest** `MaintenanceRecord.dueDate` is past `dueDate + gracePeriodDays`:
-`{ flat, recipient, outstandingTotal, oldestDueDate, overdueRecordCount, message }`.
+> 0` whose **oldest not-yet-fully-settled** `MaintenanceRecord.dueDate` is past
+`dueDate + gracePeriodDays`: `{ flat, recipient, outstandingTotal, oldestDueDate,
+overdueRecordCount, message }`.
 
-- **Redefined for the ledger model**: since a Deposit is no longer tied to specific
-  charges (payment is against the aggregate), there's no per-charge paid/unpaid state
-  to check directly any more. The oldest-charge-past-grace heuristic is the natural
-  generalization of "you still owe money and your oldest bill has been sitting a
-  while," and keeps `lib/escalation.ts`'s `isOverdue`/`buildEscalationMessage` pure
-  functions unchanged — only the caller's choice of *which* date to check changes.
+- **Redefined again for the 2026-08-07 settlement addendum**: the 2026-08-06 ledger
+  pivot's version of this check used the literal oldest `MaintenanceRecord.dueDate`,
+  since there was no per-charge paid/unpaid state to consult at all back then. Now
+  that `ledger.service.ts`'s `computeRecordSettlements` derives one (see
+  `docs/payments.md`'s "Settlement status" section), this endpoint fetches each
+  flagged-candidate flat's full record set, runs the FIFO fill against that flat's
+  `approvedDeposits + approvedCredits` (updated again, same day, when Credit was
+  re-introduced — see `CLAUDE.md`'s "Credit re-introduced" addendum), and picks the
+  oldest record whose status **isn't** `PAID`. A flat that already settled its oldest
+  months but still owes a newer one is now judged against the newer, still-open
+  month's due date — not a stale one that's already been paid off, whether the
+  settlement came from a Deposit or a Credit. (`balances.outstanding > 0` guarantees
+  at least one non-`PAID` record exists, so there's always a valid candidate.)
 - **`gracePeriodDays` is still the "configurable" knob from rule 8** — exposed as an
   optional query param (`?gracePeriodDays=N`, positive integer, `zod`-validated, `400`
   on a non-numeric value), unchanged mechanism from before the pivot.
 - **`outstandingTotal` is the flat's full Outstanding, not just the overdue portion**
   — rule 8's exact wording: "computes outstanding total (across all that flat's
   unpaid records)."
-- **`overdueRecordCount`** = how many of the flat's SYSTEM charges have individually
-  passed `dueDate + gracePeriodDays`, by calendar time — there's no per-charge
-  paid/unpaid state to count under the ledger model, but this is still a meaningful
-  "how overdue is this flat" signal for the admin.
+- **`overdueRecordCount`** = how many of the flat's **not-yet-`PAID`** SYSTEM charges
+  have individually passed `dueDate + gracePeriodDays`, by calendar time. A month
+  that's already fully settled doesn't count toward "how overdue is this flat," even
+  if its due date happens to be in the past too.
 - **`recipient` is `flat.currentTenant ?? flat.owner`** — never a stale historical payer
   re-derived from an old record's `payerId`.
 - `message` is `buildEscalationMessage`'s output, ready to copy-paste as-is — the

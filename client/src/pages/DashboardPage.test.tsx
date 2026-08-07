@@ -38,8 +38,8 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
         ok: true,
         json: async () => ({
           entries: [],
-          totals: { totalCharges: 0, approvedDeposits: 0, outstanding: 0 },
-          yearTotals: { totalCharges: 0, approvedDeposits: 0, outstanding: 0 },
+          totals: { totalCharges: 0, approvedDeposits: 0, approvedCredits: 0, outstanding: 0, availableCredit: 0 },
+          yearTotals: { totalCharges: 0, approvedDeposits: 0, approvedCredits: 0, outstanding: 0, availableCredit: 0 },
           availableYears: [new Date().getFullYear()],
         }),
       });

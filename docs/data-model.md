@@ -254,10 +254,20 @@ Task 4.1 builds the real month-level rate calculation on top of it.
 > "Pivot (2026-08-06): resident view moves to a transaction ledger") replaced the
 > record-selection payment model above with a balance-based ledger. Under that model, a
 > `MaintenanceRecord` is always a SYSTEM charge — implicitly "Approved," never
-> individually paid/unpaid — so the `status`/`PaymentStatus` columns below (and the
-> `@@index([status])`) no longer exist. `dueDate` is kept, since escalation
-> (`lib/escalation.ts`) still needs it. Payment against the running balance now lives
-> entirely in the new `LedgerEntry` model, below.
+> individually paid/unpaid **in the schema** — so the `status`/`PaymentStatus` columns
+> below (and the `@@index([status])`) no longer exist. `dueDate` is kept, since
+> escalation (`lib/escalation.ts`) still needs it. Payment against the running balance
+> now lives entirely in the new `LedgerEntry` model, below.
+>
+> **Addendum (2026-08-07): a per-record status is back, but derived, not stored.**
+> Residents and admins need to see *which specific months* are paid/partial/unpaid, not
+> just the flat's one aggregate Outstanding. Rather than re-adding a stored `status`
+> column (which would resurrect exactly the state this pivot removed, plus need a
+> backfill for existing approved deposits), `ledger.service.ts`'s
+> `computeRecordSettlements` computes it fresh on every read — FIFO-filling a flat's
+> `approvedDeposits` total across its records oldest-first. No schema change at all;
+> this model is unchanged from the pivot above. Full mechanism:
+> `docs/payments.md`'s "Settlement status" section, `CLAUDE.md`'s 2026-08-07 addendum.
 
 ```prisma
 enum PayerType {
@@ -301,8 +311,10 @@ model MaintenanceRecord {
 - **`MaintenanceRecord` is always a SYSTEM charge under the ledger model.** One row per
   flat per calendar month (`period` = `"YYYY-MM"`), generated monthly (Task 4.2),
   contributing its `amount` to the flat's `totalCharges` permanently — it is never
-  individually marked paid. `dueDate` is set at generation time (generation date +
-  configured days) and still drives escalation.
+  individually marked paid *in this schema*. `dueDate` is set at generation time
+  (generation date + configured days) and still drives escalation (now off the oldest
+  *unsettled* record — see the 2026-08-07 addendum above). A derived, un-stored
+  settlement status (Unpaid/Partially Settled/Paid) is computed on read for display.
 - **Payment is now balance-based, not per-record.** A resident's Outstanding is a
   single running number (`totalCharges` minus approved Deposits, floored at 0 — see
   `LedgerEntry` below) — they may pay any amount up to Outstanding, including less
@@ -332,6 +344,16 @@ model MaintenanceRecord {
 > Deposit now. This also collapsed the balance formula from three numbers
 > (Outstanding/Credit balance/Payable) down to one (Outstanding), since Payable was
 > only ever Outstanding minus Credit.
+>
+> **Addendum (2026-08-07, same day): Credit re-introduced, `type` is back.** Confirmed
+> against a plain-text credit-allocation spec. `type LedgerType` returns via a new
+> migration (`20260807170000_readd_credit`) — same enum, same column, backfilled to
+> `DEPOSIT` for every pre-existing row. But the *meaning* is different from before:
+> Credit is no longer a separately-netted balance (the removed `Payable = Outstanding
+> - Credit` split isn't coming back) — it's pooled with Deposit money and
+> FIFO-allocated across records by the same `computeRecordSettlements` the
+> per-record-settlement addendum (below) already built for payments. See `CLAUDE.md`'s
+> "Credit re-introduced" addendum for the full reasoning and the worked formula.
 
 ```prisma
 enum ProofStatus {
@@ -340,8 +362,14 @@ enum ProofStatus {
   REJECTED
 }
 
+enum LedgerType {
+  DEPOSIT
+  CREDIT
+}
+
 model LedgerEntry {
   id       String      @id @default(cuid())
+  type     LedgerType
   amount   Decimal     @db.Decimal(10, 2)
   status   ProofStatus @default(PENDING)
   note     String?
@@ -367,36 +395,60 @@ model LedgerEntry {
 ```
 
 **One row, one flat, one payer — no join table.** Unlike `PaymentProof`, a
-`LedgerEntry` is never linked to specific `MaintenanceRecord`s, because payment is
-against the flat's aggregate balance, not particular months (a partial deposit might
-not exactly cover any one charge). A `LedgerEntry` row always represents a UPI
-**Deposit** (created when a resident pays) — SYSTEM charges are *not* stored here at
-all; they remain `MaintenanceRecord` rows (above), always implicitly "Approved."
+`LedgerEntry` is never linked to specific `MaintenanceRecord`s, because settlement is
+computed against the flat's aggregate funds, not particular months (a partial deposit
+might not exactly cover any one charge — see `computeRecordSettlements`, below). A
+`LedgerEntry` row represents either a **Deposit** (a UPI payment, `fileUrl` optional)
+or a **Credit** (a committee-approved adjustment, `note` **and** `fileUrl` both
+required at the application level — the inverse of a Deposit, where proof is
+optional) — SYSTEM charges are *not* stored here at all; they remain
+`MaintenanceRecord` rows (above), always implicitly "Approved."
 
 **Only `APPROVED` rows count toward the running balance** (computed in
 `ledger.service.ts`'s `balancesFromRows`, reused by both the resident's own Dashboard
-and the admin dashboard so the formula lives in exactly one place):
+and the admin dashboard so the formula lives in exactly one place). Updated 2026-08-07
+to fold Credit back in — `outstanding` and `availableCredit` are the two sides of the
+same subtraction, exactly one of them is ever nonzero:
 
 ```
 totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
-approvedDeposits = sum(LedgerEntry.amount) where status=APPROVED
+approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
+approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
+approvedFunds    = approvedDeposits + approvedCredits
 
-outstanding = max(0, totalCharges - approvedDeposits)
+outstanding      = max(0, totalCharges - approvedFunds)
+availableCredit  = max(0, approvedFunds - totalCharges)
 ```
 
 `PENDING`/`REJECTED` rows stay visible in the resident's dashboard for transparency
-but are excluded from the sum.
+but are excluded from every sum — including a still-pending Credit request, which must
+have zero effect on any balance until an admin approves it.
 
-**`fileUrl`/`mimeType` are optional** — unlike the pre-pivot `PaymentProof.fileUrl`
-(required), a proof screenshot is no longer mandatory to submit a Deposit (a real
-reversal of the old rule 7, see `CLAUDE.md`). Same opaque-storage-key contract as
+**Per-record settlement (Unpaid/Partially Settled/Paid), derived — not stored.**
+`ledger.service.ts`'s `computeRecordSettlements(records, totalApprovedFunds)` FIFO-fills
+`approvedFunds` (the same lump sum as above) across a flat's `MaintenanceRecord`s
+oldest-first, computed fresh on every read rather than adding a stored per-record
+column. See `CLAUDE.md`'s per-record-settlement and "Credit re-introduced" addenda for
+the full reasoning — in short, the fill is order-independent (a Deposit and a Credit
+contributing to the same record just add together, and it doesn't matter which arrived
+first or was approved first), so no history ever needs to be replayed.
+
+**`fileUrl`/`mimeType` are optional at the schema level** — unlike the pre-pivot
+`PaymentProof.fileUrl` (required), a proof screenshot is no longer mandatory to
+submit a Deposit (a real reversal of the old rule 7, see `CLAUDE.md`). **A Credit is
+the exception**: `createCredit` requires `file` at the application level (not the
+schema — nothing stops a future caller from omitting it at the DB layer, but
+`POST /api/me/ledger/credits` always rejects with `400` first), same server-side
+validation as a Deposit's optional screenshot. Same opaque-storage-key contract as
 before otherwise (`StorageAdapter`, `docs/payments.md`) — served only through the
 authenticated `GET /api/ledger-entries/:id/file`.
 
-**`note` vs `adminNote`** — `note` is a short fixed string set by the server (e.g.
-"UPI payment - awaiting review"), not resident-authored input. `adminNote` is the
-admin's rejection reason (rule 7), set only on reject — distinct fields because
-they're written by different parties at different times.
+**`note` vs `adminNote`** — for a Deposit, `note` is a short fixed string set by the
+server (e.g. "UPI payment - awaiting review"), not resident-authored input. For a
+Credit, `note` **is** resident-authored and required — the reason a committee needs to
+evaluate an arbitrary discretionary adjustment (`createCredit`'s `note` param). Either
+way, `adminNote` is the admin's rejection reason (rule 7), set only on reject —
+distinct fields because they're written by different parties at different times.
 
 ### Why `payer`/`reviewedBy` need two named relations to `User`
 

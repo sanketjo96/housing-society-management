@@ -5,8 +5,11 @@ import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { authedFetch } from '../../lib/api';
 
+type LedgerEntryType = 'DEPOSIT' | 'CREDIT';
+
 interface LedgerEntryListItem {
   id: string;
+  type: LedgerEntryType;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   amount: string;
   note: string | null;
@@ -14,6 +17,25 @@ interface LedgerEntryListItem {
   createdAt: string;
   payer: { id: string; name: string; email: string };
   flat: { id: string; wing: string; flatNumber: string };
+}
+
+// Credit re-introduced 2026-08-07 — there's something to distinguish in this queue
+// again (a Deposit is a UPI payment with a screenshot; a Credit is a committee-
+// approved adjustment with a required reason instead), so the Type column returns
+// after the 2026-08-07 Credit-removal pivot had dropped it for having nothing left
+// to show.
+const TYPE_META: Record<LedgerEntryType, { className: string; label: string }> = {
+  DEPOSIT: { className: 'border border-line text-ink', label: 'Deposit' },
+  CREDIT: { className: 'border border-brass text-brass', label: 'Credit' },
+};
+
+function TypeBadge({ type }: { type: LedgerEntryType }) {
+  const meta = TYPE_META[type];
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
 }
 
 async function fetchPendingLedgerEntries(): Promise<LedgerEntryListItem[]> {
@@ -160,8 +182,16 @@ export function PaymentProofsPage() {
           <span className="text-ink">
             {row.original.flat.wing}-{row.original.flat.flatNumber}
             <div className="text-xs text-muted">{row.original.payer.name}</div>
+            {row.original.type === 'CREDIT' && row.original.note && (
+              <div className="mt-0.5 text-xs text-muted">{row.original.note}</div>
+            )}
           </span>
         ),
+      },
+      {
+        id: 'type',
+        header: 'Type',
+        cell: ({ row }) => <TypeBadge type={row.original.type} />,
       },
       {
         id: 'amount',

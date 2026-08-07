@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { apiFetch } from '../lib/api';
 import { getAccessToken, setAccessToken } from '../lib/auth-token';
@@ -34,6 +35,15 @@ async function fetchCurrentUser(): Promise<AuthUser | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // The QueryClient (App.tsx) is one module-level singleton shared across the whole
+  // app's lifetime, with a deliberate 30s staleTime (see its comment) — great for
+  // avoiding refetches while browsing as one user, but it has no idea a *different*
+  // identity now controls this tab unless told. Without clearing it here, cached
+  // data from one login (e.g. an owner's ['my-ledger', year]) can still look "fresh"
+  // and get served straight to whoever logs in next within that window — wrong
+  // data, not a missing fetch. Cleared on both login and logout so neither the
+  // outgoing nor the incoming identity's queries survive the transition.
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     // Silent session restore, on every page load. The access token is never
@@ -73,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(body?.error ?? 'Login failed. Please try again.');
     }
+    queryClient.clear();
     setAccessToken(body.accessToken);
     setUser(body.user);
   }
@@ -81,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Best-effort: even if the network call fails, clear local state so the UI
     // reflects "logged out" immediately rather than being stuck.
     await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    queryClient.clear();
     setAccessToken(null);
     setUser(null);
   }

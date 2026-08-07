@@ -3,13 +3,17 @@ import { prisma } from '../../src/db';
 import { createFlat } from '../../src/services/flats.service';
 import {
   approveLedgerEntry,
+  balancesFromRows,
   cancelPaymentIntent,
   computeFlatBalances,
+  computeRecordSettlements,
+  createCredit,
   createDeposit,
   createOrReplacePaymentIntent,
   getLedgerEntryFileForViewing,
   getLedgerForResident,
   getOpenPaymentIntent,
+  InvalidAmountError,
   InvalidDepositAmountError,
   LedgerEntryAlreadyReviewedError,
   listPendingLedgerEntries,
@@ -90,6 +94,216 @@ describe('ledger service', () => {
     });
   });
 
+  // Pure-function coverage of the FIFO settlement spec's worked test cases (Cases
+  // 1-9; Case 10 — reject overpayment — is already covered by the createDeposit/
+  // createOrReplacePaymentIntent InvalidDepositAmountError tests, since amount
+  // validation is unchanged by this feature).
+  describe('computeRecordSettlements (FIFO fill)', () => {
+    const jun = { id: 'jun', period: '2026-06', amount: 800 };
+    const jul = { id: 'jul', period: '2026-07', amount: 800 };
+    const aug = { id: 'aug', period: '2026-08', amount: 800 };
+
+    it('Case 1: exact single-cycle payment pays the record in full', () => {
+      const result = computeRecordSettlements([jun], 800);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+    });
+
+    it('Case 2: underpayment on a single record leaves it partially settled', () => {
+      const result = computeRecordSettlements([jun], 350);
+      expect(result.get('jun')).toEqual({ settledAmount: 350, status: 'PARTIALLY_SETTLED' });
+    });
+
+    it('Case 3: a top-up bringing the cumulative total to the full amount pays it off', () => {
+      // Derived from the flat's *cumulative* approved-deposit sum, not applied
+      // incrementally — 350 (already approved) + 450 (this top-up) = 800.
+      const result = computeRecordSettlements([jun], 800);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+    });
+
+    it('Case 4: payment spanning two records exactly pays both in full', () => {
+      const result = computeRecordSettlements([jun, jul], 1600);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(result.get('jul')).toEqual({ settledAmount: 800, status: 'PAID' });
+    });
+
+    it('Case 5: payment covers one record fully and partially fills the next', () => {
+      const result = computeRecordSettlements([jun, jul], 1000);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(result.get('jul')).toEqual({ settledAmount: 200, status: 'PARTIALLY_SETTLED' });
+    });
+
+    it('Case 6: a small payment only touches the oldest record, leaving newer ones untouched', () => {
+      const result = computeRecordSettlements([jun, jul], 200);
+      expect(result.get('jun')).toEqual({ settledAmount: 200, status: 'PARTIALLY_SETTLED' });
+      expect(result.get('jul')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+    });
+
+    it('Case 7: sequential partial payments closing one record gradually — checked at each cumulative total', () => {
+      expect(computeRecordSettlements([jun], 300).get('jun')).toEqual({
+        settledAmount: 300,
+        status: 'PARTIALLY_SETTLED',
+      });
+      expect(computeRecordSettlements([jun], 550).get('jun')).toEqual({
+        settledAmount: 550,
+        status: 'PARTIALLY_SETTLED',
+      });
+      expect(computeRecordSettlements([jun], 800).get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+    });
+
+    it('Case 8: a new due cycle appearing mid-history does not disturb an already-partial older record', () => {
+      // Jun already has 300 of 800 settled; Jul is a brand-new record, no extra
+      // payment has happened — approvedDeposits is still just the 300 from Jun.
+      const result = computeRecordSettlements([jun, jul], 300);
+      expect(result.get('jun')).toEqual({ settledAmount: 300, status: 'PARTIALLY_SETTLED' });
+      expect(result.get('jul')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+    });
+
+    it('Case 9: a payment spills across a partially settled record into the next unpaid one', () => {
+      // Jun already partially settled at 300 (needs 500 more); this payment is 1000
+      // on top, so cumulative approvedDeposits = 300 + 1000 = 1300.
+      const result = computeRecordSettlements([jun, jul, aug], 1300);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(result.get('jul')).toEqual({ settledAmount: 500, status: 'PARTIALLY_SETTLED' });
+      expect(result.get('aug')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+    });
+
+    it('is order-independent of input record ordering — always fills oldest period first', () => {
+      const result = computeRecordSettlements([aug, jun, jul], 1000);
+      expect(result.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(result.get('jul')).toEqual({ settledAmount: 200, status: 'PARTIALLY_SETTLED' });
+      expect(result.get('aug')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+    });
+
+    it('handles records with differing amounts, not just a fixed unit', () => {
+      const small = { id: 'small', period: '2026-06', amount: 500 };
+      const large = { id: 'large', period: '2026-07', amount: 1200 };
+      const result = computeRecordSettlements([small, large], 900);
+      expect(result.get('small')).toEqual({ settledAmount: 500, status: 'PAID' });
+      expect(result.get('large')).toEqual({ settledAmount: 400, status: 'PARTIALLY_SETTLED' });
+    });
+
+    it('returns UNPAID with 0 settled when there are no approved deposits at all', () => {
+      const result = computeRecordSettlements([jun], 0);
+      expect(result.get('jun')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+    });
+  });
+
+  // Pure-function coverage of the credit-allocation spec's 10 worked cases —
+  // balancesFromRows (approvedCredits/availableCredit) combined with
+  // computeRecordSettlements fed the deposits+credits lump sum, exactly as
+  // getLedgerForResident/admin-dashboard.service.ts actually call them. No DB
+  // involved; createCredit/approveLedgerEntry's DB-integration behavior is covered
+  // separately below.
+  describe('credit allocation (balancesFromRows + computeRecordSettlements combined)', () => {
+    const jun = { id: 'jun', period: '2026-06', amount: 800 };
+    const jul = { id: 'jul', period: '2026-07', amount: 800 };
+    const aug = { id: 'aug', period: '2026-08', amount: 800 };
+
+    function run(records: { id: string; period: string; amount: number }[], entries: { type: 'DEPOSIT' | 'CREDIT'; status: 'PENDING' | 'APPROVED' | 'REJECTED'; amount: number }[]) {
+      const balances = balancesFromRows(records, entries);
+      const settlements = computeRecordSettlements(records, balances.approvedDeposits + balances.approvedCredits);
+      return { balances, settlements };
+    }
+
+    it('Case 1: credit smaller than a single outstanding record', () => {
+      const { balances, settlements } = run([jun], [{ type: 'CREDIT', status: 'APPROVED', amount: 550 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
+      expect(balances.outstanding).toBe(250);
+      expect(balances.availableCredit).toBe(0);
+    });
+
+    it('Case 2: credit larger than total outstanding — leftover becomes Available Credit', () => {
+      const { balances, settlements } = run([jun], [{ type: 'CREDIT', status: 'APPROVED', amount: 1200 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(balances.outstanding).toBe(0);
+      expect(balances.availableCredit).toBe(400);
+    });
+
+    it('Case 3: credit exactly equals the outstanding amount', () => {
+      const { balances, settlements } = run([jun], [{ type: 'CREDIT', status: 'APPROVED', amount: 800 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(balances.outstanding).toBe(0);
+      expect(balances.availableCredit).toBe(0);
+    });
+
+    it('Case 4: credit spans two records — one full, one partial', () => {
+      const { balances, settlements } = run([jun, jul], [{ type: 'CREDIT', status: 'APPROVED', amount: 1000 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(settlements.get('jul')).toEqual({ settledAmount: 200, status: 'PARTIALLY_SETTLED' });
+      expect(balances.outstanding).toBe(600);
+      expect(balances.availableCredit).toBe(0);
+    });
+
+    it('Case 5: credit approved when there are no open dues at all — entire amount becomes Available Credit', () => {
+      const { balances, settlements } = run(
+        [jun],
+        [
+          { type: 'DEPOSIT', status: 'APPROVED', amount: 800 },
+          { type: 'CREDIT', status: 'APPROVED', amount: 550 },
+        ],
+      );
+      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(balances.outstanding).toBe(0);
+      expect(balances.availableCredit).toBe(550);
+    });
+
+    it('Case 6: a still-pending credit has zero effect on any balance', () => {
+      const { balances, settlements } = run([jun], [{ type: 'CREDIT', status: 'PENDING', amount: 550 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+      expect(balances.outstanding).toBe(800);
+      expect(balances.availableCredit).toBe(0);
+    });
+
+    it('Case 7: multiple credits approved separately apply cumulatively', () => {
+      const { balances, settlements } = run(
+        [jun],
+        [
+          { type: 'CREDIT', status: 'APPROVED', amount: 300 },
+          { type: 'CREDIT', status: 'APPROVED', amount: 250 },
+        ],
+      );
+      expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
+      expect(balances.outstanding).toBe(250);
+      expect(balances.availableCredit).toBe(0);
+    });
+
+    it('Case 8: existing pending dues get immediate benefit from newly approved credit', () => {
+      const { balances, settlements } = run([jun, jul], [{ type: 'CREDIT', status: 'APPROVED', amount: 550 }]);
+      expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
+      expect(settlements.get('jul')).toEqual({ settledAmount: 0, status: 'UNPAID' });
+      expect(balances.outstanding).toBe(1050);
+    });
+
+    it('Case 9: Available Credit is automatically consumed when a new due is generated — no special "consumption" code needed, just rerunning the same fill against a larger record set', () => {
+      const entries: { type: 'DEPOSIT' | 'CREDIT'; status: 'APPROVED'; amount: number }[] = [
+        { type: 'CREDIT', status: 'APPROVED', amount: 1200 },
+      ];
+      const before = run([jun], entries);
+      expect(before.balances.outstanding).toBe(0);
+      expect(before.balances.availableCredit).toBe(400);
+
+      // Aug is generated later — same entries, one more record.
+      const after = run([jun, aug], entries);
+      expect(after.settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(after.settlements.get('aug')).toEqual({ settledAmount: 400, status: 'PARTIALLY_SETTLED' });
+      expect(after.balances.outstanding).toBe(400);
+      expect(after.balances.availableCredit).toBe(0);
+    });
+
+    it('Case 10: credit combined with a partially-settled record from a prior payment — sources are just added together', () => {
+      const { balances, settlements } = run(
+        [jun],
+        [
+          { type: 'DEPOSIT', status: 'APPROVED', amount: 300 },
+          { type: 'CREDIT', status: 'APPROVED', amount: 500 },
+        ],
+      );
+      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
+      expect(balances.outstanding).toBe(0);
+      expect(balances.availableCredit).toBe(0);
+    });
+  });
+
   describe('createDeposit', () => {
     it('rejects an amount of 0 or less', async () => {
       await expect(createDeposit(ownerId, flatId, societyId, { amount: 0 })).rejects.toThrow(InvalidDepositAmountError);
@@ -149,6 +363,105 @@ describe('ledger service', () => {
       expect(result).toBeNull();
       await prisma.society.delete({ where: { id: otherSociety.id } });
     });
+
+    it('logs APPROVE_CREDIT/REJECT_CREDIT distinctly from the Deposit action names', async () => {
+      const approved = await createCredit(ownerId, flatId, societyId, {
+        amount: 60,
+        note: 'Approved-credit audit check',
+        file: fakeProofFile,
+      });
+      await approveLedgerEntry(approved.id, societyId, adminId);
+      const approveLog = await prisma.auditLog.findFirst({
+        where: { entityId: approved.id, entityType: 'LedgerEntry' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(approveLog?.action).toBe('APPROVE_CREDIT');
+
+      const rejected = await createCredit(ownerId, flatId, societyId, {
+        amount: 60,
+        note: 'Rejected-credit audit check',
+        file: fakeProofFile,
+      });
+      await rejectLedgerEntry(rejected.id, societyId, adminId, 'not enough context');
+      const rejectLog = await prisma.auditLog.findFirst({
+        where: { entityId: rejected.id, entityType: 'LedgerEntry' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(rejectLog?.action).toBe('REJECT_CREDIT');
+    });
+  });
+
+  describe('createCredit', () => {
+    it('rejects an amount of 0 or less', async () => {
+      await expect(
+        createCredit(ownerId, flatId, societyId, { amount: 0, note: 'x', file: fakeProofFile }),
+      ).rejects.toThrow(InvalidAmountError);
+    });
+
+    it('allows an amount that exceeds the current Outstanding — unlike a Deposit, Credit is never capped', async () => {
+      const balances = await computeFlatBalances(flatId);
+      const credit = await createCredit(ownerId, flatId, societyId, {
+        amount: balances.outstanding + 10_000,
+        note: 'Large repair reimbursement, exceeds Outstanding on purpose',
+        file: fakeProofFile,
+      });
+      expect(credit.status).toBe('PENDING');
+      expect(credit.type).toBe('CREDIT');
+      expect(Number(credit.amount)).toBe(balances.outstanding + 10_000);
+    });
+
+    it('requires a proof attachment, same as it requires a note — saved via the storage adapter like a Deposit\'s screenshot', async () => {
+      const credit = await createCredit(ownerId, flatId, societyId, {
+        amount: 40,
+        note: 'Receipt attached',
+        file: fakeProofFile,
+      });
+      expect(credit.fileUrl).not.toBeNull();
+      expect(credit.mimeType).toBe('image/png');
+    });
+
+    it('a PENDING credit has zero effect on Outstanding or Available Credit until approved', async () => {
+      const before = await computeFlatBalances(flatId);
+      await createCredit(ownerId, flatId, societyId, {
+        amount: 500,
+        note: 'Still pending, must not move anything',
+        file: fakeProofFile,
+      });
+
+      const after = await computeFlatBalances(flatId);
+      expect(after.outstanding).toBe(before.outstanding);
+      expect(after.availableCredit).toBe(before.availableCredit);
+      expect(after.approvedCredits).toBe(before.approvedCredits);
+    });
+
+    it('approving a credit increases approvedCredits by exactly its amount', async () => {
+      const before = await computeFlatBalances(flatId);
+      const credit = await createCredit(ownerId, flatId, societyId, {
+        amount: 150,
+        note: 'Common-area repair',
+        file: fakeProofFile,
+      });
+      await approveLedgerEntry(credit.id, societyId, adminId);
+
+      const after = await computeFlatBalances(flatId);
+      expect(after.approvedCredits).toBe(before.approvedCredits + 150);
+    });
+
+    it('rejecting a credit stores the reason and never moves any balance', async () => {
+      const before = await computeFlatBalances(flatId);
+      const credit = await createCredit(ownerId, flatId, societyId, {
+        amount: 75,
+        note: 'Disputed reimbursement',
+        file: fakeProofFile,
+      });
+      const rejected = await rejectLedgerEntry(credit.id, societyId, adminId, 'insufficient documentation');
+      expect(rejected!.status).toBe('REJECTED');
+      expect(rejected!.adminNote).toBe('insufficient documentation');
+
+      const after = await computeFlatBalances(flatId);
+      expect(after.outstanding).toBe(before.outstanding);
+      expect(after.approvedCredits).toBe(before.approvedCredits);
+    });
   });
 
   describe('payment intents', () => {
@@ -195,10 +508,11 @@ describe('ledger service', () => {
   });
 
   describe('getLedgerForResident', () => {
-    it('merges SYSTEM charges with LedgerEntry rows and includes the running totals', async () => {
+    it('merges SYSTEM charges with LedgerEntry rows (Deposit and Credit) and includes the running totals', async () => {
       const ledger = await getLedgerForResident(flatId);
       expect(ledger.entries.some((e) => e.type === 'SYSTEM')).toBe(true);
       expect(ledger.entries.some((e) => e.type === 'DEPOSIT')).toBe(true);
+      expect(ledger.entries.some((e) => e.type === 'CREDIT')).toBe(true);
       expect(ledger.totals.totalCharges).toBe(2000);
       expect(ledger.availableYears).toContain(2026);
     });
@@ -224,6 +538,16 @@ describe('ledger service', () => {
     it('filters by status', async () => {
       const pendingDeposits = await listPendingLedgerEntries(societyId, { status: 'PENDING' });
       expect(pendingDeposits.every((e) => e.status === 'PENDING')).toBe(true);
+    });
+
+    it('filters by type', async () => {
+      const credits = await listPendingLedgerEntries(societyId, { type: 'CREDIT' });
+      expect(credits.length).toBeGreaterThan(0);
+      expect(credits.every((e) => e.type === 'CREDIT')).toBe(true);
+
+      const deposits = await listPendingLedgerEntries(societyId, { type: 'DEPOSIT' });
+      expect(deposits.length).toBeGreaterThan(0);
+      expect(deposits.every((e) => e.type === 'DEPOSIT')).toBe(true);
     });
   });
 

@@ -15,6 +15,8 @@ describe('admin-dashboard service', () => {
   let flatAId: string; // no records or ledger entries at all
   let flatBId: string; // two SYSTEM charges, an old overdue one and a recent one, nothing paid
   let flatCId: string; // one SYSTEM charge settled by an approved Deposit, plus a second pending Deposit
+  let flatDId: string; // old charge fully settled (Deposit), newer charge unpaid but not yet past grace
+  let flatEId: string; // old charge fully settled via approved Credit (not Deposit), newer charge unpaid
   const createdFlatIds: string[] = [];
 
   beforeAll(async () => {
@@ -60,8 +62,32 @@ describe('admin-dashboard service', () => {
     flatCId = flatC!.id;
     createdFlatIds.push(flatCId);
 
+    const flatD = await createFlat({
+      societyId,
+      wing: 'D',
+      flatNumber: '104',
+      baseRate: 1000,
+      ownerName: 'Dash Owner D',
+      ownerEmail: `dash-owner-d-${suffix}@example.com`,
+    });
+    flatDId = flatD!.id;
+    createdFlatIds.push(flatDId);
+
+    const flatE = await createFlat({
+      societyId,
+      wing: 'D',
+      flatNumber: '105',
+      baseRate: 1000,
+      ownerName: 'Dash Owner E',
+      ownerEmail: `dash-owner-e-${suffix}@example.com`,
+    });
+    flatEId = flatE!.id;
+    createdFlatIds.push(flatEId);
+
     const flatBRow = await prisma.flat.findUniqueOrThrow({ where: { id: flatBId } });
     const flatCRow = await prisma.flat.findUniqueOrThrow({ where: { id: flatCId } });
+    const flatDRow = await prisma.flat.findUniqueOrThrow({ where: { id: flatDId } });
+    const flatERow = await prisma.flat.findUniqueOrThrow({ where: { id: flatEId } });
 
     await prisma.maintenanceRecord.createMany({
       data: [
@@ -92,6 +118,47 @@ describe('admin-dashboard service', () => {
           dueDate: daysAgo(60),
           payerId: flatCRow.ownerId,
         },
+        // Flat D: an old charge, well past grace, but fully settled below — the
+        // escalation check must not key off this one.
+        {
+          flatId: flatDId,
+          period: '2026-01',
+          payerType: 'OWNER',
+          amount: 800,
+          dueDate: daysAgo(60),
+          payerId: flatDRow.ownerId,
+        },
+        // Flat D: a newer, still-unpaid charge, past its due date but within the
+        // default 7-day grace period.
+        {
+          flatId: flatDId,
+          period: '2026-02',
+          payerType: 'OWNER',
+          amount: 800,
+          dueDate: daysAgo(2),
+          payerId: flatDRow.ownerId,
+        },
+        // Flat E: an old charge, well past grace, but fully settled via an approved
+        // CREDIT (not a Deposit) below — the escalation check's lump sum must include
+        // approvedCredits, not just approvedDeposits, or this would wrongly flag off it.
+        {
+          flatId: flatEId,
+          period: '2026-01',
+          payerType: 'OWNER',
+          amount: 800,
+          dueDate: daysAgo(60),
+          payerId: flatERow.ownerId,
+        },
+        // Flat E: a newer, still-unpaid charge, past its due date but within the
+        // default 7-day grace period.
+        {
+          flatId: flatEId,
+          period: '2026-02',
+          payerType: 'OWNER',
+          amount: 800,
+          dueDate: daysAgo(2),
+          payerId: flatERow.ownerId,
+        },
       ],
     });
 
@@ -100,6 +167,7 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
+          type: 'DEPOSIT',
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
@@ -107,9 +175,27 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
+          type: 'DEPOSIT',
           status: 'PENDING',
           amount: 1200,
           note: 'Second deposit, still awaiting review',
+        },
+        {
+          flatId: flatDId,
+          payerId: flatDRow.ownerId,
+          type: 'DEPOSIT',
+          status: 'APPROVED',
+          amount: 800,
+          reviewedAt: new Date(),
+        },
+        {
+          flatId: flatEId,
+          payerId: flatERow.ownerId,
+          type: 'CREDIT',
+          status: 'APPROVED',
+          amount: 800,
+          note: 'Repair cost settled against Jan',
+          reviewedAt: new Date(),
         },
       ],
     });
@@ -132,14 +218,20 @@ describe('admin-dashboard service', () => {
   describe('getDashboardSummary', () => {
     it('computes totals and collection rate across every flat', async () => {
       const summary = await getDashboardSummary(societyId);
-      // totalBilled = 1000(B) + 500(B) + 800(C) = 2300; totalPaid = 800(C's deposit).
-      expect(summary.totalBilled).toBe(2300);
-      expect(summary.totalPaid).toBe(800);
+      // totalBilled = 1000(B)+500(B)+800(C)+800(D)+800(D)+800(E)+800(E) = 5500;
+      // totalPaid only counts approvedDeposits (actual money collected), never
+      // Credit — 800(C's deposit) + 800(D's deposit) = 1600. Flat E's 800 Credit is a
+      // real adjustment reducing what's owed, but it isn't "collected" cash, so it
+      // must not inflate the collection rate.
+      expect(summary.totalBilled).toBe(5500);
+      expect(summary.totalPaid).toBe(1600);
       // outstandingTotal = sum of per-flat Outstanding: A=0, B=1500, C=0 (800 charge
-      // fully covered by the approved deposit; the second pending deposit doesn't count).
-      expect(summary.outstandingTotal).toBe(1500);
+      // fully covered by the approved deposit; the second pending deposit doesn't
+      // count), D=800 (one of its two 800 charges covered, the other still open),
+      // E=800 (same shape as D, but covered by an approved Credit instead).
+      expect(summary.outstandingTotal).toBe(3100);
       expect(summary.pendingReviewTotal).toBe(1200); // C's pending deposit
-      expect(summary.collectionRatePercent).toBe(35); // round(800/2300*100)
+      expect(summary.collectionRatePercent).toBe(29); // round(1600/5500*100)
     });
   });
 
@@ -203,6 +295,32 @@ describe('admin-dashboard service', () => {
     it('never flags a flat with no Outstanding balance, even with an old charge', async () => {
       const flagged = await getFlaggedFlats(societyId);
       expect(flagged.some((f) => f.flat.id === flatCId)).toBe(false);
+    });
+
+    it("keys off the oldest UNSETTLED charge, not the oldest charge overall — flat D's old charge is fully paid, so its still-fresh newer charge (not yet past grace) must not falsely flag it", async () => {
+      const flagged = await getFlaggedFlats(societyId);
+      expect(flagged.some((f) => f.flat.id === flatDId)).toBe(false);
+    });
+
+    it("flags flat D once its newer (still-unsettled) charge itself passes a shorter grace period, using that charge's own due date and count — not the already-paid older one", async () => {
+      const flagged = await getFlaggedFlats(societyId, 1);
+      const flatD = flagged.find((f) => f.flat.id === flatDId)!;
+      expect(flatD).toBeDefined();
+      expect(flatD.outstandingTotal).toBe(800);
+      expect(flatD.overdueRecordCount).toBe(1); // only Feb — Jan is PAID, excluded even though it's also "overdue"
+    });
+
+    it("does the same for a Credit-settled old charge — flat E's Jan is PAID via an approved Credit (not a Deposit), so it must not be falsely flagged off it either", async () => {
+      const flagged = await getFlaggedFlats(societyId);
+      expect(flagged.some((f) => f.flat.id === flatEId)).toBe(false);
+    });
+
+    it("flags flat E once its newer charge passes a shorter grace period, confirming the settlement lump sum used for escalation includes approvedCredits, not just approvedDeposits", async () => {
+      const flagged = await getFlaggedFlats(societyId, 1);
+      const flatE = flagged.find((f) => f.flat.id === flatEId)!;
+      expect(flatE).toBeDefined();
+      expect(flatE.outstandingTotal).toBe(800);
+      expect(flatE.overdueRecordCount).toBe(1); // only Feb — Jan is PAID (via Credit), excluded
     });
   });
 });

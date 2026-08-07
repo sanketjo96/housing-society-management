@@ -5,15 +5,27 @@ import { useMemo, useState } from 'react';
 import { DataTable } from '../components/DataTable';
 import { authedFetch } from '../lib/api';
 
+type SettlementStatus = 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID';
+
 interface MaintenanceRow {
   id: string;
   period: string;
   date: string;
   amount: number;
+  settledAmount: number;
+  settlementStatus: SettlementStatus;
 }
 
 interface LedgerResponse {
-  entries: { id: string; type: string; period?: string; date: string; amount: number }[];
+  entries: {
+    id: string;
+    type: string;
+    period?: string;
+    date: string;
+    amount: number;
+    settledAmount?: number;
+    settlementStatus?: SettlementStatus;
+  }[];
   totals: { totalCharges: number };
 }
 
@@ -34,8 +46,37 @@ async function fetchMaintenanceRecords(): Promise<MaintenanceBookData> {
   const body: LedgerResponse = await res.json();
   const rows = body.entries
     .filter((e) => e.type === 'SYSTEM')
-    .map((e) => ({ id: e.id, period: e.period ?? '', date: e.date, amount: e.amount }));
+    .map((e) => ({
+      id: e.id,
+      period: e.period ?? '',
+      date: e.date,
+      amount: e.amount,
+      settledAmount: e.settledAmount ?? 0,
+      settlementStatus: e.settlementStatus ?? 'UNPAID',
+    }));
   return { rows, totalMaintenanceAmount: body.totals.totalCharges };
+}
+
+const STATUS_META: Record<SettlementStatus, { className: string; label: string }> = {
+  PAID: { className: 'bg-teal-light text-teal', label: 'Paid' },
+  PARTIALLY_SETTLED: { className: 'bg-amber-light text-brass', label: 'Partially settled' },
+  UNPAID: { className: 'bg-coral-light text-coral', label: 'Unpaid' },
+};
+
+function SettlementBadge({ row }: { row: MaintenanceRow }) {
+  const meta = STATUS_META[row.settlementStatus];
+  return (
+    <div className="inline-flex flex-col items-end gap-0.5">
+      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+        {meta.label}
+      </span>
+      {row.settlementStatus === 'PARTIALLY_SETTLED' && (
+        <span className="font-mono-brand text-[11px] text-muted">
+          ₹{row.settledAmount.toLocaleString('en-IN')} of ₹{row.amount.toLocaleString('en-IN')}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function periodLabel(period: string): string {
@@ -73,11 +114,11 @@ function SortableHeader({
 }
 
 // SYSTEM-charges-only view — the resident-view restructure's "Maintenance Book" nav
-// item, sibling to the Dashboard (which shows Deposit rows only). "Status" is
-// a static label, not a real column: a MaintenanceRecord has no per-row status
-// anymore (dropped in the ledger pivot — every charge is always implicitly
-// "Approved", see CLAUDE.md's data-model summary). Lifetime view, no year concept —
-// only the date-range filter narrows what's shown.
+// item, sibling to the Dashboard (which shows Deposit rows only). "Status" is a real,
+// per-record Unpaid/Partially settled/Paid badge — derived server-side by FIFO-filling
+// the flat's approved deposits across its records oldest-first (see CLAUDE.md's
+// settlement-tracking addendum; ledger.service.ts's computeRecordSettlements). Lifetime
+// view, no year concept — only the date-range filter narrows what's shown.
 export function MaintenanceBookPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-maintenance-records'],
@@ -132,11 +173,7 @@ export function MaintenanceBookPage() {
         id: 'status',
         header: 'Status',
         meta: { align: 'right' },
-        cell: () => (
-          <span className="inline-block rounded-full bg-teal-light px-2.5 py-1 text-xs font-semibold text-teal">
-            Approved
-          </span>
-        ),
+        cell: ({ row }) => <SettlementBadge row={row.original} />,
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps

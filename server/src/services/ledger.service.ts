@@ -1,4 +1,4 @@
-import type { ProofStatus, Role } from '../generated/prisma/client';
+import type { LedgerType, ProofStatus, Role } from '../generated/prisma/client';
 import { prisma } from '../db';
 import { getStorageAdapter } from '../lib/storage';
 import { buildUpiDeepLink, generateQrDataUrl } from '../lib/upi';
@@ -43,30 +43,88 @@ export class NoOpenPaymentIntentError extends Error {
 export interface FlatBalances {
   totalCharges: number;
   approvedDeposits: number;
+  approvedCredits: number;
   outstanding: number;
+  availableCredit: number;
 }
 
-// The core formula: only APPROVED Deposits count. SYSTEM charges (MaintenanceRecord)
+// The core formula: only APPROVED rows count. SYSTEM charges (MaintenanceRecord)
 // are always implicitly "Approved" — every one contributes to totalCharges
 // unconditionally. PENDING/REJECTED LedgerEntry rows stay visible in the resident's
-// dashboard for transparency but are excluded from the running total. Pure/DB-free
+// dashboard for transparency but are excluded from the running totals. Pure/DB-free
 // so callers who already have the rows in hand (e.g. admin-dashboard.service.ts,
 // computing every flat in a society from two bulk queries rather than N+1) can reuse
-// the exact same formula without a redundant per-flat query. Credit was removed
-// from this system entirely (2026-08-07) — there is no separate "Payable" anymore,
-// Outstanding is directly the amount due.
+// the exact same formula without a redundant per-flat query.
+//
+// Credit re-introduced (2026-08-07, same day it was removed) in a different shape
+// than before — see CLAUDE.md's "Credit re-introduced" addendum. It's no longer a
+// separately-netted "Credit balance" (the old `Payable = Outstanding - Credit`
+// split); Deposit and Credit money is simply pooled together — `outstanding`
+// subtracts both, and `availableCredit` is just the *other side* of the same
+// subtraction: whichever of (money owed) or (money paid in excess) is positive.
+// Exactly one of `outstanding`/`availableCredit` is ever nonzero at a time.
 export function balancesFromRows(
   records: { amount: unknown }[],
-  entries: { status: ProofStatus; amount: unknown }[],
+  entries: { type: LedgerType; status: ProofStatus; amount: unknown }[],
 ): FlatBalances {
   const totalCharges = records.reduce((sum, r) => sum + Number(r.amount), 0);
   const approvedDeposits = entries
-    .filter((e) => e.status === 'APPROVED')
+    .filter((e) => e.type === 'DEPOSIT' && e.status === 'APPROVED')
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+  const approvedCredits = entries
+    .filter((e) => e.type === 'CREDIT' && e.status === 'APPROVED')
     .reduce((sum, e) => sum + Number(e.amount), 0);
 
-  const outstanding = Math.max(0, totalCharges - approvedDeposits);
+  const approvedFunds = approvedDeposits + approvedCredits;
+  const outstanding = Math.max(0, totalCharges - approvedFunds);
+  const availableCredit = Math.max(0, approvedFunds - totalCharges);
 
-  return { totalCharges, approvedDeposits, outstanding };
+  return { totalCharges, approvedDeposits, approvedCredits, outstanding, availableCredit };
+}
+
+export type RecordSettlementStatus = 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID';
+
+export interface RecordSettlement {
+  settledAmount: number;
+  status: RecordSettlementStatus;
+}
+
+// Per-record settlement, derived fresh every call rather than stored on
+// MaintenanceRecord — see CLAUDE.md's settlement-tracking addendum. FIFO-fills
+// `totalApprovedFunds` (one lump sum) across `records` sorted oldest-to-newest by
+// period. This is deliberately order-independent of *which* individual rows
+// contributed or when each was approved: filling strictly from the front always
+// produces the same final per-record state for a given total, whether that total
+// arrived as one payment or ten spread over months (see the worked proof in
+// CLAUDE.md). That's what makes this safe to recompute from scratch on every read
+// instead of mutating a stored column — there's no history to replay, only the
+// current sum of approved funds and the current set of records.
+//
+// Since 2026-08-07's Credit re-introduction, `totalApprovedFunds` is always
+// `approvedDeposits + approvedCredits` (FlatBalances) — this function itself has no
+// idea Deposit vs Credit even exists, and doesn't need to: money is money once it's
+// summed (see CLAUDE.md's "Credit re-introduced" addendum, and the credit spec's own
+// Case 10 — "the engine doesn't care whether the ₹800 came from one source or a mix
+// of payment + credit"). This is also exactly what makes Case 9 (available credit
+// auto-consumed by a newly-generated record) work with no extra code: rerunning this
+// same fill against a larger record set naturally lands leftover funds on the new
+// record.
+export function computeRecordSettlements(
+  records: { id: string; period: string; amount: unknown }[],
+  totalApprovedFunds: number,
+): Map<string, RecordSettlement> {
+  const sorted = [...records].sort((a, b) => a.period.localeCompare(b.period));
+  let remainingPaise = Math.round(totalApprovedFunds * 100);
+  const result = new Map<string, RecordSettlement>();
+  for (const r of sorted) {
+    const amountPaise = Math.round(Number(r.amount) * 100);
+    const settledPaise = Math.max(0, Math.min(remainingPaise, amountPaise));
+    remainingPaise -= settledPaise;
+    const status: RecordSettlementStatus =
+      settledPaise <= 0 ? 'UNPAID' : settledPaise >= amountPaise ? 'PAID' : 'PARTIALLY_SETTLED';
+    result.set(r.id, { settledAmount: settledPaise / 100, status });
+  }
+  return result;
 }
 
 function maintenanceRecordYearFilter(year?: number) {
@@ -90,7 +148,7 @@ export async function computeFlatBalances(flatId: string, year?: number): Promis
     }),
     prisma.ledgerEntry.findMany({
       where: { flatId, ...ledgerEntryYearFilter(year) },
-      select: { status: true, amount: true },
+      select: { type: true, status: true, amount: true },
     }),
   ]);
   return balancesFromRows(records, entries);
@@ -98,13 +156,18 @@ export async function computeFlatBalances(flatId: string, year?: number): Promis
 
 export interface LedgerRow {
   id: string;
-  type: 'SYSTEM' | 'DEPOSIT';
+  type: 'SYSTEM' | LedgerType;
   period?: string;
   date: string;
   payer: string;
   amount: number;
   status: 'APPROVED' | ProofStatus;
   note?: string | null;
+  // Only set on SYSTEM rows — the derived per-record settlement (see
+  // computeRecordSettlements above). Undefined on DEPOSIT rows, which have no
+  // concept of being "settled" themselves.
+  settledAmount?: number;
+  settlementStatus?: RecordSettlementStatus;
 }
 
 export interface LedgerForResident {
@@ -122,7 +185,7 @@ function availableYearsFromRows(records: { period: string }[], entries: { create
 }
 
 // The resident's Dashboard — MaintenanceRecord rows (SYSTEM, always "Approved")
-// merged with the flat's LedgerEntry rows (Deposit, real status), newest first.
+// merged with the flat's LedgerEntry rows (Deposit/Credit, real status), newest first.
 // Never stored as a union — computed fresh from both tables every time. `year`
 // scopes the returned `entries` to a calendar year; omitted returns every row ever
 // (what Maintenance Book relies on when showing full history). Two separate totals
@@ -146,8 +209,15 @@ export async function getLedgerForResident(flatId: string, year?: number): Promi
   const yearTotals = year ? balancesFromRows(records, entries) : totals;
   const availableYears = availableYearsFromRows(allRecords, allEntries);
 
+  // Always derived from the *lifetime* record set and the *lifetime* approved funds
+  // (deposits + credits — never the year-filtered `records`/`yearTotals`) — a
+  // record's settlement depends on its position in the flat's full oldest-to-newest
+  // history, not on whichever year the resident happens to be browsing.
+  const settlements = computeRecordSettlements(allRecords, totals.approvedDeposits + totals.approvedCredits);
+
   const systemRows: LedgerRow[] = records.map((r) => {
     const [recordYear, recordMonth] = r.period.split('-').map(Number);
+    const settlement = settlements.get(r.id);
     return {
       id: r.id,
       type: 'SYSTEM',
@@ -156,12 +226,14 @@ export async function getLedgerForResident(flatId: string, year?: number): Promi
       payer: r.payerType === 'OWNER' ? 'Owner' : 'Tenant',
       amount: Number(r.amount),
       status: 'APPROVED',
+      settledAmount: settlement?.settledAmount ?? 0,
+      settlementStatus: settlement?.status ?? 'UNPAID',
     };
   });
 
   const ledgerRows: LedgerRow[] = entries.map((e) => ({
     id: e.id,
-    type: 'DEPOSIT',
+    type: e.type,
     date: e.createdAt.toISOString(),
     payer: 'You',
     amount: Number(e.amount),
@@ -251,6 +323,7 @@ export async function submitPaymentIntent(
       data: {
         flatId,
         payerId,
+        type: 'DEPOSIT',
         status: 'PENDING',
         amount: intent.amount,
         note: 'UPI payment - awaiting review',
@@ -310,6 +383,7 @@ export async function createDeposit(payerId: string, flatId: string, societyId: 
       data: {
         flatId,
         payerId,
+        type: 'DEPOSIT',
         status: 'PENDING',
         amount: input.amount,
         note: 'UPI payment - awaiting review',
@@ -330,18 +404,77 @@ export async function createDeposit(payerId: string, flatId: string, societyId: 
   });
 }
 
+export interface CreateCreditInput {
+  amount: number;
+  note: string;
+  file: ProofFileInput;
+}
+
+// Credit re-introduced (2026-08-07) — a committee-approved adjustment (e.g. a repair
+// cost the owner wants settled against maintenance), resident-submitted like a
+// Deposit but validated differently: `amount > 0` only, **not** capped at Outstanding
+// (a resident can request more credit than they currently owe — the excess becomes
+// availableCredit once approved, see balancesFromRows). `note` is required — unlike a
+// Deposit's amount+screenshot (self-explanatory), an arbitrary discretionary
+// adjustment needs a reason for the committee to actually evaluate it. **`file` is
+// also required** (2026-08-07, later same day) — unlike a Deposit's optional
+// screenshot, a Credit's proof (receipt, invoice, photo of the repair) is the
+// committee's only independent evidence for an amount that isn't otherwise
+// verifiable the way a UPI payment is. Starts PENDING, with zero effect on any
+// balance until an admin approves it (rule: a pending credit request never moves
+// Outstanding/availableCredit).
+export async function createCredit(payerId: string, flatId: string, societyId: string, input: CreateCreditInput) {
+  if (!(input.amount > 0)) throw new InvalidAmountError();
+
+  const saved = await getStorageAdapter().save({
+    buffer: input.file.buffer,
+    societyId,
+    extension: input.file.extension,
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const entry = await tx.ledgerEntry.create({
+      data: {
+        flatId,
+        payerId,
+        type: 'CREDIT',
+        status: 'PENDING',
+        amount: input.amount,
+        note: input.note,
+        fileUrl: saved.key,
+        mimeType: input.file.mimeType,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: payerId,
+        action: 'SUBMIT_CREDIT',
+        entityType: 'LedgerEntry',
+        entityId: entry.id,
+        note: input.note,
+      },
+    });
+    return entry;
+  });
+}
+
 const LEDGER_ENTRY_LIST_INCLUDE = {
   payer: { select: { id: true, name: true, email: true } },
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;
 
-// Admin review queue — optionally filtered by status (defaults to every entry,
-// though the frontend queue only ever asks for PENDING).
-export async function listPendingLedgerEntries(societyId: string, filters: { status?: ProofStatus } = {}) {
+// Admin review queue — optionally filtered by status and/or type (defaults to every
+// entry; the frontend queue asks for PENDING, optionally further narrowed by type
+// now that there's something to distinguish again post-Credit-reintroduction).
+export async function listPendingLedgerEntries(
+  societyId: string,
+  filters: { status?: ProofStatus; type?: LedgerType } = {},
+) {
   return prisma.ledgerEntry.findMany({
     where: {
       flat: { societyId },
       ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.type ? { type: filters.type } : {}),
     },
     include: LEDGER_ENTRY_LIST_INCLUDE,
     orderBy: { createdAt: 'desc' },
@@ -349,8 +482,9 @@ export async function listPendingLedgerEntries(societyId: string, filters: { sta
 }
 
 // Approve/reject a single LedgerEntry row directly — much simpler than the pre-pivot
-// PaymentProof flow, since a Deposit is never linked to specific MaintenanceRecords
-// (payment is against the aggregate balance).
+// PaymentProof flow, since a Deposit/Credit is never linked to specific
+// MaintenanceRecords (settlement is computed against the aggregate, see
+// computeRecordSettlements).
 export async function approveLedgerEntry(id: string, societyId: string, adminId: string) {
   const entry = await prisma.ledgerEntry.findFirst({ where: { id, flat: { societyId } } });
   if (!entry) return null;
@@ -365,7 +499,7 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: 'APPROVE_DEPOSIT',
+        action: entry.type === 'DEPOSIT' ? 'APPROVE_DEPOSIT' : 'APPROVE_CREDIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: `Amount ${entry.amount}`,
@@ -389,7 +523,7 @@ export async function rejectLedgerEntry(id: string, societyId: string, adminId: 
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: 'REJECT_DEPOSIT',
+        action: entry.type === 'DEPOSIT' ? 'REJECT_DEPOSIT' : 'REJECT_CREDIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: reason ?? `Amount ${entry.amount} rejected`,
@@ -414,6 +548,7 @@ export async function manualDeposit(societyId: string, adminId: string, flatId: 
       data: {
         flatId,
         payerId: flat.currentTenantId ?? flat.ownerId,
+        type: 'DEPOSIT',
         status: 'APPROVED',
         amount,
         note: 'Manual deposit (cash/bank transfer)',

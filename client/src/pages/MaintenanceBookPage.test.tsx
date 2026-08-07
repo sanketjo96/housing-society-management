@@ -19,12 +19,37 @@ function renderPage() {
 // Amounts deliberately don't correlate with date order, so a test asserting
 // amount-sorted output can't accidentally pass just because it matches date order.
 // totals.totalCharges (6500) intentionally excludes the DEPOSIT row (4000) — only
-// SYSTEM charges count toward it.
+// SYSTEM charges count toward it. settlementStatus/settledAmount mix all three states
+// so the badge/amount rendering can be asserted per-row.
 const ledger = {
   entries: [
-    { id: 'sys-1', type: 'SYSTEM', period: '2026-01', date: '2026-01-01T00:00:00.000Z', amount: 1500 },
-    { id: 'sys-2', type: 'SYSTEM', period: '2026-03', date: '2026-03-01T00:00:00.000Z', amount: 2000 },
-    { id: 'sys-3', type: 'SYSTEM', period: '2026-02', date: '2026-02-01T00:00:00.000Z', amount: 3000 },
+    {
+      id: 'sys-1',
+      type: 'SYSTEM',
+      period: '2026-01',
+      date: '2026-01-01T00:00:00.000Z',
+      amount: 1500,
+      settledAmount: 1500,
+      settlementStatus: 'PAID',
+    },
+    {
+      id: 'sys-2',
+      type: 'SYSTEM',
+      period: '2026-03',
+      date: '2026-03-01T00:00:00.000Z',
+      amount: 2000,
+      settledAmount: 0,
+      settlementStatus: 'UNPAID',
+    },
+    {
+      id: 'sys-3',
+      type: 'SYSTEM',
+      period: '2026-02',
+      date: '2026-02-01T00:00:00.000Z',
+      amount: 3000,
+      settledAmount: 900,
+      settlementStatus: 'PARTIALLY_SETTLED',
+    },
     { id: 'dep-1', type: 'DEPOSIT', date: '2026-06-18T00:00:00.000Z', amount: 4000 },
   ],
   totals: { totalCharges: 6500 },
@@ -56,7 +81,7 @@ describe('MaintenanceBookPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows only SYSTEM charges, not Deposit/Credit rows, all with a static Approved status', async () => {
+  it('shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
     mockFetch();
     renderPage();
 
@@ -64,7 +89,11 @@ describe('MaintenanceBookPage', () => {
     expect(screen.getByText('Jan 2026')).toBeInTheDocument();
     expect(screen.getByText('Feb 2026')).toBeInTheDocument();
     expect(screen.queryByText('₹4,000')).not.toBeInTheDocument(); // the DEPOSIT row's amount
-    expect(screen.getAllByText('Approved').length).toBe(3);
+
+    expect(screen.getByText('Paid')).toBeInTheDocument(); // Jan, fully settled
+    expect(screen.getByText('Unpaid')).toBeInTheDocument(); // Mar, untouched
+    expect(screen.getByText('Partially settled')).toBeInTheDocument(); // Feb
+    expect(screen.getByText('₹900 of ₹3,000')).toBeInTheDocument(); // Feb's settled-so-far
   });
 
   it('sorts by date descending by default, newest first', async () => {

@@ -1,6 +1,6 @@
 import { prisma } from '../db';
 import { buildEscalationMessage, DEFAULT_GRACE_PERIOD_DAYS, isOverdue } from '../lib/escalation';
-import { balancesFromRows } from './ledger.service';
+import { balancesFromRows, computeRecordSettlements } from './ledger.service';
 import { listFlats } from './flats.service';
 
 type FlatWithResidents = Awaited<ReturnType<typeof listFlats>>[number];
@@ -23,7 +23,7 @@ async function getBalancesByFlat(societyId: string) {
     prisma.maintenanceRecord.findMany({ where: { flat: { societyId } }, select: { flatId: true, amount: true } }),
     prisma.ledgerEntry.findMany({
       where: { flat: { societyId } },
-      select: { flatId: true, status: true, amount: true },
+      select: { flatId: true, type: true, status: true, amount: true },
     }),
   ]);
 
@@ -102,14 +102,17 @@ export interface FlaggedFlat {
 }
 
 // Task 8.4 — rule 8's escalation. A Deposit is not tied to specific charges (payment
-// is against the aggregate balance), so there's no per-charge paid/unpaid state to
-// check directly. A flat is flagged when it still has something Outstanding AND its
-// OLDEST SYSTEM charge's dueDate is past dueDate + gracePeriodDays (default 7,
-// CLAUDE.md's confirmed decision; query-param overridable) — the natural
-// generalization of "you still owe money and your oldest bill has been sitting a
-// while." outstandingTotal is the flat's full Outstanding (rule 8's "computes
-// outstanding total... across all that flat's unpaid records"), not just whatever
-// portion happens to be technically overdue.
+// is against the aggregate balance), but a MaintenanceRecord's own settlement state
+// *is* derivable (computeRecordSettlements, ledger.service.ts's FIFO fill against the
+// flat's approved-deposit total) — so "oldest charge" means the oldest record that
+// isn't fully PAID yet, not just the oldest record overall. A flat that has already
+// settled its oldest few months but still owes newer ones must be judged against the
+// newer, still-open month's due date, not a stale already-paid one. A flat is flagged
+// when it still has something Outstanding AND that oldest-unsettled charge's dueDate
+// is past dueDate + gracePeriodDays (default 7, CLAUDE.md's confirmed decision;
+// query-param overridable). outstandingTotal is the flat's full Outstanding (rule 8's
+// "computes outstanding total... across all that flat's unpaid records"), not just
+// whatever portion happens to be technically overdue.
 export async function getFlaggedFlats(
   societyId: string,
   gracePeriodDays: number = DEFAULT_GRACE_PERIOD_DAYS,
@@ -118,25 +121,32 @@ export async function getFlaggedFlats(
   const byFlat = await getBalancesByFlat(societyId);
   const records = await prisma.maintenanceRecord.findMany({
     where: { flat: { societyId } },
-    select: { flatId: true, dueDate: true },
+    select: { id: true, flatId: true, period: true, amount: true, dueDate: true },
   });
 
   const now = new Date();
-  const dueDatesByFlat = new Map<string, Date[]>();
-  for (const r of records) dueDatesByFlat.set(r.flatId, [...(dueDatesByFlat.get(r.flatId) ?? []), r.dueDate]);
+  const recordsByFlat = new Map<string, typeof records>();
+  for (const r of records) recordsByFlat.set(r.flatId, [...(recordsByFlat.get(r.flatId) ?? []), r]);
 
   const flagged: FlaggedFlat[] = [];
   for (const { flat, balances } of byFlat) {
     if (balances.outstanding <= 0) continue;
-    const dueDates = dueDatesByFlat.get(flat.id) ?? [];
-    if (dueDates.length === 0) continue;
-    const oldestDueDate = dueDates.reduce((oldest, d) => (d < oldest ? d : oldest));
+    const flatRecords = recordsByFlat.get(flat.id) ?? [];
+    if (flatRecords.length === 0) continue;
+
+    const settlements = computeRecordSettlements(flatRecords, balances.approvedDeposits + balances.approvedCredits);
+    const unsettled = flatRecords
+      .filter((r) => settlements.get(r.id)?.status !== 'PAID')
+      .sort((a, b) => a.period.localeCompare(b.period));
+    // balances.outstanding > 0 guarantees at least one non-PAID record exists — the
+    // FIFO fill can never mark every record PAID while approvedDeposits < totalCharges.
+    const oldestUnsettled = unsettled[0]!;
+    const oldestDueDate = oldestUnsettled.dueDate;
     if (!isOverdue(oldestDueDate, gracePeriodDays, now)) continue;
-    // How many months' SYSTEM charges have passed their due date, by calendar time —
-    // there's no per-charge paid/unpaid state to count any more under the ledger
-    // model (payment is against the aggregate, not specific months), but this is
-    // still a meaningful "how overdue is this flat" signal for the admin.
-    const overdueRecordCount = dueDates.filter((d) => isOverdue(d, gracePeriodDays, now)).length;
+    // How many still-open (not fully settled) months have passed their due date — a
+    // month that's already PAID off, even if its due date is technically in the past,
+    // isn't part of "how overdue is this flat" from the admin's perspective.
+    const overdueRecordCount = unsettled.filter((r) => isOverdue(r.dueDate, gracePeriodDays, now)).length;
 
     // Whoever currently occupies the flat, not whichever payerId happens to be on the
     // oldest charge — a mid-history tenant swap could otherwise name someone who has

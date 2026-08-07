@@ -26,12 +26,22 @@ enum PayerType {
 }
 
 // Shared PENDING/APPROVED/REJECTED review status — originally PaymentProof's status,
-// now reused by LedgerEntry (Deposit rows) after the ledger pivot (see CLAUDE.md's
-// "Pivot (2026-08-06): resident view moves to a transaction ledger").
+// now reused by LedgerEntry (Deposit/Credit rows) after the ledger pivot (see
+// CLAUDE.md's "Pivot (2026-08-06): resident view moves to a transaction ledger").
 enum ProofStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+// Re-added 2026-08-07 (same day as its removal) — see CLAUDE.md's "Credit
+// re-introduced" addendum. DEPOSIT = a resident's UPI payment, capped at Outstanding
+// when created. CREDIT = a committee-approved adjustment (e.g. a repair cost the
+// owner wants settled against maintenance), NOT capped — see
+// ledger.service.ts's createCredit.
+enum LedgerType {
+  DEPOSIT
+  CREDIT
 }
 
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
@@ -223,12 +233,18 @@ model MaintenanceRecord {
   @@index([payerId])
 }
 
-// A resident-created Deposit row (a UPI payment, pending admin review). SYSTEM
-// charges are NOT stored here — they remain MaintenanceRecord rows, always
-// implicitly "Approved" (see below). Credit was removed from this system entirely
-// (2026-08-07) — LedgerEntry only ever represents a Deposit now.
+// A resident-created Deposit or Credit row. SYSTEM charges are NOT stored here —
+// they remain MaintenanceRecord rows, always implicitly "Approved" (see below).
+// Credit was removed on 2026-08-07, then re-introduced the same day in a different
+// shape (allocation-based, not a separate netted balance) — see CLAUDE.md's "Credit
+// re-introduced" addendum. `type` distinguishes the two: a DEPOSIT is capped at the
+// flat's Outstanding when created; a CREDIT is not. Both are summed together once
+// APPROVED for balance/settlement purposes (ledger.service.ts) — `type` only matters
+// at creation-time validation and for admin/audit display, never in the balance math
+// itself.
 model LedgerEntry {
   id     String      @id @default(cuid())
+  type   LedgerType
   amount Decimal     @db.Decimal(10, 2)
   status ProofStatus @default(PENDING)
   note   String?

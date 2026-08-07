@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getMyFlat } from '../services/flats.service';
 import {
   cancelPaymentIntent,
+  createCredit,
   createDeposit,
   createOrReplacePaymentIntent,
   ForbiddenLedgerEntryAccessError,
@@ -173,6 +174,44 @@ export async function createDepositHandler(req: Request, res: Response) {
       file: req.file
         ? { buffer: req.file.buffer, mimeType: req.file.mimetype, extension: path.extname(req.file.originalname) }
         : undefined,
+    });
+    res.status(201).json(entry);
+  } catch (err) {
+    if (amountErrorResponse(res, err)) return;
+    throw err;
+  }
+}
+
+const creditSchema = z.object({ amount: z.coerce.number().positive(), note: z.string().min(1) });
+
+export async function createCreditHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const parsed = creditSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
+  const flatId = await resolveMyFlatId(req.user.id, req.user.societyId, req.user.role as 'OWNER' | 'TENANT');
+  if (!flatId) {
+    res.status(404).json({ error: 'No flat associated with your account' });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: 'A proof attachment is required' });
+    return;
+  }
+
+  try {
+    const entry = await createCredit(req.user.id, flatId, req.user.societyId, {
+      amount: parsed.data.amount,
+      note: parsed.data.note,
+      file: { buffer: req.file.buffer, mimeType: req.file.mimetype, extension: path.extname(req.file.originalname) },
     });
     res.status(201).json(entry);
   } catch (err) {

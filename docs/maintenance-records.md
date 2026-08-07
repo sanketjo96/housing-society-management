@@ -96,11 +96,18 @@ cron's own run would have been.
 
 > **Pivot note (2026-08-06)**: Task 4.5's `GET /api/me/maintenance-records` (below, for
 > history) is **replaced** by `GET /api/me/ledger`, which merges these same records
-> (rendered as always-"Approved" SYSTEM rows) with the flat's `LedgerEntry` rows and
-> returns the three running balances — see `docs/payments.md` and `CLAUDE.md`'s ledger
-> pivot note. `getMaintenanceRecordsForPayer` (the underlying query, `payerId ===
-> req.user.id`, newest period first) still exists as an internal building block
-> `ledger.service.ts` calls; it's no longer exposed as its own top-level route.
+> (rendered as SYSTEM rows, `status: 'APPROVED'` always) with the flat's `LedgerEntry`
+> rows and returns the three running balances — see `docs/payments.md` and
+> `CLAUDE.md`'s ledger pivot note. `getMaintenanceRecordsForPayer` (the underlying
+> query, `payerId === req.user.id`, newest period first) still exists as an internal
+> building block `ledger.service.ts` calls; it's no longer exposed as its own
+> top-level route.
+>
+> **Addendum (2026-08-07)**: each SYSTEM row also carries a derived
+> `settlementStatus` (`UNPAID`/`PARTIALLY_SETTLED`/`PAID`) and `settledAmount` — see
+> `docs/payments.md`'s "Settlement status" section. `status: 'APPROVED'` (the
+> LedgerEntry-review vocabulary) is unrelated and unchanged; `settlementStatus` is the
+> new field to read for per-month payment state.
 
 ## Admin view — `GET /api/admin/maintenance-records`
 
@@ -108,8 +115,9 @@ Task 4.6 (absorbed the dissolved Task 5.5's dues-summary concern — see `CLAUDE
 pivot note). Every record in the society, each with `flat` and `payer` summaries.
 **Optional query filters**: `period` (`YYYY-MM`), `flatId`. No pagination — a 24-flat
 MVP generates at most 24 records/month, correctness over scale (`CLAUDE.md`). **No
-`status` filter any more** (2026-08-06 ledger pivot) — every record is always
-"Approved"; payment state lives on `LedgerEntry`, not here.
+`status` filter any more** (2026-08-06 ledger pivot) — this endpoint's own rows are
+always "Approved" (`ProofStatus` sense); per-record settlement status is only computed
+by `GET /api/me/ledger` (2026-08-07 addendum), not exposed here.
 
 ## Admin settings — `GET`/`PATCH /api/admin/settings`
 
@@ -154,9 +162,16 @@ Task 4.7 originally built `MaintenancePage.tsx` as a read-only "Passbook" tab (s
 Phase 6). The 2026-08-06 ledger pivot replaced it with `PassbookPage.tsx` — three
 summary cards (Outstanding/Credit balance/Payable), Pay and Add credit actions, and
 the full merged ledger table. Later split into `ResidentDashboardOverview.tsx`
-(Deposit-only ledger, a single Outstanding card, Pay) and `MaintenanceBookPage.tsx`
-(SYSTEM charges only); Credit was removed from the product entirely on 2026-08-07.
-See `docs/payments.md` for the current pages.
+(Deposit/Credit ledger, Pay, Add credit) and `MaintenanceBookPage.tsx` (SYSTEM charges
+only). Credit was removed from the product entirely on 2026-08-07, then re-introduced
+the same day in a different (allocation-based, not separately-netted) shape — see
+`CLAUDE.md`'s "Credit re-introduced" addendum — so `ResidentDashboardOverview.tsx`
+once again shows an Available Credit card and an Add-credit button, and its ledger
+table's Type column is back too. `MaintenanceBookPage.tsx`'s "Status" column, briefly a
+static "Approved" badge once `MaintenanceRecord.status` was dropped, is a real
+per-record Unpaid/Partially settled/Paid badge again as of 2026-08-07 — derived, not
+stored, from `approvedDeposits + approvedCredits`; see `docs/payments.md`'s
+"Settlement status" section. See `docs/payments.md` for the current pages.
 
 ## Manually verified against the real running stack
 
