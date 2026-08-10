@@ -3,7 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 
 // staleTime > 0 so switching Dashboard tabs (which mount/unmount their content) doesn't
 // re-fetch on every switch — data from the last 30s is treated as fresh. Any mutation
@@ -19,6 +21,8 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route
               path="/dashboard"
               element={

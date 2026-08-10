@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { Building2, Lock, Mail } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ErrorBanner } from '../components/FormField';
 import { useAuth } from '../context/AuthContext';
@@ -119,6 +119,9 @@ export function LoginPage() {
                 <label htmlFor="password" className="text-xs font-semibold text-muted">
                   Password
                 </label>
+                <Link to="/forgot-password" className="text-xs font-semibold text-teal">
+                  Forgot password?
+                </Link>
               </div>
               <div className="flex items-center gap-2 rounded-lg border border-line px-3 focus-within:border-teal">
                 <Lock size={15} className="shrink-0 text-muted" />
