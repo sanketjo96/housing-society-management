@@ -157,7 +157,16 @@ not built here. `docs/payments.md` has the full detail.
 
 ## Phase 7 — Notifications (email only)
 
-- [ ] 7.1 EmailProvider interface and implementation
+- [x] 7.1 EmailProvider interface and implementation (`src/lib/email` — `console`
+      default/dev-test, `resend` real send via the Resend API; `sendgrid` named as an
+      extension point, not implemented). Wired into `password-reset.service.ts`
+      (replaces the old `sendResetEmailStub`), which every caller of
+      `requestPasswordReset()` already goes through — Task 2.4's reset flow, the
+      2026-08-06 resident self-service tenant flow, and the same-day admin
+      flat-onboarding flow all now send real email automatically, no changes needed at
+      those call sites. `docs/auth.md`'s "Email (Phase 7, now built)" section has the
+      full contract. 7.2–7.6 below (the other notification triggers) are still
+      unbuilt — this only covers the send mechanism + its one existing consumer.
 - [ ] 7.2 Maintenance-record-generated notification (was: invoice-generated)
 - [ ] 7.3 Proof-submitted admin notification
 - [ ] 7.4 Proof approved/rejected resident notification

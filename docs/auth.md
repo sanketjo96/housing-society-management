@@ -240,14 +240,34 @@ model PasswordResetToken {
   (industry-typical range is 15 minutes–1 hour), so 1 hour errs toward the longer,
   more forgiving end while still being far tighter than a session token.
 
-### Email isn't built yet (Phase 7) — this task explicitly anticipates that
+### Email (Phase 7, now built): swappable `EmailProvider`, Resend by default
 
-The task's own precheck says: *"if Phase 7 (email) isn't done yet, stub the send and
-log the token instead."* `sendResetEmailStub()` in the service does exactly that —
-`console.log`s the token with a `TODO(Phase 7)` comment marking where a real
-`EmailProvider.send()` call replaces it once Task 7.1 exists. The function signature
-(`requestPasswordReset(email): Promise<string | null>`) doesn't need to change when
-that happens — only what happens with the returned token inside it.
+The task's own precheck originally said: *"if Phase 7 (email) isn't done yet, stub the
+send and log the token instead."* That stub (`sendResetEmailStub()`, a bare
+`console.log`) has been replaced with a real send through `src/lib/email`'s
+`EmailProvider` interface — the same "one env var picks the implementation" shape
+`src/lib/storage`'s `StorageAdapter` already established for payment proofs.
+`getEmailProvider()` (`src/lib/email/index.ts`) switches on `EMAIL_PROVIDER`:
+
+- **`console`** (default, unset also falls here) — logs instead of sending. What
+  `sendResetEmailStub` used to do inline; kept as the dev/test default so `npm test`
+  and local `npm run dev` never need a real API key. `tests/setup.ts` relies on this
+  default — it never sets `EMAIL_PROVIDER`.
+- **`resend`** — real send via the [Resend](https://resend.com) API (free tier: 3,000
+  emails/month, 100/day, one verified domain — comfortably covers this MVP's volume).
+  Requires `RESEND_API_KEY` (from resend.com/api-keys) and `EMAIL_FROM` (must be on a
+  domain verified in that Resend account — the sandbox default `onboarding@resend.dev`
+  only delivers to the account owner's own email, not real residents).
+- **`sendgrid`** — named as the documented alternative (`CLAUDE.md`'s tech-stack
+  table) but not implemented; throws a clear error pointing at where to add it.
+
+`password-reset.service.ts`'s `requestPasswordReset(email): Promise<string | null>`
+signature didn't change — only what happens with the token inside it did. It now
+builds the actual link the resident clicks via `buildResetUrl()`: `APP_BASE_URL` (the
+public URL the frontend is reachable at) + the client's `/reset-password?token=...`
+route (`ResetPasswordPage.tsx`), and sends it through whichever `EmailProvider` is
+configured. `APP_BASE_URL` defaults to `http://localhost` — update it once this
+deployment has a real domain (`CLAUDE.md`'s Task 10.2, still pending, adds HTTPS).
 
 **Critically, the raw token is never returned over HTTP** — `requestResetHandler`
 calls the service but discards its return value, always responding with the same
@@ -386,8 +406,9 @@ behavior — see `docs/flats.md`), or creates a new `TENANT` account if none exi
 **How a self-service-created tenant gets a working login without the owner ever
 entering a password for them**: the backend creates the `TENANT` `User` with a random,
 unusable password, then calls the *same* `requestPasswordReset()` this task already
-built (§ "Password reset" above), currently stubbed to log the reset link. The tenant
-follows that link to set their own real password and logs in normally — reuses this
-task's existing token/email mechanics rather than building a separate invite-token
-system. The identical `findOrCreateUserByEmail()` pattern was later reused by Task
-3.1/3.2's redesigned admin flat-onboarding endpoints too (`docs/flats.md`).
+built (§ "Password reset" above) — which now sends a real email via Resend (or logs
+the link, in `console` mode). The tenant follows that link to set their own real
+password and logs in normally — reuses this task's existing token/email mechanics
+rather than building a separate invite-token system. The identical
+`findOrCreateUserByEmail()` pattern was later reused by Task 3.1/3.2's redesigned
+admin flat-onboarding endpoints too (`docs/flats.md`).

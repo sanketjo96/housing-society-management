@@ -33,6 +33,15 @@ services:
       # this compose config would need to change.
       STORAGE_PROVIDER: local
       LOCAL_STORAGE_DIR: /app/uploads
+      # Phase 7's swappable EmailProvider (src/lib/email) — defaults to logging reset
+      # links instead of sending (no account needed) unless EMAIL_PROVIDER=resend and
+      # the two Resend vars below are set in the root .env. APP_BASE_URL builds the
+      # /reset-password link residents click — point it at wherever this stack is
+      # actually reachable.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
     volumes:
       - uploads_data:/app/uploads
     ports:

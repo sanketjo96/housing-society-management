@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db';
+import { getEmailProvider } from '../lib/email';
 
 export class InvalidResetTokenError extends Error {
   constructor() {
@@ -15,12 +16,30 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-// TODO(Phase 7): this "sends" the reset link by logging it — no EmailProvider exists
-// yet (Task 7.1). Replace this console.log with a real email send once it does; the
-// function's shape (returns the raw token) doesn't need to change, only what happens
-// with it here.
-function sendResetEmailStub(email: string, token: string): void {
-  console.log(`[password-reset stub] Reset link for ${email}: token=${token}`);
+// Phase 7: real send, via the swappable EmailProvider (src/lib/email) — defaults to
+// ConsoleEmailProvider (logs instead of sending) unless EMAIL_PROVIDER=resend is set,
+// so dev/test never need a real RESEND_API_KEY. Builds the link the resident actually
+// clicks: APP_BASE_URL + the client's /reset-password route (ResetPasswordPage.tsx),
+// which reads ?token= off the query string.
+function buildResetUrl(token: string): string {
+  const base = (process.env.APP_BASE_URL ?? 'http://localhost').replace(/\/$/, '');
+  return `${base}/reset-password?token=${token}`;
+}
+
+async function sendResetEmail(email: string, token: string): Promise<void> {
+  const resetUrl = buildResetUrl(token);
+  await getEmailProvider().send({
+    to: email,
+    subject: 'Reset your password',
+    text:
+      `We received a request to reset your password. This link expires in ` +
+      `${RESET_TOKEN_TTL_MINUTES} minutes:\n\n${resetUrl}\n\n` +
+      `If you didn't request this, you can ignore this email.`,
+    html:
+      `<p>We received a request to reset your password. This link expires in ` +
+      `${RESET_TOKEN_TTL_MINUTES} minutes:</p><p><a href="${resetUrl}">${resetUrl}</a></p>` +
+      `<p>If you didn't request this, you can ignore this email.</p>`,
+  });
 }
 
 // Returns null (not an error) for an email that doesn't exist — the controller
@@ -38,7 +57,7 @@ export async function requestPasswordReset(email: string): Promise<string | null
     data: { tokenHash: hashToken(token), userId: user.id, expiresAt },
   });
 
-  sendResetEmailStub(email, token);
+  await sendResetEmail(email, token);
 
   return token;
 }
