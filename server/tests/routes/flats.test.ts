@@ -169,5 +169,26 @@ describe('Flats admin endpoints', () => {
         .send({ baseRate: -5 });
       expect(res.status).toBe(400);
     });
+
+    // Regression: the admin edit form always sends tenantName/tenantEmail (as '')
+    // even when occupancy is 'owner' — it doesn't omit them from the payload just
+    // because they're not required in that state. A blank tenantEmail must not fail
+    // .email() validation the way a genuinely-provided malformed email should.
+    it('accepts a blank tenant payload when occupancy is owner (matches what the admin form sends)', async () => {
+      const flatId = await createTestFlat('G', '105');
+      const res = await request(app)
+        .patch(`/api/admin/flats/${flatId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          baseRate: 1650,
+          occupancy: 'owner',
+          tenantName: '',
+          tenantPhone: '',
+          tenantEmail: '',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.currentTenant).toBeNull();
+    });
   });
 });

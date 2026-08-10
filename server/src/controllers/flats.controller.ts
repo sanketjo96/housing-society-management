@@ -17,11 +17,27 @@ import {
 // Owner/tenant are contact fields (name/phone/email), not ids — createFlat/updateFlat
 // find-or-create the underlying User accounts (see CLAUDE.md's "Addition
 // (2026-08-06)"), matching the admin UI's single flat-onboarding form.
+// A blank input submits as '' (React Hook Form), not undefined — '' must be treated
+// as "not provided" here, both so the wrapped schema's own checks (.min(1), .email())
+// don't reject an intentionally empty field, and (for phone specifically) so it's
+// never written to User.phone (a @unique column) as a literal empty string, which
+// would collide with the next blank submission.
+function optionalNonEmpty<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+}
+
+const optionalPhone = optionalNonEmpty(z.string().min(1));
+
+// The admin form always sends tenantName/tenantEmail (as '') even when
+// occupancy: 'owner' — the client only requires them conditionally (FlatsListPage.tsx's
+// flatFormSchema .refine), it doesn't omit them from the payload. Without
+// optionalNonEmpty here, an owner-occupied save would fail .email()/.min(1) on that
+// blank string instead of being skipped.
 const occupancyFields = {
   occupancy: z.enum(['owner', 'tenant']).optional(),
-  tenantName: z.string().min(1).optional(),
-  tenantPhone: z.string().min(1).optional(),
-  tenantEmail: z.string().email().optional(),
+  tenantName: optionalNonEmpty(z.string().min(1)),
+  tenantPhone: optionalPhone,
+  tenantEmail: optionalNonEmpty(z.string().email()),
   effectiveFrom: z.coerce.date().optional(),
 };
 
@@ -30,7 +46,7 @@ const createFlatSchema = z.object({
   flatNumber: z.string().min(1),
   baseRate: z.coerce.number().positive(),
   ownerName: z.string().min(1),
-  ownerPhone: z.string().min(1).optional(),
+  ownerPhone: optionalPhone,
   ownerEmail: z.string().email(),
   ...occupancyFields,
 });
@@ -39,7 +55,7 @@ const updateFlatSchema = z
   .object({
     baseRate: z.coerce.number().positive(),
     ownerName: z.string().min(1),
-    ownerPhone: z.string().min(1),
+    ownerPhone: optionalPhone,
     ownerEmail: z.string().email(),
     ...occupancyFields,
   })
