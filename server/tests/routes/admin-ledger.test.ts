@@ -5,6 +5,7 @@ import { prisma } from '../../src/db';
 import { createUser } from '../../src/services/admin-users.service';
 import { createFlat } from '../../src/services/flats.service';
 import { login } from '../../src/services/auth.service';
+import { TINY_JPEG_BYTES } from '../fixtures/tiny-files';
 
 describe('/api/admin/ledger-entries*', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -94,7 +95,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '100')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(created.status).toBe(201);
 
       const res = await request(app)
@@ -118,7 +119,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
@@ -132,7 +133,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -164,7 +165,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '60')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .get(`/api/admin/ledger-entries/${created.body.id}/receipt-preview`)
@@ -182,7 +183,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '60')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -200,7 +201,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '60')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .get(`/api/ledger-entries/${created.body.id}/receipt`)
@@ -213,7 +214,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '60')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -230,7 +231,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '60')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -248,7 +249,7 @@ describe('/api/admin/ledger-entries*', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '50')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/reject`)

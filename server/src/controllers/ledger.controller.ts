@@ -160,7 +160,7 @@ export async function cancelPaymentIntentHandler(req: Request, res: Response) {
     return;
   }
 
-  await cancelPaymentIntent(flatId);
+  await cancelPaymentIntent(flatId, req.user.societyId);
   res.status(204).end();
 }
 

@@ -52,7 +52,7 @@ export function ResetPasswordPage() {
       <div className="w-full max-w-[380px] rounded-2xl border border-line bg-white p-6 shadow-sm sm:p-10">
         <div className="mb-6 flex items-center gap-2">
           <Building2 size={20} className="text-brass" />
-          <span className="font-display text-[19px] tracking-wide text-ink">Housing Society</span>
+          <span className="font-display text-[19px] tracking-wide text-ink">Saral Society</span>
         </div>
 
         {!token ? (

@@ -307,8 +307,17 @@ async function buildPaymentIntentResult(
 // Re-derives the QR/UPI link fresh every call rather than storing them on the row —
 // they're cheap/deterministic from `amount` alone, so there's nothing to keep in
 // sync, and a resident revisiting a QR on a later day still gets a valid one.
+//
+// `flat: { societyId }` on every query below (Phase 9 security-audit
+// defense-in-depth, 2026-08-12) — PaymentIntent has no direct societyId column of
+// its own, only via its Flat relation, and every caller today already pre-validates
+// `flatId` against the caller's own society (ledger.controller.ts's
+// resolveMyFlatId), so this filter is currently unreachable-but-inert. It's added
+// anyway so a future caller that ever passes a client-supplied flatId straight
+// through without going via resolveMyFlatId first fails safe (empty result) rather
+// than silently reading/mutating a different society's pending payment.
 export async function getOpenPaymentIntent(flatId: string, societyId: string): Promise<PaymentIntentResult | null> {
-  const intent = await prisma.paymentIntent.findUnique({ where: { flatId } });
+  const intent = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
   if (!intent) return null;
   return buildPaymentIntentResult(intent, societyId);
 }
@@ -328,15 +337,15 @@ export async function createOrReplacePaymentIntent(
   if (!(amount > 0) || amount > balances.outstanding) throw new InvalidDepositAmountError(balances.outstanding);
 
   const intent = await prisma.paymentIntent.upsert({
-    where: { flatId },
+    where: { flatId, flat: { societyId } },
     create: { flatId, payerId, amount },
     update: { payerId, amount, createdAt: new Date() },
   });
   return buildPaymentIntentResult(intent, societyId);
 }
 
-export async function cancelPaymentIntent(flatId: string): Promise<void> {
-  await prisma.paymentIntent.deleteMany({ where: { flatId } });
+export async function cancelPaymentIntent(flatId: string, societyId: string): Promise<void> {
+  await prisma.paymentIntent.deleteMany({ where: { flatId, flat: { societyId } } });
 }
 
 // Finalizes an open intent into a real, reviewable Deposit — same shape as
@@ -350,7 +359,7 @@ export async function submitPaymentIntent(
   societyId: string,
   file: ProofFileInput,
 ): Promise<unknown> {
-  const intent = await prisma.paymentIntent.findUnique({ where: { flatId } });
+  const intent = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
   if (!intent) throw new NoOpenPaymentIntentError();
 
   const saved = await getStorageAdapter().save({ buffer: file.buffer, societyId, extension: file.extension });

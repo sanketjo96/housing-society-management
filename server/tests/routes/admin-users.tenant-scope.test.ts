@@ -78,4 +78,32 @@ describe('GET /api/admin/users/:id — tenant scoping', () => {
       .set('Authorization', `Bearer ${adminAToken}`);
     expect(res.status).toBe(404);
   });
+
+  // Regression test for a Phase 9 security-audit finding (2026-08-12):
+  // createUserHandler used to read `societyId` straight from the request body and
+  // pass it through unchecked, letting any authenticated ADMIN provision a
+  // full-privilege account (including role: 'ADMIN') inside an arbitrary *other*
+  // society just by naming its id — a full write-side tenant-boundary bypass, not
+  // just a read leak.
+  it('ignores a client-supplied societyId when creating a user — the new user always lands in the caller\'s own society', async () => {
+    const email = `injected-${suffix}@example.com`;
+    const res = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({
+        name: 'Attempted Cross-Society Admin',
+        email,
+        password: 'password-123',
+        role: 'ADMIN',
+        societyId: societyBId, // Society A's admin tries to plant an account in Society B.
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.societyId).toBe(societyAId);
+    expect(res.body.societyId).not.toBe(societyBId);
+    createdUserIds.push(res.body.id);
+
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(stored.societyId).toBe(societyAId);
+  });
 });

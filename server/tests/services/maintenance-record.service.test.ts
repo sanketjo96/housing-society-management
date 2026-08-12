@@ -103,6 +103,30 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
     expect(Number(tenantRecord.amount)).toBe(3000);
   });
 
+  it('writes an AuditLog row for a manual-trigger (actor-attributed) generation run', async () => {
+    const period = '2026-07';
+    const flat = await prisma.flat.findUniqueOrThrow({ where: { id: ownerFlatId } });
+    await generateMaintenanceRecords(societyId, period, flat.ownerId);
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'MaintenanceRecord', entityId: period, actorId: flat.ownerId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(entry.action).toBe('GENERATE_MAINTENANCE_RECORDS');
+    expect(entry.note).toContain('Test Society');
+  });
+
+  it('writes an AuditLog row with no actor for a cron-triggered (system) generation run', async () => {
+    const period = '2026-07';
+    await generateMaintenanceRecords(societyId, period);
+
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'MaintenanceRecord', entityId: period, actorId: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(entry.action).toBe('GENERATE_MAINTENANCE_RECORDS');
+  });
+
   it('sets dueDate to 15 days after generation', async () => {
     const period = '2026-08';
     const before = Date.now();
@@ -137,6 +161,25 @@ describe('maintenance-record service — generateMaintenanceRecords', () => {
       where: { flatId_period: { flatId: otherSocietyFlatId, period } },
     });
     expect(otherRecord).toBeNull();
+  });
+
+  it('still writes an AuditLog row when a society has no flats to generate for', async () => {
+    const empty = await prisma.society.create({
+      data: { name: `Empty Society ${suffix}`, address: 'Empty St', upiVpa: 'empty@okhdfcbank' },
+    });
+    try {
+      const period = '2026-07';
+      const result = await generateMaintenanceRecords(empty.id, period);
+      expect(result).toEqual({ created: 0, skipped: 0 });
+
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { entityType: 'MaintenanceRecord', entityId: period, note: { contains: empty.name } },
+      });
+      expect(entry.action).toBe('GENERATE_MAINTENANCE_RECORDS');
+      expect(entry.note).toContain('No flats onboarded yet');
+    } finally {
+      await prisma.society.delete({ where: { id: empty.id } });
+    }
   });
 
   it('defaults to the current calendar period when none is given', () => {

@@ -8,6 +8,9 @@ import {
 } from '../controllers/society-settings.controller';
 import { requireRole } from '../middleware/require-role';
 import { signatureUpload } from '../middleware/signature-upload';
+import { verifyFileSignature } from '../middleware/verify-file-signature';
+
+const verifySignatureFileSignature = verifyFileSignature(['image/png', 'image/jpeg', 'image/webp']);
 
 export const societySettingsRouter = Router();
 societySettingsRouter.get('/api/admin/settings', requireRole(['ADMIN']), getSocietySettingsHandler);
@@ -16,6 +19,7 @@ societySettingsRouter.post(
   '/api/admin/settings/signature',
   requireRole(['ADMIN']),
   signatureUpload.single('file'),
+  verifySignatureFileSignature,
   uploadReceiptSignatureHandler,
 );
 societySettingsRouter.delete(

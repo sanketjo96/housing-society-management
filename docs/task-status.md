@@ -225,11 +225,61 @@ Full contract, the two implementation judgment calls, and manual verification:
 
 ## Phase 9 — Security & Hardening Audit
 
-- [ ] 9.1 Society-scoping audit (module list: no more "invoices")
-- [ ] 9.2 Rate limiting on auth endpoints
-- [ ] 9.3 Consistent error handling
-- [ ] 9.4 AuditLog verification (reference Tasks 4.2, 6.5, 6.6, 6.7 — not removed 5.1)
-- [ ] 9.5 File upload validation re-check
+- [x] 9.1 Society-scoping audit — reviewed every id-based Prisma query across all
+      `server/src/services/*.ts` (62 sites). Found and fixed one critical
+      cross-tenant bug: `POST /api/admin/users` accepted a client-supplied
+      `societyId`, letting any authenticated ADMIN provision a full-privilege
+      account (including another ADMIN) inside an arbitrary *other* society —
+      fixed by always using `req.user.societyId`, matching
+      `flats.controller.ts`'s `createFlatHandler` pattern. Also hardened
+      `ledger.service.ts`'s `PaymentIntent` functions with an explicit
+      `flat: { societyId }` filter as defense-in-depth (unreachable today — every
+      caller already pre-validates `flatId` — but `PaymentIntent` has no direct
+      `societyId` column of its own, only via its `Flat` relation).
+- [x] 9.2 Rate limiting on auth endpoints — `src/middleware/auth-rate-limit.ts`
+      (`express-rate-limit`), applied to `POST /api/auth/login` (10/15min) and
+      `POST /api/auth/request-reset` + `POST /api/auth/reset` (5/15min, shared
+      budget). Deliberately not applied to `/api/auth/refresh` (keyed by a
+      high-entropy httpOnly cookie, not a guessable credential; called silently on
+      every page load). Required `app.set('trust proxy', 1)` in `app.ts` so the
+      limiter keys off the real client IP, not nginx's container IP. Disabled
+      during the automated test suite (`DISABLE_RATE_LIMIT=true`,
+      `tests/setup.ts`) to avoid tripping from ordinary cross-file test traffic;
+      the real 429 behavior is verified against an isolated instance in
+      `tests/middleware/auth-rate-limit.test.ts`.
+- [x] 9.3 Consistent error handling — found and fixed a critical gap, confirmed
+      empirically: Express 4 does not catch a promise rejected by an async route
+      handler, so an uncaught throw anywhere (every controller's `throw err;`
+      fallback, plus `admin-dashboard.controller.ts`/
+      `maintenance-records.controller.ts`'s handlers, which had zero try/catch at
+      all) crashed the *entire Node process* instead of ever reaching
+      `errorHandler` — a single bad request could take the whole backend down for
+      every user. Fixed with `express-async-errors`, imported at the very top of
+      `app.ts` before any route is registered.
+- [x] 9.4 AuditLog verification — Tasks 6.5/6.6/6.7 already had coverage
+      (`ledger.service.ts`'s `APPROVE_DEPOSIT`/`APPROVE_CREDIT`/
+      `REJECT_DEPOSIT`/`REJECT_CREDIT`/`MANUAL_MARK_PAID`). Task 4.2 (monthly
+      generation) had **no audit trail at all** — fixed:
+      `generateMaintenanceRecords` now writes one `GENERATE_MAINTENANCE_RECORDS`
+      row per run (`entityId` = the period, `actorId` = the triggering admin for
+      a manual run, `null`/system for the cron), including the "no flats yet"
+      early-return case.
+- [x] 9.5 File upload validation re-check — found and fixed: `proof-upload.ts`/
+      `signature-upload.ts`'s multer `fileFilter` only ever checked the
+      client-*declared* Content-Type header, never the actual file bytes —
+      trivially spoofable, and meaningful here because uploaded files are later
+      served back with `Content-Type` set to that same stored (attacker-
+      controllable) value, and an admin routinely opens residents' "screenshots"
+      as part of the normal payment-proof review workflow. Fixed with a
+      dependency-free magic-byte sniffer (`src/lib/file-signature.ts`, checked
+      against a well-known CVE-carrying third-party library and rejected in
+      favor of a ~10-line hand-rolled check for the fixed, small set of formats
+      this app actually accepts) plus `src/middleware/verify-file-signature.ts`,
+      run after multer on every upload route; the verified (not client-declared)
+      type is what's persisted from here on. Also added a global
+      `X-Content-Type-Options: nosniff` header (`app.ts`) as defense-in-depth.
+
+Full findings, fixes, and reasoning: `docs/security-audit.md`.
 
 ## Phase 10 — Production Deployment
 

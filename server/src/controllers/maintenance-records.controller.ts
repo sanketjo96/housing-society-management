@@ -32,7 +32,7 @@ export async function generateMaintenanceRecordsHandler(req: Request, res: Respo
   }
 
   const period = parsed.data.period ?? previousPeriod();
-  const result = await generateMaintenanceRecords(req.user.societyId, period);
+  const result = await generateMaintenanceRecords(req.user.societyId, period, req.user.id);
   res.status(200).json({ ...result, period });
 }
 

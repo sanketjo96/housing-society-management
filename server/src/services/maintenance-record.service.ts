@@ -39,13 +39,32 @@ export function previousPeriod(now: Date = new Date()): string {
 // skipDuplicates does the enforcement at the database level, not just in application
 // logic, so a concurrent double-trigger (manual + cron racing) can't create doubles
 // either.
+//
+// `actorId` (Phase 9 security-audit addition, 2026-08-12 — this action previously
+// left no audit trail at all, the one gap found when cross-checking AuditLog
+// coverage against Tasks 4.2/6.5/6.6/6.7): the admin who called the manual-trigger
+// endpoint, or `undefined` for the monthly cron (system-triggered, no user in
+// context) — AuditLog.actorId is nullable specifically to represent that
+// distinction, not just "unknown."
 export async function generateMaintenanceRecords(
   societyId: string,
   period: string = previousPeriod(),
+  actorId?: string,
 ): Promise<GenerateResult> {
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
   const flats = await prisma.flat.findMany({ where: { societyId } });
-  if (flats.length === 0) return { created: 0, skipped: 0 };
+  if (flats.length === 0) {
+    await prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'GENERATE_MAINTENANCE_RECORDS',
+        entityType: 'MaintenanceRecord',
+        entityId: period,
+        note: `No flats onboarded yet for ${society.name}`,
+      },
+    });
+    return { created: 0, skipped: 0 };
+  }
 
   const [year, month] = period.split('-').map(Number);
   const monthStart = new Date(year, month - 1, 1);
@@ -96,6 +115,16 @@ export async function generateMaintenanceRecords(
   const result = await prisma.maintenanceRecord.createMany({
     data: records,
     skipDuplicates: true,
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId,
+      action: 'GENERATE_MAINTENANCE_RECORDS',
+      entityType: 'MaintenanceRecord',
+      entityId: period,
+      note: `${society.name}: created ${result.count}, skipped ${records.length - result.count}`,
+    },
   });
 
   return { created: result.count, skipped: records.length - result.count };

@@ -770,7 +770,9 @@ existing schema.
 | Scheduling | node-cron (in-process) |
 | Email | Resend or SendGrid, behind a swappable `EmailProvider` interface |
 | QR generation | `qrcode` npm package (no external API) |
-| File upload parsing | `multer` (memory storage — buffers handed to the storage adapter, never written to disk by multer itself) |
+| File upload parsing | `multer` (memory storage — buffers handed to the storage adapter, never written to disk by multer itself), content verified against a hand-rolled magic-byte sniff (`src/lib/file-signature.ts`) — not just the client-declared Content-Type — before anything is persisted (Phase 9 audit, `docs/security-audit.md`) |
+| Error handling | `express-async-errors` (imported first in `app.ts`) — Express 4 alone does not forward a rejected async-handler promise to the error middleware; without this, an uncaught throw anywhere crashes the whole process (Phase 9 audit) |
+| Rate limiting | `express-rate-limit`, applied only to `/api/auth/login` and the password-reset endpoints (`src/middleware/auth-rate-limit.ts`); requires `app.set('trust proxy', 1)` since this app always sits behind nginx |
 | Proof storage | Swappable `StorageAdapter` interface (`server/src/lib/storage`) — `local` (disk, default) implemented; `s3`/`gdrive` are named extension points, not yet built. See `docs/payments.md` |
 | Test runner | Vitest (backend and frontend) |
 | Deployment | Docker Compose, Nginx reverse proxy, Certbot SSL |

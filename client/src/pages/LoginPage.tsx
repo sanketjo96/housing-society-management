@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { Building2, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Building2, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -33,11 +34,11 @@ function BrandPanel() {
       <div>
         <div className="mb-6 flex items-center gap-2 sm:mb-10">
           <Building2 size={20} className="text-brass" />
-          <span className="font-display text-[19px] tracking-wide">Saral Society</span>
+          <span className="font-display text-[26px] tracking-wide sm:text-[30px]">Saral Society</span>
         </div>
 
-        <p className="max-w-[280px] font-display text-[22px] leading-snug sm:text-[26px]">
-          Your maintenance, dues, and receipts — all in one passbook.
+        <p className="max-w-[280px] font-display text-[17px] leading-snug sm:text-[19px]">
+          Your maintenance, dues, and receipts — <span className="text-brass">all in one passbook.</span>
         </p>
       </div>
 
@@ -54,6 +55,17 @@ function BrandPanel() {
             </div>
           ))}
         </div>
+        <div className="mb-5 flex items-center gap-4 text-xs text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm bg-teal" /> settled
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm bg-brass" /> pending
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm bg-coral" /> overdue
+          </span>
+        </div>
         <p className="font-mono-brand m-0 text-xs text-muted">Owner & tenant billing, simplified</p>
       </div>
     </div>
@@ -63,6 +75,7 @@ function BrandPanel() {
 export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
@@ -127,12 +140,20 @@ export function LoginPage() {
                 <Lock size={15} className="shrink-0 text-muted" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   placeholder="••••••••"
                   className="w-full border-none bg-transparent py-2.5 text-sm text-ink outline-none"
                   {...register('password')}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide characters' : 'Show characters'}
+                  className="shrink-0 text-muted"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
               {errors.password && (
                 <p role="alert" className="mt-1.5 text-xs text-coral">
@@ -146,13 +167,19 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="mt-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white transition-opacity disabled:cursor-default disabled:opacity-70"
+              className="mt-1 flex items-center justify-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white transition-opacity disabled:cursor-default disabled:opacity-70"
             >
               {mutation.isPending ? 'Logging in…' : 'Log in'}
+              {!mutation.isPending && <ArrowRight size={15} />}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-muted">
+          <div className="mt-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-line" />
+            <span className="text-[10px] font-semibold tracking-wide text-muted">NEW HERE?</span>
+            <div className="h-px flex-1 bg-line" />
+          </div>
+          <p className="mt-3 text-center text-xs text-muted">
             Accounts are created by your society admin.
             <br />
             Contact them if you don't have one yet.

@@ -5,6 +5,7 @@ import { prisma } from '../../src/db';
 import { createUser } from '../../src/services/admin-users.service';
 import { createFlat } from '../../src/services/flats.service';
 import { login } from '../../src/services/auth.service';
+import { TINY_JPEG_BYTES } from '../fixtures/tiny-files';
 
 describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -157,7 +158,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
       const submitted = await request(app)
         .post('/api/me/ledger/deposits/intent/submit')
         .set('Authorization', `Bearer ${ownerToken}`)
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(submitted.status).toBe(201);
       expect(submitted.body.status).toBe('PENDING');
 
@@ -200,8 +201,27 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '100')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(res.status).toBe(201);
+    });
+
+    // Regression test for a Phase 9 security-audit finding (2026-08-12):
+    // proof-upload.ts's fileFilter only ever checked the client-declared
+    // Content-Type header, which is trivially spoofable — nothing verified the
+    // actual file bytes. An attacker could declare image/jpeg while uploading
+    // arbitrary content, which would later be served back to an admin reviewing
+    // payment proofs with that same (attacker-controlled) Content-Type.
+    it('rejects a file whose declared Content-Type does not match its actual bytes (spoofed upload)', async () => {
+      const res = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '100')
+        .attach('file', Buffer.from('<script>alert(1)</script>'), {
+          filename: 'proof.jpg',
+          contentType: 'image/jpeg',
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Unsupported file type');
     });
   });
 
@@ -220,7 +240,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .post('/api/me/ledger/credits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '300')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'receipt.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
       expect(res.status).toBe(400);
     });
 
@@ -230,7 +250,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '0')
         .field('note', 'Plumber repair')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'receipt.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
       expect(res.status).toBe(400);
     });
 
@@ -240,7 +260,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '999999') // far above this flat's Outstanding — must still succeed
         .field('note', 'Plumber repair for the common water tank')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'receipt.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
       expect(res.status).toBe(201);
       expect(res.body.type).toBe('CREDIT');
       expect(res.body.status).toBe('PENDING');
@@ -265,7 +285,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .post('/api/me/ledger/deposits')
         .set('Authorization', `Bearer ${ownerToken}`)
         .field('amount', '20')
-        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof2.jpg', contentType: 'image/jpeg' });
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof2.jpg', contentType: 'image/jpeg' });
       const res = await request(app)
         .get(`/api/ledger-entries/${uploaded.body.id}/file`)
         .set('Authorization', `Bearer ${otherOwnerToken}`);

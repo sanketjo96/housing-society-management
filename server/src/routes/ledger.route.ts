@@ -12,6 +12,9 @@ import {
 } from '../controllers/ledger.controller';
 import { proofUpload } from '../middleware/proof-upload';
 import { requireRole } from '../middleware/require-role';
+import { verifyFileSignature } from '../middleware/verify-file-signature';
+
+const verifyProofSignature = verifyFileSignature(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 
 export const ledgerRouter = Router();
 
@@ -22,6 +25,7 @@ ledgerRouter.post(
   '/api/me/ledger/deposits/intent/submit',
   requireRole(['OWNER', 'TENANT']),
   proofUpload.single('file'),
+  verifyProofSignature,
   submitPaymentIntentHandler,
 );
 ledgerRouter.delete('/api/me/ledger/deposits/intent', requireRole(['OWNER', 'TENANT']), cancelPaymentIntentHandler);
@@ -33,6 +37,7 @@ ledgerRouter.post(
   '/api/me/ledger/deposits',
   requireRole(['OWNER', 'TENANT']),
   proofUpload.single('file'),
+  verifyProofSignature,
   createDepositHandler,
 );
 // Credit re-introduced 2026-08-07 — resident-submitted, admin-approved (same
@@ -43,6 +48,7 @@ ledgerRouter.post(
   '/api/me/ledger/credits',
   requireRole(['OWNER', 'TENANT']),
   proofUpload.single('file'),
+  verifyProofSignature,
   createCreditHandler,
 );
 // Admin or the entry's own payer, enforced in the service (getLedgerEntryForViewing)

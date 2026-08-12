@@ -6,6 +6,7 @@ import { createUser } from '../../src/services/admin-users.service';
 import { createFlat } from '../../src/services/flats.service';
 import { generateMaintenanceRecords } from '../../src/services/maintenance-record.service';
 import { login } from '../../src/services/auth.service';
+import { TINY_PNG_BYTES } from '../fixtures/tiny-files';
 
 describe('/api/admin/settings', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -210,7 +211,7 @@ describe('/api/admin/settings', () => {
       const uploadRes = await request(app)
         .post('/api/admin/settings/signature')
         .set('Authorization', `Bearer ${adminToken}`)
-        .attach('file', Buffer.from('fake-png-bytes'), { filename: 'sig.png', contentType: 'image/png' });
+        .attach('file', TINY_PNG_BYTES, { filename: 'sig.png', contentType: 'image/png' });
       expect(uploadRes.status).toBe(200);
       expect(uploadRes.body.hasSignature).toBe(true);
 
