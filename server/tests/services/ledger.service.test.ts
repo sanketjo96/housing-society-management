@@ -19,6 +19,7 @@ import {
   listPendingLedgerEntries,
   manualDeposit,
   NoOpenPaymentIntentError,
+  PaymentMethodNotConfiguredError,
   rejectLedgerEntry,
   submitPaymentIntent,
 } from '../../src/services/ledger.service';
@@ -480,6 +481,7 @@ describe('ledger service', () => {
     it('creates an intent, replaces it on a second lock, and cancel clears it', async () => {
       const first = await createOrReplacePaymentIntent(flatId, ownerId, societyId, 10);
       expect(first.amount).toBe(10);
+      expect(first.paymentMethod).toBe('UPI');
       expect(first.upiLink).toContain('upi://pay');
       expect(first.qrDataUrl).toContain('data:image/png;base64,');
 
@@ -505,6 +507,92 @@ describe('ledger service', () => {
       expect((entry as { status: string }).status).toBe('PENDING');
       expect((entry as { fileUrl: string | null }).fileUrl).not.toBeNull();
       expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
+    });
+  });
+
+  describe('payment method selection (UPI vs bank transfer)', () => {
+    const methodSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let methodSocietyId: string;
+    let methodFlatId: string;
+    let methodOwnerId: string;
+    const methodFlatIds: string[] = [];
+
+    beforeAll(async () => {
+      const society = await prisma.society.create({
+        data: { name: `Payment Method Society ${methodSuffix}`, address: '1 Test St' },
+      });
+      methodSocietyId = society.id;
+
+      const flat = await createFlat({
+        societyId: methodSocietyId,
+        wing: 'M',
+        flatNumber: '101',
+        baseRate: 1000,
+        ownerName: 'Method Owner',
+        ownerEmail: `method-owner-${methodSuffix}@example.com`,
+      });
+      methodFlatId = flat!.id;
+      methodOwnerId = flat!.ownerId;
+      methodFlatIds.push(methodFlatId);
+
+      await prisma.maintenanceRecord.create({
+        data: {
+          flatId: methodFlatId,
+          period: '2026-01',
+          payerType: 'OWNER',
+          amount: 1000,
+          dueDate: new Date('2026-01-15'),
+          payerId: methodOwnerId,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.paymentIntent.deleteMany({ where: { flatId: { in: methodFlatIds } } });
+      await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: methodFlatIds } } });
+      await prisma.flat.deleteMany({ where: { id: { in: methodFlatIds } } });
+      const userIds = await prisma.user
+        .findMany({ where: { societyId: methodSocietyId }, select: { id: true } })
+        .then((rows) => rows.map((r) => r.id));
+      await prisma.passwordResetToken.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      await prisma.society.delete({ where: { id: methodSocietyId } });
+    });
+
+    it('uses UPI when both UPI and bank details are configured — UPI takes precedence', async () => {
+      await prisma.society.update({
+        where: { id: methodSocietyId },
+        data: { upiVpa: 'method-test@okhdfcbank', bankAccountNumber: '123456789012', bankIfsc: 'HDFC0001234' },
+      });
+      const intent = await createOrReplacePaymentIntent(methodFlatId, methodOwnerId, methodSocietyId, 10);
+      expect(intent.paymentMethod).toBe('UPI');
+      expect(intent.upiLink).toContain('upi://pay');
+      expect(intent.qrDataUrl).toContain('data:image/png;base64,');
+      expect(intent.bankAccountNumber).toBeUndefined();
+      expect(intent.bankIfsc).toBeUndefined();
+    });
+
+    it('falls back to bank transfer details when no UPI VPA is configured', async () => {
+      await prisma.society.update({
+        where: { id: methodSocietyId },
+        data: { upiVpa: null, bankAccountNumber: '123456789012', bankIfsc: 'HDFC0001234' },
+      });
+      const intent = await createOrReplacePaymentIntent(methodFlatId, methodOwnerId, methodSocietyId, 10);
+      expect(intent.paymentMethod).toBe('BANK_TRANSFER');
+      expect(intent.bankAccountNumber).toBe('123456789012');
+      expect(intent.bankIfsc).toBe('HDFC0001234');
+      expect(intent.upiLink).toBeUndefined();
+      expect(intent.qrDataUrl).toBeUndefined();
+    });
+
+    it('throws PaymentMethodNotConfiguredError when neither UPI nor complete bank details are set', async () => {
+      await prisma.society.update({
+        where: { id: methodSocietyId },
+        data: { upiVpa: null, bankAccountNumber: null, bankIfsc: null },
+      });
+      await expect(createOrReplacePaymentIntent(methodFlatId, methodOwnerId, methodSocietyId, 10)).rejects.toThrow(
+        PaymentMethodNotConfiguredError,
+      );
     });
   });
 

@@ -61,9 +61,22 @@ model Society {
   name    String
   address String
 
-  // UPI payment address QR codes are generated against (Task 6.1). Required — a
-  // society can't be onboarded without a way to actually collect payment.
-  upiVpa String
+  // UPI payment address QR codes are generated against (Task 6.1). Optional as of
+  // the bank-transfer-fallback addition — a society without a UPI VPA can instead
+  // configure bankAccountNumber+bankIfsc below. UPI always takes precedence when
+  // both are set (ledger.service.ts's buildPaymentIntentResult); at least one of
+  // the two payment methods should be configured for residents to actually be able
+  // to pay, but that's enforced where it matters (payment-intent creation), not as
+  // a DB constraint Prisma can't express anyway ("A or (B and C)").
+  upiVpa String?
+
+  // Bank-transfer fallback for a society with no UPI VPA — only ever shown to a
+  // resident when upiVpa is unset (UPI, once set, always wins). Both-or-neither is
+  // enforced in society-settings.service.ts's updateSocietySettings, not here — a
+  // lone account number with no IFSC (or vice versa) is meaningless to a resident
+  // trying to pay.
+  bankAccountNumber String?
+  bankIfsc          String?
 
   // The tenant-occupied billing multiplier (rule 1: "have this factor configurable,
   // could be 1.7x or 2x etc."). Owner-occupied always bills at 1x the flat's baseRate;

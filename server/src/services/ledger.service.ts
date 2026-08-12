@@ -34,6 +34,18 @@ export class NoOpenPaymentIntentError extends Error {
   }
 }
 
+// Neither a UPI VPA nor a complete bank-account+IFSC pair is configured on the
+// society — there's nothing to show a resident trying to pay. Distinct from a
+// resident-facing input error (InvalidDepositAmountError/InvalidAmountError
+// above): this is a society-configuration gap the admin needs to fix, not
+// something the resident did wrong.
+export class PaymentMethodNotConfiguredError extends Error {
+  constructor() {
+    super('This society has no payment method configured yet — contact your society admin');
+    this.name = 'PaymentMethodNotConfiguredError';
+  }
+}
+
 export interface FlatBalances {
   totalCharges: number;
   approvedDeposits: number;
@@ -252,20 +264,44 @@ export async function getLedgerForResident(flatId: string, year?: number): Promi
 export interface PaymentIntentResult {
   id: string;
   amount: number;
-  upiLink: string;
-  qrDataUrl: string;
+  paymentMethod: 'UPI' | 'BANK_TRANSFER';
+  // Set only when paymentMethod is 'UPI'.
+  upiLink?: string;
+  qrDataUrl?: string;
+  // Set only when paymentMethod is 'BANK_TRANSFER'.
+  bankAccountNumber?: string;
+  bankIfsc?: string;
   createdAt: string;
 }
 
+// UPI always takes precedence when configured (CLAUDE.md's payment-method rule) —
+// bank details are only ever surfaced when the society has no UPI VPA set. Throws
+// PaymentMethodNotConfiguredError if neither is usable, rather than returning a
+// result with nothing a resident could actually act on.
 async function buildPaymentIntentResult(
   intent: { id: string; amount: unknown; createdAt: Date },
   societyId: string,
 ): Promise<PaymentIntentResult> {
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
   const amount = Number(intent.amount);
-  const upiLink = buildUpiDeepLink({ vpa: society.upiVpa, payeeName: society.name, amount, note: 'Maintenance deposit' });
-  const qrDataUrl = await generateQrDataUrl(upiLink);
-  return { id: intent.id, amount, upiLink, qrDataUrl, createdAt: intent.createdAt.toISOString() };
+  const base = { id: intent.id, amount, createdAt: intent.createdAt.toISOString() };
+
+  if (society.upiVpa) {
+    const upiLink = buildUpiDeepLink({ vpa: society.upiVpa, payeeName: society.name, amount, note: 'Maintenance deposit' });
+    const qrDataUrl = await generateQrDataUrl(upiLink);
+    return { ...base, paymentMethod: 'UPI', upiLink, qrDataUrl };
+  }
+
+  if (society.bankAccountNumber && society.bankIfsc) {
+    return {
+      ...base,
+      paymentMethod: 'BANK_TRANSFER',
+      bankAccountNumber: society.bankAccountNumber,
+      bankIfsc: society.bankIfsc,
+    };
+  }
+
+  throw new PaymentMethodNotConfiguredError();
 }
 
 // Re-derives the QR/UPI link fresh every call rather than storing them on the row —

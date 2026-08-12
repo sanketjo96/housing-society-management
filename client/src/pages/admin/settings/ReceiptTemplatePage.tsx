@@ -1,65 +1,28 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Check, PenTool, Receipt as ReceiptIcon, Settings as SettingsIcon } from 'lucide-react';
+import { PenTool, Receipt as ReceiptIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
-import { FileUploadField } from '../../components/FileUploadField';
-import { authedFetch } from '../../lib/api';
+import { ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../../components/FormField';
+import { FileUploadField } from '../../../components/FileUploadField';
+import { authedFetch } from '../../../lib/api';
+import { fetchSettings, type SocietySettings } from './settings-api';
+import { SettingsFormActions } from './SettingsFormActions';
 
-export interface SocietySettings {
-  name: string;
-  address: string;
-  upiVpa: string;
-  tenantRateFactor: number;
-  defaultBaseRate: number;
-  // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/receipts.md.
-  receiptNumberPrefix: string;
-  receiptSignatoryName: string | null;
-  receiptSignatoryTitle: string | null;
-  receiptFooterNote: string | null;
-  hasSignature: boolean;
-}
-
-// Exported so FlatsListPage's FlatForm can share the same query (key + fetcher) to
-// pre-fill a new flat's base rate — one cached settings fetch, not two.
-export async function fetchSettings(): Promise<SocietySettings> {
-  const res = await authedFetch('/api/admin/settings');
-  if (!res.ok) throw new Error('Could not load settings.');
-  return res.json();
-}
-
-const settingsFormSchema = z.object({
-  name: z.string().min(1, 'Society name is required'),
-  address: z.string().min(1, 'Society address is required'),
-  upiVpa: z.string().min(1, 'UPI ID is required'),
-  defaultBaseRate: z.coerce.number().positive('Default base rate must be a positive number'),
-  tenantRateFactor: z.coerce
-    .number()
-    .positive('Occupancy factor must be a positive number')
-    .max(9.99, 'Occupancy factor must be 9.99 or less'),
-  receiptNumberPrefix: z
-    .string()
-    .regex(/^[A-Za-z0-9-]{1,20}$/, 'Use 1-20 letters, digits, or hyphens'),
+const formSchema = z.object({
+  receiptNumberPrefix: z.string().regex(/^[A-Za-z0-9-]{1,20}$/, 'Use 1-20 letters, digits, or hyphens'),
   // Empty strings are valid here (they clear the field server-side) — only the
-  // core/prefix fields above are non-empty-required.
+  // prefix above is non-empty-required.
   receiptSignatoryName: z.string(),
   receiptSignatoryTitle: z.string(),
   receiptFooterNote: z.string(),
 });
 
-type SettingsFormInput = z.input<typeof settingsFormSchema>;
-type SettingsFormValues = z.infer<typeof settingsFormSchema>;
+type FormValues = z.infer<typeof formSchema>;
 
-function formValuesFromSettings(settings: SocietySettings): SettingsFormValues {
+function formValuesFromSettings(settings: SocietySettings): FormValues {
   return {
-    name: settings.name,
-    address: settings.address,
-    upiVpa: settings.upiVpa,
-    defaultBaseRate: settings.defaultBaseRate,
-    tenantRateFactor: settings.tenantRateFactor,
     receiptNumberPrefix: settings.receiptNumberPrefix,
     receiptSignatoryName: settings.receiptSignatoryName ?? '',
     receiptSignatoryTitle: settings.receiptSignatoryTitle ?? '',
@@ -175,7 +138,7 @@ function SignatureSection({
   );
 }
 
-export function SettingsPage() {
+export function ReceiptTemplatePage() {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({ queryKey: ['society-settings'], queryFn: fetchSettings });
 
@@ -184,14 +147,9 @@ export function SettingsPage() {
     handleSubmit,
     reset,
     formState: { errors, isDirty },
-  } = useForm<SettingsFormInput, unknown, SettingsFormValues>({
-    resolver: zodResolver(settingsFormSchema),
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
-      name: '',
-      address: '',
-      upiVpa: '',
-      defaultBaseRate: undefined,
-      tenantRateFactor: undefined,
       receiptNumberPrefix: '',
       receiptSignatoryName: '',
       receiptSignatoryTitle: '',
@@ -200,13 +158,12 @@ export function SettingsPage() {
   });
 
   // Form fields can't be pre-filled until the GET resolves, so sync them in once data
-  // arrives — same pattern as every other edit form in this app (e.g. FlatForm), just
-  // deferred a tick here since this page has no separate "loaded flat" prop to key off.
+  // arrives — same pattern as every other edit form in this app (e.g. FlatForm).
   useEffect(() => {
     if (data) reset(formValuesFromSettings(data));
   }, [data, reset]);
 
-  const mutation = useMutation<SocietySettings, Error, SettingsFormValues>({
+  const mutation = useMutation<SocietySettings, Error, FormValues>({
     mutationFn: async (values) => {
       const res = await authedFetch('/api/admin/settings', { method: 'PATCH', body: JSON.stringify(values) });
       const body = await res.json().catch(() => null);
@@ -228,11 +185,12 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div>
       <div className="mb-6">
-        <h1 className="m-0 font-display text-xl text-ink">Settings</h1>
+        <h1 className="m-0 font-display text-xl text-ink">Receipt template</h1>
         <p className="m-0 mt-0.5 text-xs text-muted">
-          These values drive every maintenance-rate calculation and receipt society-wide.
+          Changes here only affect receipts issued after saving — an already-issued receipt is never
+          retroactively altered.
         </p>
       </div>
 
@@ -250,61 +208,7 @@ export function SettingsPage() {
             noValidate
             className="mb-5 rounded-2xl border border-line bg-white p-6"
           >
-            <SectionHeader icon={Building2} title="Society details" />
-
-            <Field label="Society name">
-              <input className={inputClass} {...register('name')} />
-              {errors.name && <ErrMsg>{errors.name.message}</ErrMsg>}
-            </Field>
-
-            <Field label="Society address">
-              <input className={inputClass} {...register('address')} />
-              {errors.address && <ErrMsg>{errors.address.message}</ErrMsg>}
-            </Field>
-            <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
-              Printed on every generated receipt's letterhead, alongside the society name.
-            </p>
-
-            <Field label="UPI ID (VPA)">
-              <input className={inputClass} placeholder="society-name@bank" {...register('upiVpa')} />
-              {errors.upiVpa && <ErrMsg>{errors.upiVpa.message}</ErrMsg>}
-            </Field>
-            <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
-              The UPI address residents' payment QR codes encode. Update this whenever the society's
-              collection account changes — takes effect on the very next QR a resident generates.
-            </p>
-
-            <Divider />
-
-            <SectionHeader icon={SettingsIcon} title="Billing defaults" />
-
-            <Field label="Default base rate (₹ / month)">
-              <input type="number" step="0.01" className={inputClass} {...register('defaultBaseRate')} />
-              {errors.defaultBaseRate && <ErrMsg>{errors.defaultBaseRate.message}</ErrMsg>}
-            </Field>
-            <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
-              Pre-fills the base rate when onboarding a new flat. Doesn't change any flat's rate that's
-              already set — each flat's own base rate stays independently editable from Flats and
-              residents.
-            </p>
-
-            <Field label="Tenant occupancy factor (×)">
-              <input type="number" step="0.01" className={inputClass} {...register('tenantRateFactor')} />
-              {errors.tenantRateFactor && <ErrMsg>{errors.tenantRateFactor.message}</ErrMsg>}
-            </Field>
-            <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
-              The multiplier applied to a flat's base rate when it's tenant-occupied. Owner-occupied
-              flats always bill at 1× base rate, unaffected by this value. Takes effect immediately for
-              any maintenance record generated after saving.
-            </p>
-
-            <Divider />
-
             <SectionHeader icon={ReceiptIcon} title="Receipt template" />
-            <p className="m-0 mb-3.5 text-xs text-muted">
-              Changes here only affect receipts issued after saving — an already-issued receipt is
-              never retroactively altered.
-            </p>
 
             <Field label="Receipt number prefix">
               <input className={inputClass} placeholder="RCPT" {...register('receiptNumberPrefix')} />
@@ -334,20 +238,12 @@ export function SettingsPage() {
               {errors.receiptFooterNote && <ErrMsg>{errors.receiptFooterNote.message}</ErrMsg>}
             </Field>
 
-            {mutation.error && <ErrorBanner>{mutation.error.message}</ErrorBanner>}
-            {mutation.isSuccess && !isDirty && (
-              <p className="mb-3.5 flex items-center gap-1.5 text-xs font-semibold text-teal">
-                <Check size={13} /> Saved.
-              </p>
-            )}
-
-            <button
-              type="submit"
+            <SettingsFormActions
+              error={mutation.error?.message}
+              saved={mutation.isSuccess && !isDirty}
+              pending={mutation.isPending}
               disabled={mutation.isPending || !isDirty}
-              className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
-            >
-              {mutation.isPending ? 'Saving…' : 'Save settings'}
-            </button>
+            />
           </form>
 
           <div className="rounded-2xl border border-line bg-white p-6">

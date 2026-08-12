@@ -53,7 +53,9 @@ function mockFetch(ledger: unknown = baseLedger, openIntent: unknown = null, rec
     if (url.includes('/api/me/ledger/deposits/intent') && init?.method === 'POST') {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ intent: { id: 'intent-1', amount: 500, upiLink: 'upi://pay?x', qrDataUrl: 'data:image/png;base64,abc' } }),
+        json: async () => ({
+          intent: { id: 'intent-1', amount: 500, paymentMethod: 'UPI', upiLink: 'upi://pay?x', qrDataUrl: 'data:image/png;base64,abc' },
+        }),
       });
     }
     if (url.includes('/api/me/ledger/deposits/intent')) {
@@ -230,12 +232,35 @@ describe('ResidentDashboardOverview', () => {
   });
 
   it('shows the resume-payment panel automatically when an intent is already open', async () => {
-    mockFetch(baseLedger, { id: 'intent-1', amount: 500, upiLink: 'upi://pay?x', qrDataUrl: 'data:image/png;base64,abc' });
+    mockFetch(baseLedger, {
+      id: 'intent-1',
+      amount: 500,
+      paymentMethod: 'UPI',
+      upiLink: 'upi://pay?x',
+      qrDataUrl: 'data:image/png;base64,abc',
+    });
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/locked/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Amount to pay')).not.toBeInTheDocument();
+  });
+
+  it('shows account number and IFSC instead of a QR code when the society has no UPI VPA configured', async () => {
+    mockFetch(baseLedger, {
+      id: 'intent-2',
+      amount: 500,
+      paymentMethod: 'BANK_TRANSFER',
+      bankAccountNumber: '123456789012',
+      bankIfsc: 'HDFC0001234',
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/locked/i)).toBeInTheDocument());
+    expect(screen.getByText('123456789012')).toBeInTheDocument();
+    expect(screen.getByText('HDFC0001234')).toBeInTheDocument();
+    expect(screen.queryByAltText(/upi payment qr code/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/transfer the amount via neft\/imps\/rtgs/i)).toBeInTheDocument();
   });
 
   it('hides the Pay controls and shows "Nothing outstanding right now" when outstanding is 0', async () => {

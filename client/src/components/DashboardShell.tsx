@@ -2,18 +2,23 @@ import { Building2, LogOut, Menu, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { NavLink } from 'react-router-dom';
 import type { AuthUser } from '../context/AuthContext';
 
 export interface NavItem {
-  key: string;
+  // Absolute path (always under /dashboard) — real, deep-linkable/shareable URLs
+  // rather than in-memory tab state, so each section survives a refresh/bookmark.
+  to: string;
   label: string;
   icon: LucideIcon;
+  // Only the "overview" item of each dashboard (the exact /dashboard root) needs
+  // exact matching — every other item is itself a leaf path, so default (prefix)
+  // matching is harmless there but would make /dashboard permanently "active".
+  end?: boolean;
 }
 
 interface DashboardShellProps {
   navItems: NavItem[];
-  activeKey: string;
-  onSelectKey: (key: string) => void;
   user: AuthUser | null;
   onLogout: () => void;
   children: ReactNode;
@@ -21,20 +26,17 @@ interface DashboardShellProps {
 
 // Shared shell for both the admin and resident dashboards: a persistent left nav
 // rail on desktop, collapsing to a hamburger-triggered slide-out drawer below the
-// `md` breakpoint. Only one copy of the nav (`role="tablist"`) is ever mounted —
-// its position/visibility is toggled with CSS transforms rather than being
-// duplicated per breakpoint, so there's no risk of two elements sharing the same
-// `role="tab"` accessible name (which would break tests and screen readers alike).
-// A persistent top bar (not mobile-only) carries the signed-in user's name — visible
-// regardless of which nav section is active. Log out lives as a link at the bottom of
-// the left nav panel instead (UI-only placement choice; behavior is unchanged).
-export function DashboardShell({ navItems, activeKey, onSelectKey, user, onLogout, children }: DashboardShellProps) {
+// `md` breakpoint. Only one copy of the nav is ever mounted — its position/
+// visibility is toggled with CSS transforms rather than being duplicated per
+// breakpoint. Nav items are real <NavLink>s (real URLs, deep-linkable and
+// shareable) rather than an ARIA tabs widget over in-memory state — active state
+// comes from the current route (NavLink sets aria-current="page" automatically),
+// not a controlled prop. A persistent top bar (not mobile-only) carries the
+// signed-in user's name — visible regardless of which section is active. Log out
+// lives as a link at the bottom of the left nav panel instead (UI-only placement
+// choice; behavior is unchanged).
+export function DashboardShell({ navItems, user, onLogout, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  function selectAndClose(key: string) {
-    onSelectKey(key);
-    setMobileOpen(false);
-  }
 
   return (
     <div className="min-h-dvh bg-paper md:flex">
@@ -54,7 +56,7 @@ export function DashboardShell({ navItems, activeKey, onSelectKey, user, onLogou
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 size={20} className="text-brass" />
-            <span className="font-display text-lg tracking-wide text-[#EDEFEA]">SMI</span>
+            <span className="font-display text-lg tracking-wide text-[#EDEFEA]">Saral Society</span>
           </div>
           <button
             type="button"
@@ -66,25 +68,23 @@ export function DashboardShell({ navItems, activeKey, onSelectKey, user, onLogou
           </button>
         </div>
 
-        <nav role="tablist" aria-label="Dashboard sections" aria-orientation="vertical" className="flex flex-1 flex-col gap-1">
+        <nav aria-label="Dashboard sections" className="flex flex-1 flex-col gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = item.key === activeKey;
             return (
-              <button
-                key={item.key}
-                type="button"
-                role="tab"
-                id={`tab-${item.key}`}
-                aria-selected={active}
-                aria-controls={`tabpanel-${item.key}`}
-                onClick={() => selectAndClose(item.key)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-                  active ? 'bg-teal-light font-semibold text-teal' : 'text-[#B7BCB2]'
-                }`}
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+                    isActive ? 'bg-teal-light font-semibold text-teal' : 'text-[#B7BCB2]'
+                  }`
+                }
               >
                 <Icon size={16} /> {item.label}
-              </button>
+              </NavLink>
             );
           })}
         </nav>
@@ -96,6 +96,8 @@ export function DashboardShell({ navItems, activeKey, onSelectKey, user, onLogou
         >
           <LogOut size={16} /> Log out
         </button>
+
+        <p className="m-0 mt-2 px-3 text-[10px] text-[#B7BCB2] opacity-60">Designed by Sanket Joshi</p>
       </aside>
 
       <div className="flex min-h-dvh flex-1 flex-col">

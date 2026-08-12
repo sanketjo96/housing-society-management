@@ -4,6 +4,7 @@ import { getStorageAdapter } from '../../src/lib/storage';
 import {
   getReceiptSignatureForViewing,
   getSocietySettings,
+  IncompleteBankDetailsError,
   removeReceiptSignature,
   setReceiptSignature,
   updateSocietySettings,
@@ -51,6 +52,8 @@ describe('society-settings service', () => {
       name: `Settings Test Society ${suffix}`,
       address: '1 Test St',
       upiVpa: 'settings-test@okhdfcbank',
+      bankAccountNumber: null,
+      bankIfsc: null,
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
       receiptNumberPrefix: 'RCPT',
@@ -84,6 +87,36 @@ describe('society-settings service', () => {
     expect(updated.upiVpa).toBe('renamed-society@upi');
     expect(updated.defaultBaseRate).toBe(1800);
     expect(updated.tenantRateFactor).toBe(1.75);
+  });
+
+  it('sets a complete bank account number + IFSC pair', async () => {
+    const updated = await updateSocietySettings(societyId, {
+      bankAccountNumber: '123456789012',
+      bankIfsc: 'HDFC0001234',
+    });
+    expect(updated.bankAccountNumber).toBe('123456789012');
+    expect(updated.bankIfsc).toBe('HDFC0001234');
+  });
+
+  it('rejects setting only one of bankAccountNumber/bankIfsc when the other is unset', async () => {
+    await updateSocietySettings(societyId, { bankAccountNumber: '', bankIfsc: '' });
+    await expect(updateSocietySettings(societyId, { bankAccountNumber: '123456789012' })).rejects.toThrow(
+      IncompleteBankDetailsError,
+    );
+  });
+
+  it('rejects clearing just one side of an already-complete pair', async () => {
+    await updateSocietySettings(societyId, { bankAccountNumber: '123456789012', bankIfsc: 'HDFC0001234' });
+    await expect(updateSocietySettings(societyId, { bankIfsc: '' })).rejects.toThrow(IncompleteBankDetailsError);
+    // Neither field was actually touched by the rejected request.
+    const settings = await getSocietySettings(societyId);
+    expect(settings.bankAccountNumber).toBe('123456789012');
+    expect(settings.bankIfsc).toBe('HDFC0001234');
+  });
+
+  it('clears the UPI VPA back to null when given an empty string', async () => {
+    const updated = await updateSocietySettings(societyId, { upiVpa: '' });
+    expect(updated.upiVpa).toBeNull();
   });
 
   it('updates the receipt template fields', async () => {

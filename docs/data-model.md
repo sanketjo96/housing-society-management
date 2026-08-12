@@ -13,12 +13,14 @@ so a second society could be onboarded later without a schema rewrite.
 
 ```prisma
 model Society {
-  id               String   @id @default(cuid())
-  name             String
-  address          String
-  upiVpa           String
-  tenantRateFactor Decimal  @default(1.5) @db.Decimal(3, 2)
-  defaultBaseRate  Decimal  @default(1500) @db.Decimal(10, 2)
+  id                String   @id @default(cuid())
+  name              String
+  address           String
+  upiVpa            String?
+  bankAccountNumber String?
+  bankIfsc          String?
+  tenantRateFactor  Decimal  @default(1.5) @db.Decimal(3, 2)
+  defaultBaseRate   Decimal  @default(1500) @db.Decimal(10, 2)
 
   receiptNumberPrefix      String  @default("RCPT")
   receiptSignatoryName     String?
@@ -35,6 +37,15 @@ model Society {
   receipts Receipt[]
 }
 ```
+
+> **`upiVpa` became optional, `bankAccountNumber`/`bankIfsc` added (2026-08-12)** —
+> a society without a UPI collection address can instead configure a bank account
+> number + IFSC pair, shown to a resident during Pay instead of a QR code. UPI
+> always takes precedence when both are configured. `bankAccountNumber`/`bankIfsc`
+> are validated as a pair (both-or-neither) in `society-settings.service.ts`'s
+> `updateSocietySettings`, not at the schema level — Prisma can't express "A or (B
+> and C)" as a column constraint. Full contract: `docs/payments.md`'s "Payment
+> method: UPI or bank transfer" section.
 
 > **Receipt fields added 2026-08-11** (Receipt Generation & Approval Workflow) —
 > admin-configurable letterhead for the PDF receipt issued when a Deposit/Credit is
@@ -58,9 +69,13 @@ model Society {
 > missed in the first schema pass and were caught on review before Phase 2 built on
 > top of them.
 
-- **`upiVpa` is required, not optional.** Task 6.1 (QR generation) is entirely
-  non-functional without a payment address to encode into the UPI deep link — a
-  society genuinely can't be onboarded without one, so the schema shouldn't allow it.
+- **`upiVpa` was originally required, not optional** — Task 6.1 (QR generation) is
+  entirely non-functional without a payment address to encode into the UPI deep
+  link. Relaxed to optional (2026-08-12) once `bankAccountNumber`/`bankIfsc` gave a
+  society a second way to configure payment collection; `ledger.service.ts`'s
+  `buildPaymentIntentResult` throws `PaymentMethodNotConfiguredError` if a society
+  ends up with neither configured, so a payment intent still can't be created
+  without *some* way to collect money — just not necessarily UPI specifically.
 - **`tenantRateFactor` defaults to `1.5`** (matching rule 1's example) but is a real
   per-society column, not a hardcoded constant in application code — satisfies "have
   this factor configurable, could be 1.7x or 2x etc." literally. Only applies when a

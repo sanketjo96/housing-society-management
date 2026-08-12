@@ -61,7 +61,7 @@ function SummaryCard({
     <div className="rounded-2xl border border-line bg-white p-5">
       <p className="m-0 text-xs uppercase tracking-wide text-muted">{label}</p>
       <p
-        className={`m-0 mt-1 font-mono-brand text-2xl font-semibold ${accent === 'coral' ? 'text-coral' : accent === 'teal' ? 'text-teal' : 'text-ink'}`}
+        className={`m-0 mt-1 truncate whitespace-nowrap font-mono-brand text-xl font-semibold ${accent === 'coral' ? 'text-coral' : accent === 'teal' ? 'text-teal' : 'text-ink'}`}
       >
         {value}
       </p>
@@ -136,6 +136,11 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
   const isLoading = summaryQuery.isLoading || duesQuery.isLoading || pendingProofsQuery.isLoading;
   const isError = summaryQuery.isError || duesQuery.isError || pendingProofsQuery.isError;
 
+  // Society-wide available credit — the same per-flat `creditTotal` the "Credit"
+  // table column below already shows, just summed across every flat. No new
+  // backend endpoint needed: duesQuery already fetches this per flat.
+  const totalCredits = duesQuery.data?.reduce((sum, row) => sum + row.creditTotal, 0) ?? 0;
+
   return (
     <div className="mx-auto max-w-4xl">
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
@@ -145,15 +150,15 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
         </p>
       )}
 
-      {summaryQuery.data && (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {summaryQuery.data && duesQuery.data && (
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <SummaryCard
-            label="Outstanding total"
+            label="Maintenance Outstanding Total"
             value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
             accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
           />
           <SummaryCard
-            label="Collection rate"
+            label="Maintenance Collection Rate"
             value={`${summaryQuery.data.collectionRatePercent}%`}
             accent="teal"
             note="Share of total dues actually paid in so far. Approved credit adjustments aren't counted."
@@ -161,6 +166,11 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
           <SummaryCard
             label="Pending review"
             value={`₹${summaryQuery.data.pendingReviewTotal.toLocaleString('en-IN')}`}
+          />
+          <SummaryCard
+            label="Total Credits"
+            value={`₹${totalCredits.toLocaleString('en-IN')}`}
+            accent={totalCredits > 0 ? 'teal' : undefined}
           />
         </div>
       )}

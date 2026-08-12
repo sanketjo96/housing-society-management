@@ -81,6 +81,8 @@ describe('/api/admin/settings', () => {
       name: `Settings Route Society ${suffix}`,
       address: '1 Test St',
       upiVpa: 'settings-route@okhdfcbank',
+      bankAccountNumber: null,
+      bankIfsc: null,
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
       receiptNumberPrefix: 'RCPT',

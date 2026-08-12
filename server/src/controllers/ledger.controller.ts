@@ -14,6 +14,7 @@ import {
   InvalidAmountError,
   InvalidDepositAmountError,
   NoOpenPaymentIntentError,
+  PaymentMethodNotConfiguredError,
   submitPaymentIntent,
 } from '../services/ledger.service';
 import { getIssuedReceiptForViewing } from '../services/receipt.service';
@@ -71,8 +72,16 @@ export async function getPaymentIntentHandler(req: Request, res: Response) {
     return;
   }
 
-  const intent = await getOpenPaymentIntent(flatId, req.user.societyId);
-  res.status(200).json({ intent });
+  try {
+    const intent = await getOpenPaymentIntent(flatId, req.user.societyId);
+    res.status(200).json({ intent });
+  } catch (err) {
+    if (err instanceof PaymentMethodNotConfiguredError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function createPaymentIntentHandler(req: Request, res: Response) {
@@ -98,6 +107,10 @@ export async function createPaymentIntentHandler(req: Request, res: Response) {
     res.status(201).json({ intent });
   } catch (err) {
     if (amountErrorResponse(res, err)) return;
+    if (err instanceof PaymentMethodNotConfiguredError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     throw err;
   }
 }

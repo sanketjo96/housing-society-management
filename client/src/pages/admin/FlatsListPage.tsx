@@ -10,7 +10,7 @@ import { OccupancyFields, OwnerDetailsFields } from '../../components/FlatFields
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
-import { fetchSettings } from './SettingsPage';
+import { fetchSettings } from './settings/settings-api';
 
 interface FlatSummary {
   id: string;
@@ -95,7 +95,7 @@ function FlatForm({
 
   const occupancy = watch('occupancy');
 
-  // New flats are pre-filled from the admin Settings tab's default base rate
+  // New flats are pre-filled from the admin Billing plan page's default base rate
   // (2026-08-06 addendum), purely a starting point still freely editable before
   // saving. Applied via effect rather than useForm's defaultValues, since the
   // Settings fetch (in the parent) can resolve after this form has already mounted —
@@ -262,7 +262,7 @@ function CsvImportPanel() {
           <p className="m-0 text-xs text-muted">
             Required columns: wing, flatNumber, ownerName, ownerPhone, ownerEmail. Optional:
             occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom. Every
-            imported flat takes the Settings tab's default base rate — edit a flat afterward to
+            imported flat takes the Billing plan page's default base rate — edit a flat afterward to
             set a different rate.
           </p>
         </div>
@@ -317,8 +317,8 @@ function occupancyLabel(flat: FlatSummary) {
 export function FlatsListPage() {
   const [editingId, setEditingId] = useState<string | null | 'new'>(null);
   const { data, isLoading, isError } = useQuery({ queryKey: ['admin-flats'], queryFn: fetchFlats });
-  // Fetched here too (not just on the Settings tab) so a new flat's base rate can be
-  // pre-filled even if the admin never opens Settings this session.
+  // Fetched here too (not just on the Billing plan page) so a new flat's base rate
+  // can be pre-filled even if the admin never opens Billing plan this session.
   const { data: settings } = useQuery({ queryKey: ['society-settings'], queryFn: fetchSettings });
 
   const columns = useMemo<ColumnDef<FlatSummary, unknown>[]>(

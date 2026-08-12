@@ -33,7 +33,7 @@ function BrandPanel() {
       <div>
         <div className="mb-6 flex items-center gap-2 sm:mb-10">
           <Building2 size={20} className="text-brass" />
-          <span className="font-display text-[19px] tracking-wide">Housing Society</span>
+          <span className="font-display text-[19px] tracking-wide">Saral Society</span>
         </div>
 
         <p className="max-w-[280px] font-display text-[22px] leading-snug sm:text-[26px]">
@@ -157,6 +157,7 @@ export function LoginPage() {
             <br />
             Contact them if you don't have one yet.
           </p>
+          <p className="m-0 mt-3 text-center text-[10px] text-muted opacity-70">Designed by Sanket Joshi</p>
         </div>
       </div>
     </main>

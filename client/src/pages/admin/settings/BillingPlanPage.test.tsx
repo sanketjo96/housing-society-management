@@ -1,0 +1,115 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setAccessToken } from '../../../lib/auth-token';
+import { BillingPlanPage } from './BillingPlanPage';
+
+function renderPage() {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BillingPlanPage />
+    </QueryClientProvider>,
+  );
+}
+
+type FetchMock = ReturnType<typeof vi.fn>;
+
+const baseSettings = {
+  name: 'Sunrise Residency',
+  address: '1 Garden Road, Pune',
+  upiVpa: 'sunrise-residency@okhdfcbank',
+  tenantRateFactor: 1.5,
+  defaultBaseRate: 1500,
+  receiptNumberPrefix: 'RCPT',
+  receiptSignatoryName: null,
+  receiptSignatoryTitle: null,
+  receiptFooterNote: null,
+  hasSignature: false,
+};
+
+describe('BillingPlanPage', () => {
+  beforeEach(() => {
+    setAccessToken('fake-admin-token');
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    setAccessToken(null);
+    vi.unstubAllGlobals();
+  });
+
+  it('loads and displays the current billing defaults', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('1.5')).toBeInTheDocument();
+    // The save button starts disabled — nothing has been changed yet.
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+  });
+
+  it('submits updated values and shows confirmation', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    let sentBody: string | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
+        sentBody = init.body as string;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ ...baseSettings, tenantRateFactor: 2, defaultBaseRate: 1800 }),
+        });
+      }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText(/default base rate/i));
+    await user.type(screen.getByLabelText(/default base rate/i), '1800');
+    await user.clear(screen.getByLabelText(/tenant occupancy factor/i));
+    await user.type(screen.getByLabelText(/tenant occupancy factor/i), '2');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
+    expect(JSON.parse(sentBody!)).toEqual({ defaultBaseRate: 1800, tenantRateFactor: 2 });
+  });
+
+  it('rejects a non-positive occupancy factor client-side', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
+        return Promise.reject(new Error('PATCH should not have been called'));
+      }
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByDisplayValue('1500')).toBeInTheDocument());
+    await user.clear(screen.getByLabelText(/tenant occupancy factor/i));
+    await user.type(screen.getByLabelText(/tenant occupancy factor/i), '-1');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/occupancy factor must be a positive number/i)).toBeInTheDocument();
+    });
+  });
+});

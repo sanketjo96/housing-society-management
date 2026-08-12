@@ -645,6 +645,44 @@ resident-facing view.
 columns. See `docs/data-model.md`'s "Receipt" section for the full model and
 `docs/receipts.md` for the endpoint-by-endpoint contract.
 
+### Addition (2026-08-12): bank-transfer fallback for societies without a UPI VPA
+
+Confirmed: not every society can accept UPI (some collection accounts are
+UPI-less bank accounts only), so `Society.upiVpa` — required since the Phase 1
+review — is now **optional**, and an admin may instead configure
+`Society.bankAccountNumber` + `Society.bankIfsc` from Settings → Society
+details. **UPI always takes precedence** when both are configured — a resident
+never sees both a QR code and bank details, only one or the other.
+
+`ledger.service.ts`'s `buildPaymentIntentResult` (the single place a payment
+intent's QR/link/bank-details are built, backing both `GET`/`POST
+/api/me/ledger/deposits/intent`) picks the method: UPI if `upiVpa` is set;
+otherwise bank transfer if both `bankAccountNumber` and `bankIfsc` are set;
+otherwise throws `PaymentMethodNotConfiguredError` (`409`) — a
+society-configuration gap distinct from a resident input error. The frontend's
+`PayIntentPanel` (`ResidentDashboardOverview.tsx`) branches on the response's
+`paymentMethod` field: a `'BANK_TRANSFER'` intent shows the account number and
+IFSC in place of the QR image (on every device — there's no UPI app to
+deep-link into) and swaps the guideline copy to instruct an NEFT/IMPS/RTGS
+transfer instead of scanning a QR. The screenshot-upload/submit/cancel step
+that follows is unchanged either way.
+
+**Bank fields are validated as a pair, not individually.** A lone account
+number with no IFSC (or vice versa) is meaningless to a resident trying to
+pay, so `society-settings.service.ts`'s `updateSocietySettings` checks the
+*merged final state* (this PATCH's fields layered onto whatever's already
+stored) and throws `IncompleteBankDetailsError` (`400`) if exactly one ends up
+set — checked against the merged state rather than the request body alone,
+since a PATCH may legitimately touch only one of the two fields (e.g. fixing a
+typo in the IFSC while the account number, already saved, is left untouched).
+No schema-level "at least one payment method configured" constraint exists —
+Prisma can't express "A or (B and C)" — so that's enforced only where it
+matters: payment-intent creation, via `PaymentMethodNotConfiguredError` above.
+
+Full contract: `docs/payments.md`'s "Payment method: UPI or bank transfer,
+UPI takes precedence" section; schema: `docs/data-model.md`'s `Society`
+section.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
@@ -672,7 +710,7 @@ columns. See `docs/data-model.md`'s "Receipt" section for the full model and
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| Society | name, address, upiVpa, tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptSignatoryName/Title, receiptFooterNote, receiptSignatureFileKey/MimeType | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the six `receipt*` fields (2026-08-11 addendum) configure the receipt letterhead/signature — see `docs/receipts.md` |
+| Society | name, address, upiVpa (optional), bankAccountNumber/bankIfsc (optional, added 2026-08-12), tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptSignatoryName/Title, receiptFooterNote, receiptSignatureFileKey/MimeType | Root tenant entity. `upiVpa` was required until the 2026-08-12 bank-transfer-fallback addition; a payment intent still needs *some* payment method configured (UPI, or a complete bankAccountNumber+bankIfsc pair — UPI takes precedence), enforced at payment-intent-creation time, not the schema; `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the six `receipt*` fields (2026-08-11 addendum) configure the receipt letterhead/signature — see `docs/receipts.md` |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |

@@ -2,10 +2,29 @@ import type { Readable } from 'node:stream';
 import { prisma } from '../db';
 import { getStorageAdapter } from '../lib/storage';
 
+// Thrown when a PATCH would leave the society with exactly one of
+// bankAccountNumber/bankIfsc set — checked against the *merged* final state (this
+// input's fields layered onto whatever's already stored), not the request body
+// alone, since either field can legitimately be omitted on a given PATCH to leave
+// it untouched. A lone account number with no IFSC (or vice versa) can't be shown
+// to a resident trying to pay, so it's rejected outright rather than silently
+// saved half-complete.
+export class IncompleteBankDetailsError extends Error {
+  constructor() {
+    super('Both account number and IFSC code are required together');
+    this.name = 'IncompleteBankDetailsError';
+  }
+}
+
 export interface SocietySettings {
   name: string;
   address: string;
-  upiVpa: string;
+  // UPI always takes precedence over bank details when both are configured — see
+  // ledger.service.ts's buildPaymentIntentResult, the one place that choice
+  // actually matters.
+  upiVpa: string | null;
+  bankAccountNumber: string | null;
+  bankIfsc: string | null;
   tenantRateFactor: number;
   defaultBaseRate: number;
   // Receipt template customization (Receipt Generation & Approval Workflow,
@@ -22,14 +41,15 @@ export interface SocietySettings {
 export interface UpdateSocietySettingsInput {
   name?: string;
   address?: string;
+  // An empty string clears the field back to null — same PATCH convention as the
+  // receipt text fields below (there's a real "not configured" state, distinct
+  // from "leave whatever was there").
   upiVpa?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
   tenantRateFactor?: number;
   defaultBaseRate?: number;
   receiptNumberPrefix?: string;
-  // An empty string clears the field back to null (there's a real "no footer note
-  // configured" state, distinct from "leave whatever was there"); omitting the key
-  // entirely leaves it untouched — ordinary PATCH-semantics, same as every other
-  // optional field on this input.
   receiptSignatoryName?: string;
   receiptSignatoryTitle?: string;
   receiptFooterNote?: string;
@@ -38,7 +58,9 @@ export interface UpdateSocietySettingsInput {
 interface SocietyRow {
   name: string;
   address: string;
-  upiVpa: string;
+  upiVpa: string | null;
+  bankAccountNumber: string | null;
+  bankIfsc: string | null;
   tenantRateFactor: unknown;
   defaultBaseRate: unknown;
   receiptNumberPrefix: string;
@@ -52,6 +74,8 @@ const SETTINGS_SELECT = {
   name: true,
   address: true,
   upiVpa: true,
+  bankAccountNumber: true,
+  bankIfsc: true,
   tenantRateFactor: true,
   defaultBaseRate: true,
   receiptNumberPrefix: true,
@@ -66,6 +90,8 @@ function toSettings(society: SocietyRow): SocietySettings {
     name: society.name,
     address: society.address,
     upiVpa: society.upiVpa,
+    bankAccountNumber: society.bankAccountNumber,
+    bankIfsc: society.bankIfsc,
     tenantRateFactor: Number(society.tenantRateFactor),
     defaultBaseRate: Number(society.defaultBaseRate),
     receiptNumberPrefix: society.receiptNumberPrefix,
@@ -92,12 +118,28 @@ export async function updateSocietySettings(
   societyId: string,
   input: UpdateSocietySettingsInput,
 ): Promise<SocietySettings> {
+  // Only bother checking the merged final state when this PATCH actually touches
+  // either bank field — every other field is independent and needs no such check.
+  if (input.bankAccountNumber !== undefined || input.bankIfsc !== undefined) {
+    const current = await prisma.society.findUniqueOrThrow({
+      where: { id: societyId },
+      select: { bankAccountNumber: true, bankIfsc: true },
+    });
+    const finalAccountNumber = input.bankAccountNumber !== undefined ? input.bankAccountNumber || null : current.bankAccountNumber;
+    const finalIfsc = input.bankIfsc !== undefined ? input.bankIfsc || null : current.bankIfsc;
+    if (!!finalAccountNumber !== !!finalIfsc) {
+      throw new IncompleteBankDetailsError();
+    }
+  }
+
   const society = await prisma.society.update({
     where: { id: societyId },
     data: {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.address !== undefined ? { address: input.address } : {}),
-      ...(input.upiVpa !== undefined ? { upiVpa: input.upiVpa } : {}),
+      ...(input.upiVpa !== undefined ? { upiVpa: input.upiVpa || null } : {}),
+      ...(input.bankAccountNumber !== undefined ? { bankAccountNumber: input.bankAccountNumber || null } : {}),
+      ...(input.bankIfsc !== undefined ? { bankIfsc: input.bankIfsc || null } : {}),
       ...(input.tenantRateFactor !== undefined ? { tenantRateFactor: input.tenantRateFactor } : {}),
       ...(input.defaultBaseRate !== undefined ? { defaultBaseRate: input.defaultBaseRate } : {}),
       ...(input.receiptNumberPrefix !== undefined ? { receiptNumberPrefix: input.receiptNumberPrefix } : {}),

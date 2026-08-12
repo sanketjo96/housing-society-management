@@ -41,8 +41,16 @@ interface ReceiptEntry {
 // no shared counter, no race. This is what guarantees the number shown in the
 // pre-approval preview and the number actually issued on approval can never
 // disagree (see receipt.service.ts's previewReceiptPdf vs. prepareReceiptForEntry).
+//
+// Only the last 8 characters of the (cuid) ledgerEntryId are used, to keep the
+// printed number short and readable — full uniqueness isn't needed from this
+// suffix alone, since `Receipt.receiptNumber` is still `@unique` at the schema
+// level (prisma/schema.prisma) and would fail loudly on the astronomically
+// unlikely event of a collision, same safety net every other unique field in
+// this app already relies on.
 export function buildReceiptNumber(prefix: string, flat: ReceiptFlat, ledgerEntryId: string): string {
-  return `${prefix}-${flat.wing}${flat.flatNumber}-${ledgerEntryId}`;
+  const shortId = ledgerEntryId.slice(-8);
+  return `${prefix}-${flat.wing}${flat.flatNumber}-${shortId}`;
 }
 
 // Purpose text is a generic label per type, not an itemized per-month breakdown

@@ -53,8 +53,7 @@ docker compose ps        # postgres, backend, nginx should show "Up ... (healthy
 docker compose ps -a     # frontend should show "Exited (0)" — this is correct, not a failure (see docs/docker-compose.md)
 ```
 
-Open `http://<host>/` in a browser — you should see the "Housing Society Management"
-placeholder page.
+Open `http://<host>/` in a browser — you should see the "Saral Society" login page.
 
 ## 4. Running tests
 

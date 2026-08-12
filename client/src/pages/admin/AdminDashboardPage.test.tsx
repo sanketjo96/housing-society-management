@@ -129,10 +129,20 @@ describe('AdminDashboardPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    expect(screen.getByText('₹300')).toBeInTheDocument();
+    const section = screen.getByText('Flat-wise dues').closest('div') as HTMLElement;
+    expect(within(section).getByText('₹300')).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Tenant' })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Unpaid' })).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Credit' })).toBeInTheDocument();
+  });
+
+  it('shows a Total Credits card summing every flat\'s available credit', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Total Credits')).toBeInTheDocument());
+    const card = screen.getByText('Total Credits').closest('div') as HTMLElement;
+    expect(within(card).getByText('₹300')).toBeInTheDocument();
   });
 
   it("indicates a tenant's presence under the owner's name, without a separate Tenant column", async () => {

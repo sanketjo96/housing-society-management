@@ -113,7 +113,7 @@ describe('FlatsListPage', () => {
     expect(sentBody.occupancy).toBe('owner');
   });
 
-  it("pre-fills a new flat's base rate from the admin Settings default", async () => {
+  it("pre-fills a new flat's base rate from the admin Billing plan default", async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('/api/admin/settings')) {

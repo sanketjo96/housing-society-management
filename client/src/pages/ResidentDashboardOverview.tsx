@@ -49,8 +49,15 @@ interface LedgerResponse {
 interface PaymentIntent {
   id: string;
   amount: number;
-  upiLink: string;
-  qrDataUrl: string;
+  paymentMethod: 'UPI' | 'BANK_TRANSFER';
+  // Set only when paymentMethod is 'UPI'.
+  upiLink?: string;
+  qrDataUrl?: string;
+  // Set only when paymentMethod is 'BANK_TRANSFER' — shown instead of the QR when
+  // the society has no UPI VPA configured (UPI always takes precedence when both
+  // are set — see ledger.service.ts's buildPaymentIntentResult).
+  bankAccountNumber?: string;
+  bankIfsc?: string;
   createdAt: string;
 }
 
@@ -199,11 +206,21 @@ function PayIntentPanel({ intent, isMobile }: { intent: PaymentIntent; isMobile:
     },
   });
 
+  const isBankTransfer = intent.paymentMethod === 'BANK_TRANSFER';
+
   return (
     <div className="mb-4 flex flex-wrap items-start gap-4 rounded-xl border border-line bg-paper p-4">
-      {!isMobile && (
+      {!isBankTransfer && !isMobile && (
         <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-md border border-line bg-white p-1">
           <img src={intent.qrDataUrl} alt="UPI payment QR code" className="h-full w-full" />
+        </div>
+      )}
+      {isBankTransfer && (
+        <div className="shrink-0 rounded-md border border-line bg-white p-3">
+          <p className="m-0 text-[10px] uppercase tracking-wide text-muted">Account number</p>
+          <p className="m-0 mb-2 font-mono-brand text-sm font-semibold text-ink">{intent.bankAccountNumber}</p>
+          <p className="m-0 text-[10px] uppercase tracking-wide text-muted">IFSC</p>
+          <p className="m-0 font-mono-brand text-sm font-semibold text-ink">{intent.bankIfsc}</p>
         </div>
       )}
       <div className="min-w-52 flex-1">
@@ -212,9 +229,11 @@ function PayIntentPanel({ intent, isMobile }: { intent: PaymentIntent; isMobile:
           <span className="font-normal text-muted">— awaiting your screenshot</span>
         </p>
         <p className="m-0 mb-2.5 text-xs text-muted">
-          {isMobile
-            ? 'Complete the payment in your UPI app, then attach the screenshot below.'
-            : 'Scan the QR with a UPI app on your phone. Once you have a screenshot, attach it below — you can come back later if needed.'}
+          {isBankTransfer
+            ? 'Transfer the amount via NEFT/IMPS/RTGS to the account details above, then attach a screenshot or the transaction reference below.'
+            : isMobile
+              ? 'Complete the payment in your UPI app, then attach the screenshot below.'
+              : 'Scan the QR with a UPI app on your phone. Once you have a screenshot, attach it below — you can come back later if needed.'}
         </p>
 
         <div className="mb-2.5">
@@ -372,7 +391,9 @@ export function ResidentDashboardOverview() {
     },
     onSuccess: (body) => {
       queryClient.setQueryData(['payment-intent'], body.intent);
-      if (isMobile) window.location.href = body.intent.upiLink;
+      // Only a UPI intent has an app to deep-link into — a bank-transfer intent has
+      // no equivalent redirect, the account details just render in PayIntentPanel.
+      if (isMobile && body.intent.upiLink) window.location.href = body.intent.upiLink;
     },
   });
 

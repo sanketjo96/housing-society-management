@@ -1,18 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../context/AuthContext';
 import { DashboardPage } from './DashboardPage';
 
+// DashboardPage is only the "/dashboard" route's content now (see App.tsx /
+// DashboardLayout) — it just picks AdminDashboardPage vs ResidentDashboardOverview
+// by role. Nav rendering and cross-page routing moved to
+// components/DashboardLayout.test.tsx, which is where that's covered now.
 type FetchMock = ReturnType<typeof vi.fn>;
 
 function renderDashboard() {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/dashboard']}>
         <AuthProvider>
           <DashboardPage />
         </AuthProvider>
@@ -44,23 +47,6 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
         }),
       });
     }
-    if (url.includes('/api/me/flat')) {
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'not found' }) });
-    }
-    if (url.includes('/api/admin/flats')) {
-      return Promise.resolve({ ok: true, json: async () => [] });
-    }
-    if (url.includes('/api/admin/settings')) {
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({
-          name: 'Sunrise Residency',
-          upiVpa: 'sunrise-residency@okhdfcbank',
-          tenantRateFactor: 1.5,
-          defaultBaseRate: 1500,
-        }),
-      });
-    }
     if (url.includes('/api/admin/dashboard/summary')) {
       return Promise.resolve({
         ok: true,
@@ -68,9 +54,6 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
       });
     }
     if (url.includes('/api/admin/dashboard/flat-dues')) {
-      return Promise.resolve({ ok: true, json: async () => [] });
-    }
-    if (url.includes('/api/admin/dashboard/flagged-flats')) {
       return Promise.resolve({ ok: true, json: async () => [] });
     }
     if (url.includes('/api/admin/ledger-entries')) {
@@ -89,53 +72,7 @@ describe('DashboardPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows Dashboard, Maintenance Book, and My details tabs for an OWNER', async () => {
-    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
-    renderDashboard();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /^dashboard$/i })).toBeInTheDocument());
-    expect(screen.getByRole('tab', { name: /maintenance book/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /my details/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /flats and residents/i })).not.toBeInTheDocument();
-  });
-
-  it('shows only the admin tabs (Dashboard, Flats and residents, Payment proofs, Settings) for an ADMIN', async () => {
-    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
-    renderDashboard();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /flats and residents/i })).toBeInTheDocument());
-    expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^settings$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /maintenance book/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /my details/i })).not.toBeInTheDocument();
-  });
-
-  it('switches to the Payment proofs tab', async () => {
-    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
-    renderDashboard();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('tab', { name: /payment proofs/i }));
-
-    await waitFor(() => expect(screen.getByText(/no pending entries/i)).toBeInTheDocument());
-  });
-
-  it('switches to the Settings tab and shows the current billing defaults', async () => {
-    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
-    renderDashboard();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /^settings$/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('tab', { name: /^settings$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('1500')).toBeInTheDocument();
-    });
-    expect(screen.getByDisplayValue('1.5')).toBeInTheDocument();
-  });
-
-  it('shows the Dashboard tab content (Passbook content moved here) by default', async () => {
+  it('shows the resident overview (Passbook content) for an OWNER', async () => {
     mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
     renderDashboard();
 
@@ -144,29 +81,12 @@ describe('DashboardPage', () => {
     });
   });
 
-  it('switches to the Maintenance Book tab content on click', async () => {
-    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
+  it('shows the admin overview for an ADMIN', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderDashboard();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /maintenance book/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('tab', { name: /maintenance book/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument();
-    });
-  });
-
-  it('switches to the My details tab content on click', async () => {
-    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
-    renderDashboard();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByRole('tab', { name: /my details/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('tab', { name: /my details/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/no flat is linked to your account/i)).toBeInTheDocument();
+      expect(screen.getByText(/outstanding total/i)).toBeInTheDocument();
     });
   });
 });

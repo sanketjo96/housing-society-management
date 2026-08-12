@@ -56,6 +56,35 @@ Unchanged. `buildUpiDeepLink({ vpa, payeeName, amount, note })` — pure functio
 standard `upi://pay?...` deep link any UPI app recognizes. `generateQrDataUrl(link)`
 wraps the `qrcode` npm package and returns a base64 PNG data URL.
 
+## Payment method: UPI or bank transfer, UPI takes precedence (added 2026-08-12)
+
+`Society.upiVpa` is now **optional** — a society may instead (or additionally)
+configure `Society.bankAccountNumber` + `Society.bankIfsc`, admin-editable from
+Settings → Society details (`docs/data-model.md`'s `Society` section). Both bank
+fields are validated together in `society-settings.service.ts`'s
+`updateSocietySettings`: PATCHing one without the other already being set (or being
+set in the same request) throws `IncompleteBankDetailsError` (`400`) — checked
+against the *merged* final state, not the request body alone, since either field can
+be omitted on a given PATCH to leave it untouched.
+
+`ledger.service.ts`'s `buildPaymentIntentResult` (backing every
+`GET`/`POST /api/me/ledger/deposits/intent` response) picks the payment method for a
+given payment intent:
+
+```
+if society.upiVpa is set        → paymentMethod: 'UPI', upiLink + qrDataUrl
+else if bankAccountNumber+bankIfsc are both set → paymentMethod: 'BANK_TRANSFER', bankAccountNumber + bankIfsc
+else                             → throws PaymentMethodNotConfiguredError (409)
+```
+
+UPI always wins when both are configured — a resident only ever sees one or the
+other, never both. `PaymentIntentResult`'s `upiLink`/`qrDataUrl` and
+`bankAccountNumber`/`bankIfsc` are mutually exclusive, keyed off `paymentMethod`.
+`PaymentMethodNotConfiguredError` maps to `409` in `ledger.controller.ts` (a
+society-configuration gap, not a resident input error — distinct from
+`InvalidDepositAmountError`/`InvalidAmountError`'s `400`s) on both the `GET` and
+`POST` intent handlers.
+
 ## Balance formula — `src/services/ledger.service.ts`'s `balancesFromRows`
 
 The one place this formula is computed — reused by both the resident's own Dashboard
@@ -250,6 +279,17 @@ amount becomes read-only (`PayIntentPanel` only ever displays it, never edits it
 editability is only at the entry step, before locking, matching rule 6 ("explicit
 partial payment... any amount from ₹1 up to Outstanding") rather than the
 all-or-nothing lock this page shipped with initially.
+
+**`PayIntentPanel` branches on `intent.paymentMethod` (added 2026-08-12)**: a
+`'UPI'` intent renders exactly as before (QR image on desktop, deep-link redirect on
+mobile via `lockMutation`'s `window.location.href = intent.upiLink`, now guarded on
+`upiLink` actually being present). A `'BANK_TRANSFER'` intent instead shows the
+account number and IFSC in a bordered detail box (on every device — there's no app
+to deep-link into) and swaps the guideline copy to "Transfer the amount via
+NEFT/IMPS/RTGS to the account details above, then attach a screenshot or the
+transaction reference below." The screenshot-upload/submit/cancel controls
+underneath are unchanged either way — proof is still attached the same way
+regardless of payment method.
 
 ## Frontend — admin review queue (`client/src/pages/admin/PaymentProofsPage.tsx`)
 
