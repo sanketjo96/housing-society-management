@@ -46,20 +46,34 @@ async function getBalancesByFlat(societyId: string) {
 // offset another flat's balance (each Math.max(0, ...) is per-flat, per the ledger
 // formula). pendingReviewTotal covers pending Deposits still awaiting review —
 // neither "confirmed collected" nor "still owed with no action taken."
+//
+// totalPaid = approvedDeposits + approvedCredits (2026-08-08 pivot — reverses the
+// prior 2026-08-07 rule that totalPaid excluded Credit as "not collected cash"; an
+// approved Credit is now counted as paid/settled the same as a Deposit, same as
+// availableCredit/outstanding already treat the two as fungible via approvedFunds).
+// Still used for FlatDues.paidTotal below.
+//
+// collectionRatePercent (2026-08-09 pivot): deposits only, NOT totalPaid. At the
+// society-wide headline-metric level, folding in approved Credit overstates actual
+// cash collected and risks masking a collection shortfall the committee should be
+// chasing — a Credit is a committee-approved adjustment, not money that came in the
+// door. This only affects the rate; totalPaid itself is unchanged.
 export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
   const byFlat = await getBalancesByFlat(societyId);
 
   let totalBilled = 0;
   let totalPaid = 0;
+  let totalApprovedDeposits = 0;
   let outstandingTotal = 0;
   let pendingReviewTotal = 0;
   for (const { balances, pendingEntries } of byFlat) {
     totalBilled += balances.totalCharges;
-    totalPaid += balances.approvedDeposits;
+    totalPaid += balances.approvedDeposits + balances.approvedCredits;
+    totalApprovedDeposits += balances.approvedDeposits;
     outstandingTotal += balances.outstanding;
     pendingReviewTotal += pendingEntries.reduce((sum, e) => sum + Number(e.amount), 0);
   }
-  const collectionRatePercent = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
+  const collectionRatePercent = totalBilled > 0 ? Math.round((totalApprovedDeposits / totalBilled) * 100) : 0;
 
   return { totalBilled, totalPaid, outstandingTotal, pendingReviewTotal, collectionRatePercent };
 }
@@ -68,26 +82,32 @@ export interface FlatDues {
   flat: { id: string; wing: string; flatNumber: string };
   owner: FlatWithResidents['owner'];
   currentTenant: FlatWithResidents['currentTenant'];
+  paidTotal: number;
   outstandingTotal: number;
-  unpaidCount: number;
+  creditTotal: number;
 }
 
 // Task 8.2 — every flat, not just the ones with dues (a settled flat showing ₹0 is
 // itself useful information for an admin scanning the table), sorted highest-owed
 // first. outstandingTotal here is each flat's Outstanding — the primary "what they
-// owe right now" figure. unpaidCount is the number of pending Deposit rows still
-// awaiting review for that flat (a rough "how much activity is in flight" signal,
-// distinct from Outstanding).
+// owe right now" figure. paidTotal is that flat's approvedDeposits + approvedCredits
+// (2026-08-08 pivot, same as getDashboardSummary's totalPaid — see that function's
+// comment), reused here per-flat rather than only in the aggregate. creditTotal is
+// that flat's availableCredit — the flip side of outstanding (exactly one of the two
+// is ever nonzero, per ledger.service.ts's balancesFromRows) — a distinct figure from
+// paidTotal: paidTotal is the cumulative funds ever applied, creditTotal is whatever
+// of that is still unused after covering totalCharges.
 export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
   const byFlat = await getBalancesByFlat(societyId);
 
   return byFlat
-    .map(({ flat, balances, pendingEntries }) => ({
+    .map(({ flat, balances }) => ({
       flat: { id: flat.id, wing: flat.wing, flatNumber: flat.flatNumber },
       owner: flat.owner,
       currentTenant: flat.currentTenant,
+      paidTotal: balances.approvedDeposits + balances.approvedCredits,
       outstandingTotal: balances.outstanding,
-      unpaidCount: pendingEntries.length,
+      creditTotal: balances.availableCredit,
     }))
     .sort((a, b) => b.outstandingTotal - a.outstandingTotal);
 }

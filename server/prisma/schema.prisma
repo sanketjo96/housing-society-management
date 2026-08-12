@@ -78,11 +78,28 @@ model Society {
   // (above) feeds the rate calculation at the society level.
   defaultBaseRate Decimal @default(1500) @db.Decimal(10, 2)
 
+  // Receipt template customization (Settings tab) — admin-configurable letterhead
+  // for the PDF receipt issued when a Deposit/Credit is approved (see Receipt
+  // model below). receiptNumberPrefix needs a working default so receipts issue
+  // correctly out of the box before an admin ever visits Settings; the rest are
+  // optional and simply omitted from a rendered receipt when unset.
+  receiptNumberPrefix   String  @default("RCPT")
+  receiptSignatoryName  String?
+  receiptSignatoryTitle String?
+  receiptFooterNote     String?
+
+  // Opaque StorageAdapter key for the treasurer's signature image, never a public
+  // URL — same "opaque key, not a browsable path" contract as LedgerEntry.fileUrl.
+  // Optional: a receipt renders with a blank signature line when unset.
+  receiptSignatureFileKey  String?
+  receiptSignatureMimeType String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
-  flats Flat[]
+  users    User[]
+  flats    Flat[]
+  receipts Receipt[]
 }
 
 model User {
@@ -103,6 +120,7 @@ model User {
   occupancyChanges      OccupancyChange[]
   ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
   reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
+  issuedReceipts        Receipt[]            @relation("ReceiptIssuer")
   auditLogs             AuditLog[]
   billedRecords         MaintenanceRecord[]
   paymentIntents        PaymentIntent[]
@@ -272,8 +290,40 @@ model LedgerEntry {
   reviewedById String?
   reviewedBy   User?   @relation("LedgerReviewer", fields: [reviewedById], references: [id])
 
+  receipt Receipt?
+
   @@index([flatId])
   @@index([status])
+}
+
+// Immutable record of an issued receipt (Receipt Generation & Approval Workflow,
+// 2026-08-11). Created only at the moment a LedgerEntry is actually approved —
+// `fileKey` points at the already-rendered PDF (StorageAdapter, same opaque-key
+// contract as LedgerEntry.fileUrl), never regenerated on later reads. This is
+// what makes "Settings changes affect future receipts only, never retroactively
+// alter an already-issued one" trivially true: there is nothing to re-render,
+// the PDF is a frozen fact from the moment it's saved. receiptNumber is derived
+// from the society's configured prefix + the flat's identifier + the
+// LedgerEntry's own id (see receipt.service.ts's buildReceiptNumber) — computable
+// before approval, so the number shown in the pre-approval preview and the
+// number actually issued can never disagree.
+model Receipt {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique
+  fileKey       String
+  issuedAt      DateTime @default(now())
+
+  ledgerEntryId String      @unique
+  ledgerEntry   LedgerEntry @relation(fields: [ledgerEntryId], references: [id])
+
+  issuedById String
+  issuedBy   User   @relation("ReceiptIssuer", fields: [issuedById], references: [id])
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  @@index([societyId])
+  @@index([issuedById])
 }
 
 // A resident's "I intend to pay this amount" step, ahead of actually submitting a

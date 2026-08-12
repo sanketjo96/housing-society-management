@@ -10,11 +10,16 @@ export function Modal({
   subtitle,
   onClose,
   children,
+  // Defaults to the original fixed small-form width; wider content (e.g. the
+  // receipt-approval PDF preview, ReceiptApprovalModal.tsx) can opt into more room
+  // without every other caller needing to change.
+  maxWidthClassName = 'max-w-sm',
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  maxWidthClassName?: string;
 }) {
   return (
     <div
@@ -25,7 +30,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-sm rounded-2xl bg-white p-6"
+        className={`w-full ${maxWidthClassName} rounded-2xl bg-white p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">

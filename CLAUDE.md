@@ -495,6 +495,156 @@ contract: `docs/payments.md`'s "Settlement status" and new Credit sections,
 `docs/data-model.md`'s `LedgerEntry` section, `docs/admin-dashboard.md`'s
 `getFlaggedFlats` section.
 
+### Pivot (2026-08-08): admin dashboard's `totalPaid`/`paidTotal` now include Credit
+
+Confirmed, explicit reversal of the 2026-08-07 rule (§ "Credit re-introduced", above)
+that `getDashboardSummary`'s `totalPaid` — and by extension the collection-rate
+calc — deliberately excluded `approvedCredits`, on the reasoning that a Credit isn't
+collected cash. That distinction is dropped: **"Total paid" is now
+`approvedDeposits + approvedCredits`** (i.e. `approvedFunds`, the same lump sum
+`balancesFromRows` already fungibly pools for Outstanding/Available Credit), applied
+everywhere a "paid"/"collected" figure is computed on the admin dashboard:
+
+- `getDashboardSummary`'s `totalPaid` (and therefore `collectionRatePercent =
+  round(totalPaid / totalBilled * 100)`, which now also counts approved Credit as
+  "collected" for the purposes of this rate).
+- `getFlatWiseDues`'s per-flat `paidTotal` (the admin dashboard table's "Paid"
+  column, `admin-dashboard.service.ts`).
+
+**What did NOT change**: `creditTotal` (`availableCredit`, the table's separate
+"Credit" column) is untouched and remains a distinct figure from `paidTotal` —
+`paidTotal` is the cumulative funds ever approved for a flat (Deposit or Credit
+alike), while `creditTotal` is whatever of that is still unused after covering
+`totalCharges`. The resident-facing Outstanding/Available Credit formulas
+(`ledger.service.ts`'s `balancesFromRows`, rule 4) were already computed this way
+(`approvedFunds = approvedDeposits + approvedCredits`) and needed no change — only
+the admin dashboard's separately-tracked `totalPaid` aggregate had drifted from that
+convention, which this pivot corrects. Full contract:
+`docs/admin-dashboard.md`'s `getDashboardSummary`/`getFlatWiseDues` sections.
+
+### Pivot (2026-08-09): `collectionRatePercent` splits back off from `totalPaid` —
+deposits only
+
+Confirmed, **partial** reversal of the 2026-08-08 pivot immediately above — narrower
+than it looks, so read carefully what did and didn't change. `totalPaid` and
+`getFlatWiseDues`'s `paidTotal` keep the 2026-08-08 definition
+(`approvedDeposits + approvedCredits`) exactly as-is. Only `collectionRatePercent`'s
+formula changes, and it now reads a *different* input than `totalPaid`:
+
+```
+collectionRatePercent = round(totalApprovedDeposits / totalBilled * 100)
+```
+
+**Why**: `collectionRatePercent` is a society-wide headline metric an admin uses to
+judge how collection is going. Folding approved Credit into that specific number
+overstates actual cash collected — a Credit is a committee-approved adjustment (e.g. a
+repair cost settled against maintenance), not money that came in the door — and risks
+masking a real collection shortfall the committee should be chasing down, i.e. it can
+actively discourage follow-up on flats that haven't actually paid anything. This
+concern is specific to the rate as a percentage-collected signal; it doesn't apply to
+`totalPaid`/`paidTotal`, which are still meant to represent "funds ever approved for
+this flat" (Deposit or Credit alike) and stay unchanged.
+
+**Implementation**: `getDashboardSummary` (`admin-dashboard.service.ts`) now
+accumulates a separate `totalApprovedDeposits` sum (deposits only, across every flat)
+alongside the existing `totalPaid` accumulator, and computes `collectionRatePercent`
+from that instead. `totalApprovedDeposits` is a local accumulator, not a new field on
+`DashboardSummary` — the response shape is unchanged. The admin dashboard UI
+(`AdminDashboardPage.tsx`) now shows the formula as a small note directly under the
+"Collection rate" card, so the number is self-explanatory without needing to consult
+this doc. Full contract: `docs/admin-dashboard.md`'s `getDashboardSummary` section.
+
+### Addition (2026-08-11): Receipt generation and approval workflow
+
+Confirmed against a plain-text requirements doc covering five areas: an approval
+flow, receipt content, admin-configurable template settings, signature upload, and
+a rate-calculation guard. Layered on top of Phase 6's ledger approve/reject and
+Phase 8's admin dashboard/Payment Proofs UI — not a reversal of anything above.
+Full contract, endpoints, and a manually-verified transcript: `docs/receipts.md`.
+
+**Approval flow**: clicking Approve on a pending Deposit or Credit no longer
+settles it directly — it opens a receipt-validation modal showing the *exact*
+receipt that will be issued (society name/address, receipt number, resident
+name, flat number, date, amount, purpose, signatory block). Cancel takes no
+action, the entry stays `PENDING`. **Confirm and approve** is the real action —
+this is the point the entry settles *and* the receipt is issued. Reject stays a
+single-click action, no modal (nothing to validate when declining). The preview
+is guaranteed byte-for-byte identical to what's actually issued because both
+paths call the same `buildReceiptData`/`renderReceiptPdf` functions
+(`receipt.service.ts`) — the preview simply never calls `storage.save()` or
+writes to the database.
+
+**Receipt number**: `{prefix}-{flat.wing}{flat.flatNumber}-{ledgerEntryId}`,
+prefix admin-configurable (`Society.receiptNumberPrefix`, default `"RCPT"`).
+Fully computable before approval (a `LedgerEntry`'s id already exists once
+created), so the preview and the eventually-issued number can never disagree —
+no shared counter, no race condition.
+
+**Receipt content's purpose line is a generic label per type, not an itemized
+per-month breakdown** (confirmed scope decision): a Deposit's purpose is always
+"Maintenance dues payment"; a Credit's purpose is its own existing required
+`note` field. This follows directly from the ledger pivot — a Deposit was never
+tied to specific `MaintenanceRecord`s to begin with, so there's nothing to
+itemize. Amount is shown numerically and in words (`lib/number-to-words.ts`,
+Indian numbering — crore/lakh/thousand, plus paise when applicable).
+
+**Rate calculation rule — needed zero new code.** A receipt's amount must come
+from the stored `LedgerEntry.amount`/`MaintenanceRecord.amount` captured at
+creation, never recomputed from current billing settings at approval/receipt
+time. Both fields were already persisted once and never mutated afterward (true
+since the ledger pivot and arrears-billing addenda above) — so reading them
+directly for a receipt already satisfies this rule with no extra bookkeeping.
+
+**Template customization** (`GET`/`PATCH /api/admin/settings`, admin-only):
+society name (existing), society address (already on the schema, newly exposed
+via this endpoint), receipt number prefix, signatory name, signatory title,
+footer note, and an uploaded signature image. **Changes affect future receipts
+only** — an already-issued receipt's PDF is rendered and saved once, at
+approval time, and never re-rendered on a later read; there's nothing to
+retroactively "alter."
+
+**Signature upload** (`POST`/`DELETE`/`GET /api/admin/settings/signature`):
+PNG/JPEG/WEBP only (unlike proof uploads, never PDF — it's embedded as a
+picture), 2MB cap. Displays above the signatory name on every future receipt,
+replacing the blank signature line; removing it reverts to the blank line.
+Optional throughout. Stored the same way every other upload in this app is —
+via `StorageAdapter`, private/authenticated access only, `Society` stores only
+the opaque key, never the image bytes (same contract as `LedgerEntry.fileUrl`).
+Replace/remove ordering is deliberate: save the new file → point `Society` at
+it → only then delete the old one, never delete-then-save, so a failure
+mid-replace can never leave Settings referencing a file that no longer exists.
+A signature file that can't be read at render time (deleted out-of-band,
+adapter misconfigured) falls back to the blank-line rendering with a logged
+warning — a broken decorative image must never block a financial transaction
+from settling.
+
+**Two implementation judgment calls, both resolved before/during
+implementation:**
+- **`manualDeposit` (the cash/bank-transfer fallback) also issues a receipt.**
+  The written spec only describes the Approve-button flow, but a treasurer
+  taking cash needs a receipt at least as much as a UPI depositor — arguably
+  more, since there's no screenshot serving as informal proof. No preview modal
+  for this path (it's already a single-step "record what happened" action,
+  with no `PENDING` state to preview against); the receipt issues synchronously
+  as part of that one existing step.
+- **A legacy entry approved before this feature shipped has no `Receipt` row,
+  and this is never backfilled.** The download endpoint returns a plain `404`
+  ("No receipt was issued for this entry") rather than lazily fabricating one
+  under today's settings — a fabricated receipt for a transaction that never
+  actually had one issued at the time would be actively misleading.
+
+**Resident access**: widened during planning from an initial "admin-only"
+scope — residents (owner or tenant, symmetric, whoever is the entry's
+`payerId`) can view/download their own issued receipts from the Passbook
+(`GET /api/ledger-entries/:id/receipt`, shared with the admin queue, same
+admin-or-own-payer auth rule as the existing proof-file endpoint). The receipt
+*preview* stays admin-only — it's part of the approval workflow, not a
+resident-facing view.
+
+**Schema**: new `Receipt` model (1:1 with `LedgerEntry`) plus six new `Society`
+columns. See `docs/data-model.md`'s "Receipt" section for the full model and
+`docs/receipts.md` for the endpoint-by-endpoint contract.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
@@ -522,12 +672,13 @@ contract: `docs/payments.md`'s "Settlement status" and new Credit sections,
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| Society | name, address, upiVpa, tenantRateFactor (default 1.5), defaultBaseRate (default 1500) | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation |
+| Society | name, address, upiVpa, tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptSignatoryName/Title, receiptFooterNote, receiptSignatureFileKey/MimeType | Root tenant entity. `upiVpa` required (Task 6.1 QR gen needs it); `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the six `receipt*` fields (2026-08-11 addendum) configure the receipt letterhead/signature — see `docs/receipts.md` |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
 | MaintenanceRecord | flatId, period, payerType, payerId, amount, dueDate | Monthly SYSTEM charge, always implicitly "Approved," never individually paid **in the schema** — permanently contributes `amount` to its flat's `totalCharges`. A per-record settlement status (Unpaid/Partially Settled/Paid) is derived at read time via FIFO fill against the flat's approved deposits (2026-08-07 addendum), never stored on this model. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
 | LedgerEntry | flatId, payerId, type, amount, status, note, fileUrl, mimeType, adminNote, reviewedBy/At | Resident-created Deposit or Credit row (ledger pivot, 2026-08-06; `type` dropped 2026-08-07 when Credit was removed, then re-added the same day when Credit came back in an allocation-based shape — see the "Credit re-introduced" addendum) — replaces PaymentProof. No link to specific MaintenanceRecords (settlement is computed against the aggregate, via `computeRecordSettlements`); only APPROVED rows count toward Outstanding/Available Credit. `fileUrl`/`mimeType` are optional at the schema level (a proof is never mandatory for a Deposit) but a Credit's `POST /api/me/ledger/credits` requires one at the application level, alongside `note` — see `docs/payments.md`. See `docs/data-model.md` |
+| Receipt | ledgerEntryId (unique), receiptNumber, fileKey, issuedAt, issuedById, societyId | Created only when a LedgerEntry is approved (2026-08-11 addendum) — `fileKey` points at an already-rendered PDF (StorageAdapter), never re-rendered on later reads. 1:1 with LedgerEntry; `receiptNumber` is derived (`prefix-flat-ledgerEntryId`), not a separate sequence. See `docs/receipts.md` |
 | NotificationLog | channel, recipient, status, linked entity | |
 | AuditLog | actor, action, entity, timestamp, note | Financial action trail |
 
@@ -555,6 +706,10 @@ existing schema.
 
 ## Explicitly out of scope for this MVP (Phase 2+)
 
+- Public self-signup (open registration with no prior admin/owner action — the
+  current model only provisions accounts via admin flat onboarding or owner-added
+  tenant, both followed by the password-reset claim flow; see the "Addition
+  (2026-08-06)" section above)
 - Razorpay/payment gateway integration
 - WhatsApp Business API / automated WhatsApp sending
 - Complaints/helpdesk, notices/announcements, gate/visitor management modules

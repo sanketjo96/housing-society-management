@@ -19,13 +19,30 @@ model Society {
   upiVpa           String
   tenantRateFactor Decimal  @default(1.5) @db.Decimal(3, 2)
   defaultBaseRate  Decimal  @default(1500) @db.Decimal(10, 2)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 
-  users User[]
-  flats Flat[]
+  receiptNumberPrefix      String  @default("RCPT")
+  receiptSignatoryName     String?
+  receiptSignatoryTitle    String?
+  receiptFooterNote        String?
+  receiptSignatureFileKey  String?
+  receiptSignatureMimeType String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  flats    Flat[]
+  receipts Receipt[]
 }
 ```
+
+> **Receipt fields added 2026-08-11** (Receipt Generation & Approval Workflow) —
+> admin-configurable letterhead for the PDF receipt issued when a Deposit/Credit is
+> approved. `receiptNumberPrefix` needs a working default (`"RCPT"`) so receipts
+> issue correctly before an admin ever visits Settings; the rest are optional, simply
+> omitted from a rendered receipt when unset. `receiptSignatureFileKey` is an opaque
+> `StorageAdapter` key (same contract as `LedgerEntry.fileUrl`), never a public URL.
+> Full contract: `docs/receipts.md`.
 
 > **`defaultBaseRate` added 2026-08-06** (admin Settings tab addendum, `CLAUDE.md`):
 > pre-fills the base-rate field when onboarding a *new* flat via the admin UI. Purely a
@@ -455,6 +472,53 @@ distinct fields because they're written by different parties at different times.
 Same rule as `Flat.owner`/`Flat.currentTenant` (see above) — `LedgerEntry` has two
 separate relations to `User`, so both need names (`"LedgerPayer"`, `"LedgerReviewer"`)
 or Prisma can't tell which foreign key pairs with which back-relation field on `User`.
+
+## Receipt (2026-08-11)
+
+```prisma
+model Receipt {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique
+  fileKey       String
+  issuedAt      DateTime @default(now())
+
+  ledgerEntryId String      @unique
+  ledgerEntry   LedgerEntry @relation(fields: [ledgerEntryId], references: [id])
+
+  issuedById String
+  issuedBy   User   @relation("ReceiptIssuer", fields: [issuedById], references: [id])
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  @@index([societyId])
+  @@index([issuedById])
+}
+```
+
+Created only at the moment a `LedgerEntry` is actually approved (or, for the cash/
+bank-transfer fallback, created already-approved) — never speculatively, never for
+a rejected entry. **1:1 with `LedgerEntry`**, not a history of every receipt ever
+generated for it — there's exactly one issuance event per approved entry, so a
+unique `ledgerEntryId` is sufficient; there's nothing to version.
+
+**`fileKey` points at an already-rendered PDF, not a template to re-render on
+each read.** Same opaque `StorageAdapter` key contract as `LedgerEntry.fileUrl`.
+This is the concrete mechanism behind "Settings changes only affect future
+receipts, never retroactively alter an already-issued one" — there is no
+template being re-evaluated at read time to *have* drifted; the bytes are a
+frozen fact from the moment `storage.save()` ran.
+
+**`receiptNumber` is derived, not a separate sequence.** Computed as
+`{Society.receiptNumberPrefix}-{flat.wing}{flat.flatNumber}-{ledgerEntryId}`
+(`receipt.service.ts`'s `buildReceiptNumber`) — since a `LedgerEntry`'s `id`
+already exists before it's approved, the number is fully known in advance, so a
+pre-approval preview and the number actually persisted here can never disagree.
+No counter table, no race condition to guard against.
+
+Full contract, endpoints, and the two implementation judgment calls (whether the
+manual cash/bank-transfer fallback also issues a receipt, and what happens for a
+legacy entry approved before this model existed): `docs/receipts.md`.
 
 ### NotificationLog and AuditLog — the polymorphic-lite pattern
 

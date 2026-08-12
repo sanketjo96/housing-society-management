@@ -1,6 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../src/db';
-import { getSocietySettings, updateSocietySettings } from '../../src/services/society-settings.service';
+import { getStorageAdapter } from '../../src/lib/storage';
+import {
+  getReceiptSignatureForViewing,
+  getSocietySettings,
+  removeReceiptSignature,
+  setReceiptSignature,
+  updateSocietySettings,
+} from '../../src/services/society-settings.service';
+
+// LocalStorageAdapter.read() resolves synchronously with a stream — a missing
+// file only surfaces as an 'error' event once the stream is actually consumed,
+// not as a rejected promise from read() itself.
+async function expectFileGone(key: string): Promise<void> {
+  const stream = await getStorageAdapter().read(key);
+  await expect(
+    new Promise((resolve, reject) => {
+      stream.on('data', () => {});
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    }),
+  ).rejects.toThrow();
+}
 
 describe('society-settings service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -24,24 +45,26 @@ describe('society-settings service', () => {
     await prisma.$disconnect();
   });
 
-  it('returns the current name, upiVpa, tenantRateFactor, and defaultBaseRate', async () => {
+  it('returns the current settings, with default receiptNumberPrefix and no signature', async () => {
     const settings = await getSocietySettings(societyId);
     expect(settings).toEqual({
       name: `Settings Test Society ${suffix}`,
+      address: '1 Test St',
       upiVpa: 'settings-test@okhdfcbank',
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
+      receiptNumberPrefix: 'RCPT',
+      receiptSignatoryName: null,
+      receiptSignatoryTitle: null,
+      receiptFooterNote: null,
+      hasSignature: false,
     });
   });
 
   it('updates tenantRateFactor only, leaving everything else untouched', async () => {
     const updated = await updateSocietySettings(societyId, { tenantRateFactor: 1.75 });
-    expect(updated).toEqual({
-      name: `Settings Test Society ${suffix}`,
-      upiVpa: 'settings-test@okhdfcbank',
-      tenantRateFactor: 1.75,
-      defaultBaseRate: 1500,
-    });
+    expect(updated.tenantRateFactor).toBe(1.75);
+    expect(updated.defaultBaseRate).toBe(1500);
   });
 
   it('updates defaultBaseRate only, leaving everything else untouched', async () => {
@@ -50,30 +73,110 @@ describe('society-settings service', () => {
     expect(updated.tenantRateFactor).toBe(1.75);
   });
 
-  it('updates the society name and UPI ID', async () => {
+  it('updates the society name, address, and UPI ID', async () => {
     const updated = await updateSocietySettings(societyId, {
       name: 'Renamed Society',
+      address: '2 New Address Rd',
       upiVpa: 'renamed-society@upi',
     });
     expect(updated.name).toBe('Renamed Society');
+    expect(updated.address).toBe('2 New Address Rd');
     expect(updated.upiVpa).toBe('renamed-society@upi');
-    // Unrelated fields stay untouched.
     expect(updated.defaultBaseRate).toBe(1800);
     expect(updated.tenantRateFactor).toBe(1.75);
   });
 
-  it('updates all four fields together', async () => {
+  it('updates the receipt template fields', async () => {
+    const updated = await updateSocietySettings(societyId, {
+      receiptNumberPrefix: 'SR',
+      receiptSignatoryName: 'Ramesh Kulkarni',
+      receiptSignatoryTitle: 'Treasurer',
+      receiptFooterNote: 'Thank you for your prompt payment.',
+    });
+    expect(updated.receiptNumberPrefix).toBe('SR');
+    expect(updated.receiptSignatoryName).toBe('Ramesh Kulkarni');
+    expect(updated.receiptSignatoryTitle).toBe('Treasurer');
+    expect(updated.receiptFooterNote).toBe('Thank you for your prompt payment.');
+  });
+
+  it('clears a receipt text field back to null when given an empty string', async () => {
+    const updated = await updateSocietySettings(societyId, { receiptFooterNote: '' });
+    expect(updated.receiptFooterNote).toBeNull();
+    // Unrelated receipt fields stay untouched.
+    expect(updated.receiptSignatoryName).toBe('Ramesh Kulkarni');
+  });
+
+  it('updates all core fields together', async () => {
     const updated = await updateSocietySettings(societyId, {
       name: 'Final Society Name',
+      address: 'Final Address',
       upiVpa: 'final@upi',
       tenantRateFactor: 2,
       defaultBaseRate: 2000,
     });
-    expect(updated).toEqual({
-      name: 'Final Society Name',
-      upiVpa: 'final@upi',
-      tenantRateFactor: 2,
-      defaultBaseRate: 2000,
+    expect(updated.name).toBe('Final Society Name');
+    expect(updated.address).toBe('Final Address');
+    expect(updated.upiVpa).toBe('final@upi');
+    expect(updated.tenantRateFactor).toBe(2);
+    expect(updated.defaultBaseRate).toBe(2000);
+  });
+
+  describe('receipt signature lifecycle', () => {
+    it('sets a signature, reports hasSignature true, and serves the bytes back', async () => {
+      const updated = await setReceiptSignature(societyId, {
+        buffer: Buffer.from('fake-png-bytes-1'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(updated.hasSignature).toBe(true);
+
+      const view = await getReceiptSignatureForViewing(societyId);
+      expect(view).not.toBeNull();
+      expect(view!.mimeType).toBe('image/png');
+    });
+
+    it('replacing a signature saves the new file before deleting the old one', async () => {
+      const before = await prisma.society.findUniqueOrThrow({
+        where: { id: societyId },
+        select: { receiptSignatureFileKey: true },
+      });
+      const oldKey = before.receiptSignatureFileKey!;
+
+      const updated = await setReceiptSignature(societyId, {
+        buffer: Buffer.from('fake-png-bytes-2'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(updated.hasSignature).toBe(true);
+
+      // The old file is gone (deleted only *after* the replacement succeeded)...
+      await expectFileGone(oldKey);
+
+      // ...and the new one is what's actually served now.
+      const view = await getReceiptSignatureForViewing(societyId);
+      const chunks: Buffer[] = [];
+      for await (const chunk of view!.stream) chunks.push(chunk as Buffer);
+      expect(Buffer.concat(chunks).toString()).toBe('fake-png-bytes-2');
+    });
+
+    it('removing a signature clears hasSignature and deletes the stored file', async () => {
+      const before = await prisma.society.findUniqueOrThrow({
+        where: { id: societyId },
+        select: { receiptSignatureFileKey: true },
+      });
+      const key = before.receiptSignatureFileKey!;
+
+      const updated = await removeReceiptSignature(societyId);
+      expect(updated.hasSignature).toBe(false);
+
+      const view = await getReceiptSignatureForViewing(societyId);
+      expect(view).toBeNull();
+      await expectFileGone(key);
+    });
+
+    it('removing when no signature is set is a harmless no-op', async () => {
+      const updated = await removeReceiptSignature(societyId);
+      expect(updated.hasSignature).toBe(false);
     });
   });
 });

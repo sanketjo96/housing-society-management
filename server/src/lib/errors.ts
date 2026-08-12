@@ -12,3 +12,24 @@ export class DuplicateFieldError extends Error {
     this.name = 'DuplicateFieldError';
   }
 }
+
+// Originally defined in ledger.service.ts; moved here (Receipt Generation &
+// Approval Workflow, 2026-08-11) so receipt.service.ts can throw/catch the exact
+// same error class without creating a ledger.service.ts <-> receipt.service.ts
+// import cycle (ledger.service.ts calls into receipt.service.ts for issuance,
+// receipt.service.ts needs these same statuses for its own preview/view checks).
+// Re-exported from ledger.service.ts below so every existing import site is
+// unaffected.
+export class LedgerEntryAlreadyReviewedError extends Error {
+  constructor() {
+    super('This ledger entry has already been reviewed');
+    this.name = 'LedgerEntryAlreadyReviewedError';
+  }
+}
+
+export class ForbiddenLedgerEntryAccessError extends Error {
+  constructor() {
+    super('You do not have access to this ledger entry');
+    this.name = 'ForbiddenLedgerEntryAccessError';
+  }
+}

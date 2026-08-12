@@ -36,9 +36,12 @@ calls `ledger.service.ts`'s `balancesFromRows` per flat — the exact same formu
 resident's own Dashboard uses (`docs/payments.md`), never duplicated.
 
 - `totalBilled` = sum of every flat's `totalCharges`.
-- `totalPaid` = sum of every flat's `approvedDeposits` — **deliberately excludes
-  `approvedCredits`** (2026-08-07): a Credit is a real adjustment reducing what's
-  owed, but it isn't collected cash, so it must not inflate the collection rate below.
+- `totalPaid` = sum of every flat's `approvedDeposits + approvedCredits`
+  (`approvedFunds`) — **2026-08-08 pivot**: this reverses the prior 2026-08-07 rule
+  that excluded Credit from `totalPaid` as "not collected cash." An approved Credit
+  now counts as paid the same as a Deposit, matching the fungible-funds treatment
+  `balancesFromRows` already used for Outstanding/Available Credit. See CLAUDE.md's
+  "Pivot (2026-08-08)" addendum for the full reasoning.
 - `outstandingTotal` = **sum of each flat's own `outstanding`** (which does already
   fold in Credit — see `docs/payments.md`'s balance formula) — summed per flat, not
   computed as one global subtraction, since a flat that has overpaid must never offset
@@ -46,21 +49,37 @@ resident's own Dashboard uses (`docs/payments.md`), never duplicated.
 - `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` (Deposit *and*
   Credit, since 2026-08-07) amounts — neither "confirmed collected" nor "still owed
   with no action taken."
-- `collectionRatePercent` = `round(totalPaid / totalBilled * 100)`, `0` when
-  `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
+- `collectionRatePercent` = `round(totalApprovedDeposits / totalBilled * 100)`, `0`
+  when `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
+  **2026-08-09 pivot**: deliberately *not* `totalPaid` — at the society-wide
+  headline-metric level, folding in approved Credit overstates actual cash collected
+  and can discourage collection follow-up (a Credit is a committee-approved
+  adjustment, not money that came in the door). `totalPaid` itself is unchanged and
+  still feeds `getFlatWiseDues`'s `paidTotal` below. The admin dashboard UI shows this
+  formula as a small note under the "Collection rate" card
+  (`client/src/pages/admin/AdminDashboardPage.tsx`).
 
 ## `getFlatWiseDues(societyId)` — `GET /api/admin/dashboard/flat-dues`
 
 Task 8.2. Response: one row per flat, **including flats with zero dues** — an admin
 scanning the table needs to see "this flat is fully settled" as a positive absence of
 debt, not have the flat silently missing. Each row: `{ flat: {id, wing, flatNumber},
-owner, currentTenant, outstandingTotal, unpaidCount }`.
+owner, currentTenant, paidTotal, outstandingTotal, creditTotal }`.
 
+- `paidTotal` = that flat's `approvedDeposits + approvedCredits` — same convention as
+  `getDashboardSummary`'s `totalPaid` above (2026-08-08 pivot), reused here per-flat.
+  Rendered as the admin dashboard table's "Paid" column. Distinct from `creditTotal`
+  below: `paidTotal` is the cumulative funds ever approved for the flat, `creditTotal`
+  is whatever of that is still unused after covering `totalCharges`.
 - `outstandingTotal` = the flat's **Outstanding** — the primary "what they owe right
   now" figure under the ledger model, replacing the old UNPAID+PENDING_REVIEW sum.
-- `unpaidCount` = the number of `PENDING` `LedgerEntry` rows for that flat — Deposit
-  *and* Credit since 2026-08-07, both are "activity in flight" the admin should know
-  about (a rough signal, distinct from Outstanding).
+- `creditTotal` = that flat's `availableCredit` — the flip side of `outstandingTotal`
+  (`ledger.service.ts`'s `balancesFromRows`: exactly one of the two is ever nonzero).
+  Rendered as the table's "Credit" column, replacing the old pending-`LedgerEntry`
+  "Unpaid" count column.
+- `currentTenant` is still returned (used to show "Tenant: {name}" under the owner's
+  name in the table's Owner cell) even though there's no longer a standalone Tenant
+  column.
 - Sorted `outstandingTotal` descending, so the admin's highest-priority flats surface
   first without any client-side sorting needed (`DataTable` has no sort model, per
   CLAUDE.md's tech-stack table — deliberately minimal for a 24-flat MVP).
@@ -147,7 +166,7 @@ curl http://localhost:3000/api/admin/dashboard/summary -H "Authorization: Bearer
 
 # Flat-wise dues — 5 flats, sorted highest-outstanding-first
 curl http://localhost:3000/api/admin/dashboard/flat-dues -H "Authorization: Bearer <adminToken>"
-# → 200, [{ flat: {wing:"B",flatNumber:"201"}, outstandingTotal: 2700, unpaidCount: 1, ... }, ...]
+# → 200, [{ flat: {wing:"B",flatNumber:"201"}, outstandingTotal: 2700, creditTotal: 0, ... }, ...]
 
 # Flagged flats — none of the seeded demo data is currently past the 7-day default grace period
 curl http://localhost:3000/api/admin/dashboard/flagged-flats -H "Authorization: Bearer <adminToken>"

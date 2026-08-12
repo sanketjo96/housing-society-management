@@ -47,6 +47,8 @@ const creditEntry = {
   flat: { id: 'f2', wing: 'B', flatNumber: '201' },
 };
 
+const approvedEntry = { ...depositEntry, id: 'entry-4', status: 'APPROVED' as const };
+
 describe('PaymentProofsPage', () => {
   beforeEach(() => {
     setAccessToken('fake-admin-token');
@@ -103,12 +105,15 @@ describe('PaymentProofsPage', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/no pending proofs/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/no pending entries/i)).toBeInTheDocument());
   });
 
-  it('approves an entry', async () => {
+  it('clicking Approve opens the receipt validation modal without settling the entry', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
       if (url.includes('/approve')) {
         return Promise.resolve({ ok: true, json: async () => ({ ...depositEntry, status: 'APPROVED' }) });
       }
@@ -120,6 +125,60 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /^approve$/i }));
+
+    expect(await screen.findByRole('dialog', { name: /confirm receipt/i })).toBeInTheDocument();
+    // No approve call yet — only the preview was fetched.
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/ledger-entries/entry-1/approve'),
+      expect.anything(),
+    );
+  });
+
+  it('Cancel closes the modal and leaves the entry pending, with no approve call', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    await screen.findByRole('dialog', { name: /confirm receipt/i });
+
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/ledger-entries/entry-1/approve'),
+      expect.anything(),
+    );
+  });
+
+  it('Confirm and approve in the modal settles the entry', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      if (url.includes('/approve')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ...depositEntry, status: 'APPROVED' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    await screen.findByRole('dialog', { name: /confirm receipt/i });
+
+    await user.click(screen.getByRole('button', { name: /confirm and approve/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -171,6 +230,31 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /view proof/i }));
+
+    await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:fake-url', '_blank'));
+  });
+
+  it('the Approved tab shows a Download receipt action instead of Approve/Reject', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('status=APPROVED')) {
+        return Promise.resolve({ ok: true, json: async () => [approvedEntry] });
+      }
+      if (url.includes('/receipt') && !url.includes('preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('tab', { name: /approved/i }));
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument();
+    const downloadButton = screen.getByRole('button', { name: /download receipt/i });
+    await user.click(downloadButton);
 
     await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:fake-url', '_blank'));
   });

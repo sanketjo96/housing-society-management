@@ -30,9 +30,9 @@ describe('flats service — bulkImportFlats', () => {
 
   it('creates flats for valid rows, provisioning owner accounts inline', async () => {
     const csv =
-      'wing,flatNumber,baseRate,ownerName,ownerEmail\n' +
-      `C,101,1500,CSV Owner One,csv-owner-1-${suffix}@example.com\n` +
-      `C,102,1600,CSV Owner Two,csv-owner-2-${suffix}@example.com`;
+      'wing,flatNumber,ownerName,ownerPhone,ownerEmail\n' +
+      `C,101,CSV Owner One,9000000001,csv-owner-1-${suffix}@example.com\n` +
+      `C,102,CSV Owner Two,9000000002,csv-owner-2-${suffix}@example.com`;
     const result = await bulkImportFlats(societyId, csv);
 
     expect(result.errors).toHaveLength(0);
@@ -43,8 +43,8 @@ describe('flats service — bulkImportFlats', () => {
 
   it('imports a row with an occupied tenant, creating both accounts', async () => {
     const csv =
-      'wing,flatNumber,baseRate,ownerName,ownerEmail,occupancy,tenantName,tenantEmail\n' +
-      `C,103,1500,CSV Owner Three,csv-owner-3-${suffix}@example.com,tenant,CSV Tenant,csv-tenant-1-${suffix}@example.com`;
+      'wing,flatNumber,ownerName,ownerPhone,ownerEmail,occupancy,tenantName,tenantEmail\n' +
+      `C,103,CSV Owner Three,9000000003,csv-owner-3-${suffix}@example.com,tenant,CSV Tenant,csv-tenant-1-${suffix}@example.com`;
     const result = await bulkImportFlats(societyId, csv);
 
     expect(result.errors).toHaveLength(0);
@@ -54,9 +54,9 @@ describe('flats service — bulkImportFlats', () => {
 
   it('reports a per-row error for a missing required value, without failing the whole batch', async () => {
     const csv =
-      'wing,flatNumber,baseRate,ownerName,ownerEmail\n' +
-      `C,104,1500,CSV Owner Four,csv-owner-4-${suffix}@example.com\n` +
-      'C,105,1500,,';
+      'wing,flatNumber,ownerName,ownerPhone,ownerEmail\n' +
+      `C,104,CSV Owner Four,9000000004,csv-owner-4-${suffix}@example.com\n` +
+      'C,105,,,';
     const result = await bulkImportFlats(societyId, csv);
 
     expect(result.created).toHaveLength(1);
@@ -65,9 +65,20 @@ describe('flats service — bulkImportFlats', () => {
     expect(result.errors[0].row).toBe(3);
   });
 
-  it('falls back to the society default base rate when baseRate is omitted', async () => {
+  it('reports a per-row error for a missing ownerPhone', async () => {
+    const csv =
+      'wing,flatNumber,ownerName,ownerPhone,ownerEmail\n' +
+      `C,109,CSV Owner No Phone,,csv-owner-no-phone-${suffix}@example.com`;
+    const result = await bulkImportFlats(societyId, csv);
+
+    expect(result.created).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toMatch(/Missing required value/);
+  });
+
+  it('always uses the society default base rate, since bulk import has no baseRate column', async () => {
     const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
-    const csv = `wing,flatNumber,ownerName,ownerEmail\nC,110,CSV Owner No Rate,csv-owner-no-rate-${suffix}@example.com`;
+    const csv = `wing,flatNumber,ownerName,ownerPhone,ownerEmail\nC,110,CSV Owner No Rate,9000000010,csv-owner-no-rate-${suffix}@example.com`;
     const result = await bulkImportFlats(societyId, csv);
 
     expect(result.errors).toHaveLength(0);
@@ -75,17 +86,8 @@ describe('flats service — bulkImportFlats', () => {
     expect(Number(result.created[0]!.baseRate)).toBe(Number(society.defaultBaseRate));
   });
 
-  it('reports a per-row error for an invalid baseRate', async () => {
-    const csv = `wing,flatNumber,baseRate,ownerName,ownerEmail\nC,106,not-a-number,CSV Owner,csv-owner-5-${suffix}@example.com`;
-    const result = await bulkImportFlats(societyId, csv);
-
-    expect(result.created).toHaveLength(0);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].message).toMatch(/baseRate/);
-  });
-
   it('reports a per-row error for a duplicate wing+flatNumber', async () => {
-    const csv = `wing,flatNumber,baseRate,ownerName,ownerEmail\nC,107,1500,CSV Owner,csv-owner-6-${suffix}@example.com`;
+    const csv = `wing,flatNumber,ownerName,ownerPhone,ownerEmail\nC,107,CSV Owner,9000000007,csv-owner-6-${suffix}@example.com`;
     const first = await bulkImportFlats(societyId, csv);
     createdFlatIds.push(first.created[0]!.id);
 

@@ -23,3 +23,16 @@
 body {
   margin: 0;
 }
+
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+a[href],
+select,
+summary,
+label[for],
+input[type='checkbox'],
+input[type='radio'],
+input[type='submit'],
+input[type='button'] {
+  cursor: pointer;
+}

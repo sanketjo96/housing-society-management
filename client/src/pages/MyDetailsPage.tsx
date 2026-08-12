@@ -249,7 +249,7 @@ export function MyDetailsPage() {
   } = useQuery({ queryKey: ['my-flat'], queryFn: fetchMyFlat });
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <h1 className="m-0 mb-6 font-display text-xl text-ink">My details</h1>
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}

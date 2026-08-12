@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { AlertTriangle, Check, Copy, ReceiptText } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ReceiptText } from 'lucide-react';
+import { useMemo } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
@@ -18,17 +18,9 @@ interface FlatDues {
   flat: { id: string; wing: string; flatNumber: string };
   owner: ResidentSummary;
   currentTenant: ResidentSummary | null;
+  paidTotal: number;
   outstandingTotal: number;
-  unpaidCount: number;
-}
-
-interface FlaggedFlat {
-  flat: { id: string; wing: string; flatNumber: string };
-  recipient: { id: string; name: string; email: string };
-  outstandingTotal: number;
-  oldestDueDate: string;
-  overdueRecordCount: number;
-  message: string;
+  creditTotal: number;
 }
 
 interface PendingProofsResponse {
@@ -47,12 +39,6 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
   return res.json();
 }
 
-async function fetchFlaggedFlats(): Promise<FlaggedFlat[]> {
-  const res = await authedFetch('/api/admin/dashboard/flagged-flats');
-  if (!res.ok) throw new Error('Could not load flagged flats.');
-  return res.json();
-}
-
 async function fetchPendingProofsCount(): Promise<number> {
   const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
   if (!res.ok) throw new Error('Could not load pending proofs.');
@@ -60,7 +46,17 @@ async function fetchPendingProofsCount(): Promise<number> {
   return Array.isArray(body) ? body.length : 0;
 }
 
-function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: 'coral' | 'teal' }) {
+function SummaryCard({
+  label,
+  value,
+  accent,
+  note,
+}: {
+  label: string;
+  value: string;
+  accent?: 'coral' | 'teal';
+  note?: string;
+}) {
   return (
     <div className="rounded-2xl border border-line bg-white p-5">
       <p className="m-0 text-xs uppercase tracking-wide text-muted">{label}</p>
@@ -69,47 +65,14 @@ function SummaryCard({ label, value, accent }: { label: string; value: string; a
       >
         {value}
       </p>
+      {note && <p className="m-0 mt-1.5 text-[11px] text-muted">{note}</p>}
     </div>
   );
-}
-
-// Owns just its own "copied" confirmation state — small and independently stateful,
-// same pattern as PaymentProofsPage's per-cell components.
-function CopyMessageButton({ message }: { message: string }) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(message).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        });
-      }}
-      className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-ink"
-    >
-      {copied ? (
-        <>
-          <Check size={12} /> Copied
-        </>
-      ) : (
-        <>
-          <Copy size={12} /> Copy message
-        </>
-      )}
-    </button>
-  );
-}
-
-function dateLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?: () => void }) {
   const summaryQuery = useQuery({ queryKey: ['admin-dashboard-summary'], queryFn: fetchSummary });
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
-  const flaggedQuery = useQuery({ queryKey: ['admin-dashboard-flagged-flats'], queryFn: fetchFlaggedFlats });
   const pendingProofsQuery = useQuery({
     queryKey: ['admin-dashboard-pending-proofs-count'],
     queryFn: fetchPendingProofsCount,
@@ -120,6 +83,7 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
       {
         id: 'flat',
         header: 'Flat',
+        accessorFn: (row) => `${row.flat.wing}-${row.flat.flatNumber}`,
         cell: ({ row }) => (
           <span className="font-mono-brand text-ink">
             {row.original.flat.wing}-{row.original.flat.flatNumber}
@@ -129,16 +93,20 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
       {
         id: 'owner',
         header: 'Owner',
-        cell: ({ row }) => <span className="text-ink">{row.original.owner.name}</span>,
-      },
-      {
-        id: 'tenant',
-        header: 'Tenant',
-        cell: ({ row }) => <span className="text-ink">{row.original.currentTenant?.name ?? '—'}</span>,
+        accessorFn: (row) => row.owner.name,
+        cell: ({ row }) => (
+          <div>
+            <span className="text-ink">{row.original.owner.name}</span>
+            {row.original.currentTenant && (
+              <p className="m-0 text-xs text-muted">Tenant: {row.original.currentTenant.name}</p>
+            )}
+          </div>
+        ),
       },
       {
         id: 'outstanding',
         header: 'Outstanding',
+        accessorFn: (row) => row.outstandingTotal,
         meta: { align: 'right' },
         cell: ({ row }) => (
           <span
@@ -148,57 +116,25 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
           </span>
         ),
       },
+      // 'Paid' column (row.paidTotal) hidden for now — FlatDues still returns
+      // paidTotal, only this column definition was removed.
       {
-        id: 'unpaidCount',
-        header: 'Unpaid',
+        id: 'credit',
+        header: 'Credit',
+        accessorFn: (row) => row.creditTotal,
         meta: { align: 'right' },
-        cell: ({ row }) => <span className="text-muted">{row.original.unpaidCount}</span>,
-      },
-    ],
-    [],
-  );
-
-  const flaggedColumns = useMemo<ColumnDef<FlaggedFlat, unknown>[]>(
-    () => [
-      {
-        id: 'flat',
-        header: 'Flat',
         cell: ({ row }) => (
-          <span className="font-mono-brand text-ink">
-            {row.original.flat.wing}-{row.original.flat.flatNumber}
+          <span className={`font-mono-brand ${row.original.creditTotal > 0 ? 'text-teal' : 'text-muted'}`}>
+            ₹{row.original.creditTotal.toLocaleString('en-IN')}
           </span>
         ),
       },
-      {
-        id: 'recipient',
-        header: 'Recipient',
-        cell: ({ row }) => <span className="text-ink">{row.original.recipient.name}</span>,
-      },
-      {
-        id: 'overdueSince',
-        header: 'Overdue since',
-        cell: ({ row }) => <span className="text-muted">{dateLabel(row.original.oldestDueDate)}</span>,
-      },
-      {
-        id: 'outstanding',
-        header: 'Outstanding',
-        meta: { align: 'right' },
-        cell: ({ row }) => (
-          <span className="font-mono-brand text-coral">₹{row.original.outstandingTotal.toLocaleString('en-IN')}</span>
-        ),
-      },
-      {
-        id: 'actions',
-        header: 'Actions',
-        cell: ({ row }) => <CopyMessageButton message={row.original.message} />,
-      },
     ],
     [],
   );
 
-  const isLoading =
-    summaryQuery.isLoading || duesQuery.isLoading || flaggedQuery.isLoading || pendingProofsQuery.isLoading;
-  const isError = summaryQuery.isError || duesQuery.isError || flaggedQuery.isError || pendingProofsQuery.isError;
+  const isLoading = summaryQuery.isLoading || duesQuery.isLoading || pendingProofsQuery.isLoading;
+  const isError = summaryQuery.isError || duesQuery.isError || pendingProofsQuery.isError;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -216,7 +152,12 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
             value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
             accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
           />
-          <SummaryCard label="Collection rate" value={`${summaryQuery.data.collectionRatePercent}%`} accent="teal" />
+          <SummaryCard
+            label="Collection rate"
+            value={`${summaryQuery.data.collectionRatePercent}%`}
+            accent="teal"
+            note="Share of total dues actually paid in so far. Approved credit adjustments aren't counted."
+          />
           <SummaryCard
             label="Pending review"
             value={`₹${summaryQuery.data.pendingReviewTotal.toLocaleString('en-IN')}`}
@@ -238,22 +179,6 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
           </span>
           <span className="text-xs font-semibold text-teal">Review →</span>
         </button>
-      )}
-
-      {flaggedQuery.data && flaggedQuery.data.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle size={15} className="text-coral" />
-            <h2 className="m-0 font-display text-base text-ink">Flagged flats</h2>
-            <span className="text-xs text-muted">— overdue past the grace period</span>
-          </div>
-          <DataTable
-            data={flaggedQuery.data}
-            columns={flaggedColumns}
-            getRowId={(f) => f.flat.id}
-            emptyMessage="No flagged flats."
-          />
-        </div>
       )}
 
       {duesQuery.data && (

@@ -20,9 +20,15 @@ const updateMeSchema = z
   .partial()
   .refine((data) => Object.keys(data).length > 0, { message: 'At least one field must be provided' });
 
+// A blank phone input submits as '' (React Hook Form), not undefined — '' must be
+// treated as "not provided" here, both so .min(1) doesn't reject an intentionally
+// empty field, and so it's never written to User.phone (a @unique column) as a
+// literal empty string, which would collide with the next blank submission.
+const optionalPhone = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional());
+
 const upsertTenantSchema = z.object({
   name: z.string().min(1),
-  phone: z.string().min(1).optional(),
+  phone: optionalPhone,
   email: z.string().email(),
   effectiveFrom: z.coerce.date().optional(),
 });
@@ -34,11 +40,11 @@ const upsertTenantSchema = z.object({
 // accepted here — still admin-set, read-only from the resident side (unchanged rule).
 const updateMyFlatSchema = z.object({
   ownerName: z.string().min(1),
-  ownerPhone: z.string().min(1).optional(),
+  ownerPhone: optionalPhone,
   ownerEmail: z.string().email(),
   occupancy: z.enum(['owner', 'tenant']).optional(),
   tenantName: z.string().min(1).optional(),
-  tenantPhone: z.string().min(1).optional(),
+  tenantPhone: optionalPhone,
   tenantEmail: z.string().email().optional(),
   effectiveFrom: z.coerce.date().optional(),
 });

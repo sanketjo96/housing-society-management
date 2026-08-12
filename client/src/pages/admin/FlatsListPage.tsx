@@ -213,8 +213,8 @@ function FlatForm({
 // Header + one worked example row — used both as the downloadable template's content
 // and as the source of the column list shown in the panel's description.
 const CSV_TEMPLATE =
-  'wing,flatNumber,baseRate,ownerName,ownerEmail,occupancy,tenantName,tenantEmail\n' +
-  'A,101,2000,Priya Nair,priya@example.com,owner,,\n';
+  'wing,flatNumber,ownerName,ownerPhone,ownerEmail,occupancy,tenantName,tenantPhone,tenantEmail\n' +
+  'A,101,Priya Nair,9876543210,priya@example.com,owner,,,\n';
 
 function downloadCsvTemplate() {
   const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv;charset=utf-8;' });
@@ -260,9 +260,10 @@ function CsvImportPanel() {
         <div>
           <h2 className="m-0 mb-1.5 font-display text-base text-ink">Bulk import (CSV)</h2>
           <p className="m-0 text-xs text-muted">
-            Required columns: wing, flatNumber, ownerName, ownerEmail. Optional: baseRate (falls
-            back to the Settings tab's default base rate), ownerPhone, occupancy (owner/tenant),
-            tenantName, tenantPhone, tenantEmail, effectiveFrom.
+            Required columns: wing, flatNumber, ownerName, ownerPhone, ownerEmail. Optional:
+            occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom. Every
+            imported flat takes the Settings tab's default base rate — edit a flat afterward to
+            set a different rate.
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
@@ -378,7 +379,7 @@ export function FlatsListPage() {
 
   if (editingId === 'new') {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-4xl">
         <FlatForm defaultBaseRate={settings?.defaultBaseRate} onDone={() => setEditingId(null)} />
       </div>
     );
@@ -387,7 +388,7 @@ export function FlatsListPage() {
   const editingFlat = data?.find((f) => f.id === editingId);
   if (editingFlat) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-4xl">
         <FlatForm flat={editingFlat} onDone={() => setEditingId(null)} />
       </div>
     );

@@ -118,7 +118,7 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /payment proofs/i })).toBeInTheDocument());
     await user.click(screen.getByRole('tab', { name: /payment proofs/i }));
 
-    await waitFor(() => expect(screen.getByText(/no pending proofs/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/no pending entries/i)).toBeInTheDocument());
   });
 
   it('switches to the Settings tab and shows the current billing defaults', async () => {

@@ -35,9 +35,12 @@ const baseLedger = {
   availableYears: [currentYear],
 };
 
-function mockFetch(ledger: unknown = baseLedger, openIntent: unknown = null) {
+function mockFetch(ledger: unknown = baseLedger, openIntent: unknown = null, receiptEntryId?: string) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (receiptEntryId && url.includes(`/api/ledger-entries/${receiptEntryId}/receipt`)) {
+      return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+    }
     if (url.includes('/api/me/ledger/credits')) {
       return Promise.resolve({ ok: true, json: async () => ({ id: 'cred-new', status: 'PENDING' }) });
     }
@@ -354,6 +357,41 @@ describe('ResidentDashboardOverview', () => {
 
       expect(screen.queryByRole('dialog', { name: /add credit/i })).not.toBeInTheDocument();
       expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/me/ledger/credits'), expect.anything());
+    });
+  });
+
+  describe('receipt download', () => {
+    beforeEach(() => {
+      vi.stubGlobal('open', vi.fn());
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake-url');
+      globalThis.URL.revokeObjectURL = vi.fn();
+    });
+
+    it('shows a Receipt button only for an approved row with hasReceipt, and downloads it via authenticated fetch', async () => {
+      const ledgerWithReceipt = {
+        ...baseLedger,
+        entries: baseLedger.entries.map((e) => (e.id === 'dep-1' ? { ...e, hasReceipt: true } : e)),
+      };
+      mockFetch(ledgerWithReceipt, null, 'dep-1');
+
+      renderPage();
+      const user = userEvent.setup();
+
+      // dep-1 (has a receipt) shows the button; cred-1 (approved but no receipt) doesn't.
+      const receiptButtons = await screen.findAllByRole('button', { name: /^receipt$/i });
+      expect(receiptButtons).toHaveLength(1);
+
+      await user.click(receiptButtons[0]);
+
+      await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:fake-url', '_blank'));
+    });
+
+    it('shows no Receipt button when nothing has hasReceipt set', async () => {
+      mockFetch();
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText('Plumber repair for common water tank')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /^receipt$/i })).not.toBeInTheDocument();
     });
   });
 });

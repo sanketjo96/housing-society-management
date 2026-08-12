@@ -283,16 +283,8 @@ export interface BulkImportResult {
   errors: BulkImportRowError[];
 }
 
-const IMPORT_REQUIRED_COLUMNS = ['wing', 'flatnumber', 'ownername', 'owneremail'];
-const IMPORT_OPTIONAL_COLUMNS = [
-  'baserate',
-  'ownerphone',
-  'occupancy',
-  'tenantname',
-  'tenantphone',
-  'tenantemail',
-  'effectivefrom',
-] as const;
+const IMPORT_REQUIRED_COLUMNS = ['wing', 'flatnumber', 'ownername', 'ownerphone', 'owneremail'];
+const IMPORT_OPTIONAL_COLUMNS = ['occupancy', 'tenantname', 'tenantphone', 'tenantemail', 'effectivefrom'] as const;
 
 // Hand-rolled CSV parsing (no library) — deliberately, since the expected fields never
 // contain commas or quotes, so a dependency for RFC 4180 edge cases (quoted fields,
@@ -324,9 +316,11 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
   );
   const cell = (cols: string[], col: string) => (colIndex[col] === -1 ? undefined : cols[colIndex[col]] || undefined);
 
-  // Same fallback as new-flat onboarding in the admin UI (2026-08-06 addendum) — a row
-  // that omits baseRate isn't an error, it just inherits the society's configured
-  // default rather than forcing every CSV row to repeat it.
+  // A bulk-imported row always takes the society's configured default base rate — no
+  // per-row baseRate column, unlike single-flat onboarding where an admin can set a
+  // flat-specific rate. Keeps the CSV contract to identity/contact fields only; a rate
+  // that needs to differ from the default can still be adjusted afterward via the
+  // per-flat edit form.
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
 
   const created: BulkImportResult['created'] = [];
@@ -337,21 +331,16 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
     const cols = lines[i].split(',').map((c) => c.trim());
     const wing = cell(cols, 'wing');
     const flatNumber = cell(cols, 'flatnumber');
-    const baseRateRaw = cell(cols, 'baserate');
     const ownerName = cell(cols, 'ownername');
+    const ownerPhone = cell(cols, 'ownerphone');
     const ownerEmail = cell(cols, 'owneremail');
 
-    if (!wing || !flatNumber || !ownerName || !ownerEmail) {
+    if (!wing || !flatNumber || !ownerName || !ownerPhone || !ownerEmail) {
       errors.push({ row: rowNumber, message: 'Missing required value(s)' });
       continue;
     }
 
-    const baseRate = baseRateRaw === undefined ? Number(society.defaultBaseRate) : Number(baseRateRaw);
-    if (!Number.isFinite(baseRate) || baseRate <= 0) {
-      errors.push({ row: rowNumber, message: `Invalid baseRate "${baseRateRaw}"` });
-      continue;
-    }
-
+    const baseRate = Number(society.defaultBaseRate);
     const occupancyRaw = cell(cols, 'occupancy')?.toLowerCase();
     const occupancy = occupancyRaw === 'tenant' ? 'tenant' : 'owner';
     const effectiveFromRaw = cell(cols, 'effectivefrom');
@@ -363,7 +352,7 @@ export async function bulkImportFlats(societyId: string, csvText: string): Promi
         flatNumber,
         baseRate,
         ownerName,
-        ownerPhone: cell(cols, 'ownerphone'),
+        ownerPhone,
         ownerEmail,
         occupancy,
         tenantName: cell(cols, 'tenantname'),

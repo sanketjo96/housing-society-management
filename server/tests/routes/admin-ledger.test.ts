@@ -69,6 +69,7 @@ describe('/api/admin/ledger-entries*', () => {
   });
 
   afterAll(async () => {
+    await prisma.receipt.deleteMany({ where: { societyId } });
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
@@ -140,6 +141,104 @@ describe('/api/admin/ledger-entries*', () => {
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(409);
+    });
+  });
+
+  describe('GET /api/admin/ledger-entries/:id/receipt-preview', () => {
+    it('rejects a non-admin token (403)', async () => {
+      const res = await request(app)
+        .get('/api/admin/ledger-entries/does-not-exist/receipt-preview')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('404s for an unknown entry', async () => {
+      const res = await request(app)
+        .get('/api/admin/ledger-entries/does-not-exist/receipt-preview')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('streams a PDF preview for a pending entry, with no side effects', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '60')
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+
+      const res = await request(app)
+        .get(`/api/admin/ledger-entries/${created.body.id}/receipt-preview`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+      expect(Buffer.from(res.body).subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+      const receiptCount = await prisma.receipt.count({ where: { ledgerEntryId: created.body.id } });
+      expect(receiptCount).toBe(0);
+    });
+
+    it('returns 409 once the entry has already been approved', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '60')
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const res = await request(app)
+        .get(`/api/admin/ledger-entries/${created.body.id}/receipt-preview`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(409);
+    });
+  });
+
+  describe('GET /api/ledger-entries/:id/receipt (issued receipt download)', () => {
+    it('404s while the entry is still pending', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '60')
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+
+      const res = await request(app)
+        .get(`/api/ledger-entries/${created.body.id}/receipt`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('lets the owner (payer) download their own issued receipt', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '60')
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const res = await request(app)
+        .get(`/api/ledger-entries/${created.body.id}/receipt`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('application/pdf');
+    });
+
+    it('lets an admin download the same receipt', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '60')
+        .attach('file', Buffer.from('fake-jpeg-bytes'), { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const res = await request(app)
+        .get(`/api/ledger-entries/${created.body.id}/receipt`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
     });
   });
 

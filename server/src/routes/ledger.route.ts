@@ -4,6 +4,7 @@ import {
   createCreditHandler,
   createDepositHandler,
   createPaymentIntentHandler,
+  getIssuedReceiptHandler,
   getLedgerEntryFileHandler,
   getMyLedgerHandler,
   getPaymentIntentHandler,
@@ -51,4 +52,12 @@ ledgerRouter.get(
   '/api/ledger-entries/:id/file',
   requireRole(['ADMIN', 'OWNER', 'TENANT']),
   getLedgerEntryFileHandler,
+);
+// Shared between the admin Payment Proofs queue and the resident Passbook — admin
+// or the entry's own payer, enforced in the service (getIssuedReceiptForViewing),
+// same pattern as the file endpoint immediately above.
+ledgerRouter.get(
+  '/api/ledger-entries/:id/receipt',
+  requireRole(['ADMIN', 'OWNER', 'TENANT']),
+  getIssuedReceiptHandler,
 );

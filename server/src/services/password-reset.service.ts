@@ -10,7 +10,7 @@ export class InvalidResetTokenError extends Error {
   }
 }
 
-const RESET_TOKEN_TTL_MINUTES = 60;
+const RESET_TOKEN_TTL_MINUTES = 10;
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');

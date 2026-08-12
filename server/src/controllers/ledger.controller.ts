@@ -16,6 +16,7 @@ import {
   NoOpenPaymentIntentError,
   submitPaymentIntent,
 } from '../services/ledger.service';
+import { getIssuedReceiptForViewing } from '../services/receipt.service';
 
 // Every handler here resolves "my flat" the same way — requireRole already guarantees
 // OWNER/TENANT (see ledger.route.ts), so there's no ADMIN case to handle.
@@ -235,6 +236,36 @@ export async function getLedgerEntryFileHandler(req: Request, res: Response) {
     res.setHeader('Content-Type', result.mimeType);
     result.stream.once('error', () => {
       if (!res.headersSent) res.status(404).json({ error: 'File not found' });
+    });
+    result.stream.pipe(res);
+  } catch (err) {
+    if (err instanceof ForbiddenLedgerEntryAccessError) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Download of an already-issued receipt — admin or the entry's own payer (owner or
+// tenant, symmetric), same auth shape as getLedgerEntryFileHandler above. 404 for
+// a legacy entry approved before this feature existed (no Receipt row) — never
+// lazily fabricated.
+export async function getIssuedReceiptHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  try {
+    const result = await getIssuedReceiptForViewing(req.params.id, req.user.id, req.user.role, req.user.societyId);
+    if (!result) {
+      res.status(404).json({ error: 'No receipt was issued for this entry' });
+      return;
+    }
+    res.setHeader('Content-Type', result.mimeType);
+    result.stream.once('error', () => {
+      if (!res.headersSent) res.status(404).json({ error: 'No receipt was issued for this entry' });
     });
     result.stream.pipe(res);
   } catch (err) {

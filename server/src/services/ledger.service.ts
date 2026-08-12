@@ -1,23 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import type { LedgerType, ProofStatus, Role } from '../generated/prisma/client';
 import { prisma } from '../db';
+import { ForbiddenLedgerEntryAccessError, LedgerEntryAlreadyReviewedError } from '../lib/errors';
 import { getStorageAdapter } from '../lib/storage';
 import { buildUpiDeepLink, generateQrDataUrl } from '../lib/upi';
+import { prepareReceiptForEntry } from './receipt.service';
 
-// Domain errors specific to the ledger flow — co-located here rather than
-// lib/errors.ts, matching flats.service.ts/payment-proofs.service.ts's precedent.
-export class LedgerEntryAlreadyReviewedError extends Error {
-  constructor() {
-    super('This ledger entry has already been reviewed');
-    this.name = 'LedgerEntryAlreadyReviewedError';
-  }
-}
-
-export class ForbiddenLedgerEntryAccessError extends Error {
-  constructor() {
-    super('You do not have access to this ledger entry');
-    this.name = 'ForbiddenLedgerEntryAccessError';
-  }
-}
+// LedgerEntryAlreadyReviewedError/ForbiddenLedgerEntryAccessError now live in
+// lib/errors.ts (moved there for the Receipt Generation & Approval Workflow,
+// 2026-08-11, to avoid a ledger.service.ts <-> receipt.service.ts import cycle) —
+// re-exported here so every existing `from '../services/ledger.service'` import
+// site is unaffected.
+export { LedgerEntryAlreadyReviewedError, ForbiddenLedgerEntryAccessError } from '../lib/errors';
 
 export class InvalidDepositAmountError extends Error {
   constructor(public readonly outstanding: number) {
@@ -168,6 +162,12 @@ export interface LedgerRow {
   // concept of being "settled" themselves.
   settledAmount?: number;
   settlementStatus?: RecordSettlementStatus;
+  // Only meaningful on DEPOSIT/CREDIT rows — true once a Receipt row exists (i.e.
+  // the entry has been approved since the Receipt Generation & Approval Workflow
+  // shipped, 2026-08-11). Lets the resident Passbook show a "Download receipt"
+  // action only where one genuinely exists, rather than a failed round-trip for a
+  // still-pending row or a legacy entry approved before this feature existed.
+  hasReceipt?: boolean;
 }
 
 export interface LedgerForResident {
@@ -199,7 +199,7 @@ function availableYearsFromRows(records: { period: string }[], entries: { create
 export async function getLedgerForResident(flatId: string, year?: number): Promise<LedgerForResident> {
   const [allRecords, allEntries] = await Promise.all([
     prisma.maintenanceRecord.findMany({ where: { flatId } }),
-    prisma.ledgerEntry.findMany({ where: { flatId } }),
+    prisma.ledgerEntry.findMany({ where: { flatId }, include: { receipt: { select: { id: true } } } }),
   ]);
 
   const records = year ? allRecords.filter((r) => r.period.startsWith(`${year}-`)) : allRecords;
@@ -239,6 +239,7 @@ export async function getLedgerForResident(flatId: string, year?: number): Promi
     amount: Number(e.amount),
     status: e.status,
     note: e.note,
+    hasReceipt: !!e.receipt,
   }));
 
   const merged = [...systemRows, ...ledgerRows].sort(
@@ -485,16 +486,33 @@ export async function listPendingLedgerEntries(
 // PaymentProof flow, since a Deposit/Credit is never linked to specific
 // MaintenanceRecords (settlement is computed against the aggregate, see
 // computeRecordSettlements).
+//
+// Receipt Generation & Approval Workflow (2026-08-11): approval is also the point
+// a receipt is issued (see CLAUDE.md's addendum) — the PDF is rendered and saved
+// via prepareReceiptForEntry *before* the transaction opens (same "write the file,
+// then commit the row" ordering already used for Deposit/Credit proof uploads
+// elsewhere in this file), then the Receipt row is created in the same transaction
+// as the status change so the two can never disagree.
 export async function approveLedgerEntry(id: string, societyId: string, adminId: string) {
-  const entry = await prisma.ledgerEntry.findFirst({ where: { id, flat: { societyId } } });
+  const entry = await prisma.ledgerEntry.findFirst({
+    where: { id, flat: { societyId } },
+    include: { flat: { select: { wing: true, flatNumber: true } }, payer: { select: { name: true } } },
+  });
   if (!entry) return null;
   if (entry.status !== 'PENDING') throw new LedgerEntryAlreadyReviewedError();
+
+  const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+  const issuedAt = new Date();
+  const { receiptNumber, fileKey } = await prepareReceiptForEntry(entry, entry.flat, entry.payer, society, issuedAt);
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.ledgerEntry.update({
       where: { id },
-      data: { status: 'APPROVED', reviewedById: adminId, reviewedAt: new Date() },
+      data: { status: 'APPROVED', reviewedById: adminId, reviewedAt: issuedAt },
       include: LEDGER_ENTRY_LIST_INCLUDE,
+    });
+    await tx.receipt.create({
+      data: { receiptNumber, fileKey, ledgerEntryId: id, issuedById: adminId, societyId, issuedAt },
     });
     await tx.auditLog.create({
       data: {
@@ -502,7 +520,7 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
         action: entry.type === 'DEPOSIT' ? 'APPROVE_DEPOSIT' : 'APPROVE_CREDIT',
         entityType: 'LedgerEntry',
         entityId: id,
-        note: `Amount ${entry.amount}`,
+        note: `Amount ${entry.amount}; Receipt ${receiptNumber}`,
       },
     });
     return updated;
@@ -537,25 +555,55 @@ export async function rejectLedgerEntry(id: string, societyId: string, adminId: 
 // directly creates an already-APPROVED Deposit. Logged as MANUAL_MARK_PAID
 // specifically so it's distinguishable in the audit trail from QR-flow approvals (rule
 // 7's explicit requirement), same distinct action name as the pre-pivot flow.
+//
+// Also issues a receipt (2026-08-11 addendum) — a treasurer taking cash needs a
+// receipt at least as much as a UPI depositor, arguably more (no screenshot serving
+// as informal proof). Unlike approveLedgerEntry, the LedgerEntry doesn't exist yet
+// at the point the receipt number needs to be computed (it's derived from the
+// entry's own id) — so the id is precomputed via randomUUID() (same helper already
+// used by local-storage-adapter.ts) and passed explicitly into both the receipt
+// build and the eventual `create`, preserving the same "file saved before the row
+// is committed" ordering used everywhere else.
 export async function manualDeposit(societyId: string, adminId: string, flatId: string, amount: number) {
   if (!(amount > 0)) throw new InvalidAmountError();
 
   const flat = await prisma.flat.findFirst({ where: { id: flatId, societyId } });
   if (!flat) return null;
 
+  const payerId = flat.currentTenantId ?? flat.ownerId;
+  const [payer, society] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: payerId }, select: { name: true } }),
+    prisma.society.findUniqueOrThrow({ where: { id: societyId } }),
+  ]);
+
+  const entryId = randomUUID();
+  const issuedAt = new Date();
+  const note = 'Manual deposit (cash/bank transfer)';
+  const { receiptNumber, fileKey } = await prepareReceiptForEntry(
+    { id: entryId, type: 'DEPOSIT', amount, note, payerId },
+    { wing: flat.wing, flatNumber: flat.flatNumber },
+    payer,
+    society,
+    issuedAt,
+  );
+
   return prisma.$transaction(async (tx) => {
     const entry = await tx.ledgerEntry.create({
       data: {
+        id: entryId,
         flatId,
-        payerId: flat.currentTenantId ?? flat.ownerId,
+        payerId,
         type: 'DEPOSIT',
         status: 'APPROVED',
         amount,
-        note: 'Manual deposit (cash/bank transfer)',
+        note,
         reviewedById: adminId,
-        reviewedAt: new Date(),
+        reviewedAt: issuedAt,
       },
       include: LEDGER_ENTRY_LIST_INCLUDE,
+    });
+    await tx.receipt.create({
+      data: { receiptNumber, fileKey, ledgerEntryId: entryId, issuedById: adminId, societyId, issuedAt },
     });
     await tx.auditLog.create({
       data: {
@@ -563,7 +611,7 @@ export async function manualDeposit(societyId: string, adminId: string, flatId: 
         action: 'MANUAL_MARK_PAID',
         entityType: 'LedgerEntry',
         entityId: entry.id,
-        note: `Amount ${amount}`,
+        note: `Amount ${amount}; Receipt ${receiptNumber}`,
       },
     });
     return entry;

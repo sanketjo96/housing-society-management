@@ -73,6 +73,7 @@ describe('ledger service', () => {
   });
 
   afterAll(async () => {
+    await prisma.receipt.deleteMany({ where: { societyId } });
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });

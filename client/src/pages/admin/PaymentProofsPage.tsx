@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, Eye, X } from 'lucide-react';
+import { Check, Download, Eye, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
+import { ReceiptApprovalModal } from '../../components/ReceiptApprovalModal';
 import { authedFetch } from '../../lib/api';
 
 type LedgerEntryType = 'DEPOSIT' | 'CREDIT';
+type LedgerEntryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 interface LedgerEntryListItem {
   id: string;
   type: LedgerEntryType;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: LedgerEntryStatus;
   amount: string;
   note: string | null;
   fileUrl: string | null;
@@ -38,18 +40,25 @@ function TypeBadge({ type }: { type: LedgerEntryType }) {
   );
 }
 
-async function fetchPendingLedgerEntries(): Promise<LedgerEntryListItem[]> {
-  const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
-  if (!res.ok) throw new Error('Could not load pending ledger entries.');
+const STATUS_TABS: { value: LedgerEntryStatus; label: string }[] = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
+async function fetchLedgerEntries(status: LedgerEntryStatus): Promise<LedgerEntryListItem[]> {
+  const res = await authedFetch(`/api/admin/ledger-entries?status=${status}`);
+  if (!res.ok) throw new Error('Could not load ledger entries.');
   return res.json();
 }
 
-// The file endpoint is authenticated (never a public URL), so a plain <a href> won't
-// carry the Bearer token; fetch it ourselves and hand the browser a blob: URL instead.
-// Works for both images and PDFs — the browser's own viewer opens either in the new tab.
-async function viewProofFile(id: string) {
-  const res = await authedFetch(`/api/ledger-entries/${id}/file`);
-  if (!res.ok) throw new Error('Could not load the proof file.');
+// Both the proof-file and issued-receipt endpoints are authenticated (never a
+// public URL), so a plain <a href> won't carry the Bearer token — fetch the bytes
+// ourselves and hand the browser a blob: URL instead. Works for both images and
+// PDFs — the browser's own viewer opens either in the new tab.
+async function openAuthedFile(path: string, errorMessage: string) {
+  const res = await authedFetch(path);
+  if (!res.ok) throw new Error(errorMessage);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
@@ -71,7 +80,9 @@ function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean
         type="button"
         onClick={() => {
           setViewError(null);
-          viewProofFile(entryId).catch((e: Error) => setViewError(e.message));
+          openAuthedFile(`/api/ledger-entries/${entryId}/file`, 'Could not load the proof file.').catch(
+            (e: Error) => setViewError(e.message),
+          );
         }}
         className="flex items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-teal"
       >
@@ -82,11 +93,40 @@ function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean
   );
 }
 
+// Approved rows only — a legacy entry approved before the Receipt Generation &
+// Approval Workflow shipped (2026-08-11) has no Receipt row, so a 404 here is
+// expected and shown inline rather than treated as a bug.
+function ReceiptDownloadCell({ entryId }: { entryId: string }) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          openAuthedFile(`/api/ledger-entries/${entryId}/receipt`, 'No receipt was issued for this entry.').catch(
+            (e: Error) => setError(e.message),
+          );
+        }}
+        className="flex items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-teal"
+      >
+        <Download size={13} /> Download receipt
+      </button>
+      {error && <p className="mt-1 text-xs text-coral">{error}</p>}
+    </>
+  );
+}
+
 function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
   const queryClient = useQueryClient();
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
 
+  // Approve no longer settles the entry directly — it opens ReceiptApprovalModal
+  // first (the "receipt validation modal" requirement); this mutation is now fired
+  // by the modal's "Confirm and approve" button, not by clicking Approve itself.
   const approveMutation = useMutation({
     mutationFn: async () => {
       const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, { method: 'POST' });
@@ -94,7 +134,10 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
       if (!res.ok) throw new Error(body?.error ?? 'Could not approve this entry.');
       return body;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] }),
+    onSuccess: () => {
+      setShowApprovalModal(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] });
+    },
   });
 
   const rejectMutation = useMutation({
@@ -116,9 +159,8 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending}
-            className="flex items-center gap-1 rounded-md bg-teal px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+            onClick={() => setShowApprovalModal(true)}
+            className="flex items-center gap-1 rounded-md bg-teal px-2.5 py-1.5 text-xs font-semibold text-white"
           >
             <Check size={12} /> Approve
           </button>
@@ -159,18 +201,27 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
           </div>
         </div>
       )}
-      {approveMutation.error && (
-        <p className="mt-1 text-xs text-coral">{(approveMutation.error as Error).message}</p>
-      )}
       {rejectMutation.error && <p className="mt-1 text-xs text-coral">{(rejectMutation.error as Error).message}</p>}
+
+      {showApprovalModal && (
+        <ReceiptApprovalModal
+          entryId={entry.id}
+          residentName={entry.payer.name}
+          onCancel={() => setShowApprovalModal(false)}
+          onConfirm={() => approveMutation.mutate()}
+          isConfirming={approveMutation.isPending}
+          confirmError={(approveMutation.error as Error | null)?.message}
+        />
+      )}
     </>
   );
 }
 
 export function PaymentProofsPage() {
+  const [status, setStatus] = useState<LedgerEntryStatus>('PENDING');
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin-ledger-entries'],
-    queryFn: fetchPendingLedgerEntries,
+    queryKey: ['admin-ledger-entries', status],
+    queryFn: () => fetchLedgerEntries(status),
   });
 
   const columns = useMemo<ColumnDef<LedgerEntryListItem, unknown>[]>(
@@ -178,12 +229,13 @@ export function PaymentProofsPage() {
       {
         id: 'flat',
         header: 'Flat',
+        meta: { headerClassName: 'w-36', cellClassName: 'w-36 max-w-36' },
         cell: ({ row }) => (
           <span className="text-ink">
             {row.original.flat.wing}-{row.original.flat.flatNumber}
             <div className="text-xs text-muted">{row.original.payer.name}</div>
             {row.original.type === 'CREDIT' && row.original.note && (
-              <div className="mt-0.5 text-xs text-muted">{row.original.note}</div>
+              <div className="mt-0.5 whitespace-normal break-words text-xs text-muted">{row.original.note}</div>
             )}
           </span>
         ),
@@ -208,28 +260,56 @@ export function PaymentProofsPage() {
       },
       {
         id: 'actions',
-        header: 'Actions',
-        cell: ({ row }) => <EntryActionsCell entry={row.original} />,
+        header: status === 'APPROVED' ? 'Receipt' : 'Actions',
+        cell: ({ row }) => {
+          if (row.original.status === 'PENDING') return <EntryActionsCell entry={row.original} />;
+          if (row.original.status === 'APPROVED') return <ReceiptDownloadCell entryId={row.original.id} />;
+          return <span className="text-xs text-muted">{row.original.note ?? '—'}</span>;
+        },
       },
     ],
-    [],
+    [status],
   );
 
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6">
         <h1 className="m-0 font-display text-xl text-ink">Payment proofs</h1>
-        <p className="m-0 mt-0.5 text-xs text-muted">{data?.length ?? 0} pending review</p>
+        <p className="m-0 mt-0.5 text-xs text-muted">{data?.length ?? 0} entries</p>
+      </div>
+
+      <div className="mb-4 flex gap-2" role="tablist">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={status === tab.value}
+            onClick={() => setStatus(tab.value)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+              status === tab.value ? 'bg-teal text-white' : 'border border-line text-ink'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && (
         <p role="alert" className="text-sm text-coral">
-          Could not load pending entries.
+          Could not load ledger entries.
         </p>
       )}
 
-      {data && <DataTable data={data} columns={columns} getRowId={(e) => e.id} emptyMessage="No pending proofs." />}
+      {data && (
+        <DataTable
+          data={data}
+          columns={columns}
+          getRowId={(e) => e.id}
+          emptyMessage={`No ${status.toLowerCase()} entries.`}
+        />
+      )}
     </div>
   );
 }

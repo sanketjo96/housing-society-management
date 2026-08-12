@@ -199,6 +199,30 @@ not built here. `docs/payments.md` has the full detail.
 
 Full contract, design decisions, and manual verification: `docs/admin-dashboard.md`.
 
+> **Receipt Generation & Approval Workflow added 2026-08-11, not in the original
+> `task-prompts-v1` breakdown** — see `CLAUDE.md`'s "Addition (2026-08-11)". Layered
+> on top of Phase 6's ledger approve/reject and this Phase's admin dashboard/
+> Payment Proofs UI, same precedent as the Phase 3 addendum above (a genuinely new
+> capability tracked outside the original phase numbering).
+
+- [x] Receipt data model — `Receipt` (1:1 with `LedgerEntry`) + six new `Society`
+      template-customization columns (`docs/data-model.md`'s "Receipt" section)
+- [x] Receipt PDF rendering (`src/lib/receipt-pdf.ts`, `pdfkit`) and Indian-numbering
+      amount-in-words (`src/lib/number-to-words.ts`), both pure/IO-free
+- [x] `receipt.service.ts` — preview (no side effects) and issuance (used by both
+      approve and the manual cash/bank-transfer fallback), plus authenticated
+      download shared between admin and the entry's own payer
+- [x] Approve endpoint now also issues a receipt; a new admin-only preview endpoint
+      streams the exact unsaved PDF for the approval-confirmation modal
+- [x] Settings extended with the receipt template fields + signature upload/remove/
+      view endpoints (`society-settings.service.ts`)
+- [x] Frontend: `ReceiptApprovalModal.tsx`, `PaymentProofsPage.tsx`'s status tabs +
+      download action, `SettingsPage.tsx`'s receipt section + signature widget,
+      `ResidentDashboardOverview.tsx`'s Passbook receipt download
+
+Full contract, the two implementation judgment calls, and manual verification:
+`docs/receipts.md`.
+
 ## Phase 9 — Security & Hardening Audit
 
 - [ ] 9.1 Society-scoping audit (module list: no more "invoices")

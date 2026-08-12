@@ -181,7 +181,7 @@ export function MaintenanceBookPage() {
   );
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <h1 className="m-0 mb-6 font-display text-xl text-ink">Maintenance book</h1>
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}

@@ -192,6 +192,14 @@ simpler than the pre-pivot flow**: flips one row's `status` → `APPROVED`
 the audit trail — no cascade to any `MaintenanceRecord`, since there's nothing linked.
 The balance simply reflects the newly-approved amount on the next read.
 
+**Also issues a receipt (2026-08-11 addendum).** The frontend no longer calls this
+endpoint directly from an "Approve" click — it first fetches a PDF preview from
+`GET /api/admin/ledger-entries/:id/receipt-preview` and shows it in a confirmation
+modal; only "Confirm and approve" actually calls this endpoint, which is also the
+point a `Receipt` row is created and its PDF saved. See `docs/receipts.md` for the
+full contract; nothing about this endpoint's request/response shape changed, only
+what happens inside it.
+
 ## Reject — `POST /api/admin/ledger-entries/:id/reject`
 
 Admin-only. **Request**: `{ reason?: string }` → stored as `adminNote`. Same `404`/`409`
@@ -212,7 +220,10 @@ Admin-only, for cash/bank-transfer edge cases — no proof involved. **Request**
 matching the recipient logic used elsewhere (escalation messages, etc.). **Logged as
 `MANUAL_MARK_PAID`**, same distinct audit action name as the pre-pivot flow (rule 7's
 explicit requirement that this stay distinguishable from QR-flow approvals), one
-`AuditLog` row.
+`AuditLog` row. Also issues a receipt, same as the Approve endpoint (2026-08-11
+addendum, `docs/receipts.md`) — a cash/bank payment gets one just as a UPI deposit
+does, with no preview step (there's no `PENDING` state here to preview against
+before committing).
 
 ## Frontend — resident payment flow (`client/src/pages/ResidentDashboardOverview.tsx`)
 
@@ -251,6 +262,11 @@ renders under the flat/payer cell, same treatment as the resident-side ledger ta
 Simpler than before: no `maintenanceRecords` list to render per row, since an entry is
 never linked to multiple records. The Type column (2026-08-07, same reasoning as the
 resident Dashboard's) distinguishes Deposit from Credit rows again.
+
+**2026-08-11 addendum**: the page gained a Pending/Approved/Rejected status tab
+(querying the same endpoint with a different `?status=`), Approve now opens a
+receipt-preview modal instead of settling directly, and Approved rows show a
+"Download receipt" action. Full detail: `docs/receipts.md`.
 
 ## Manually verified against the real running stack
 

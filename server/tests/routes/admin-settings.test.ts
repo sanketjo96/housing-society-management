@@ -79,9 +79,15 @@ describe('/api/admin/settings', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       name: `Settings Route Society ${suffix}`,
+      address: '1 Test St',
       upiVpa: 'settings-route@okhdfcbank',
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
+      receiptNumberPrefix: 'RCPT',
+      receiptSignatoryName: null,
+      receiptSignatoryTitle: null,
+      receiptFooterNote: null,
+      hasSignature: false,
     });
   });
 
@@ -145,5 +151,90 @@ describe('/api/admin/settings', () => {
     // 1700 base rate * the freshly-updated 2x tenant factor = 3400 — proves
     // generateMaintenanceRecords reads the live Society row, not a stale/cached value.
     expect(Number(record.amount)).toBe(3400);
+  });
+
+  it('rejects an invalid receiptNumberPrefix with a 400', async () => {
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ receiptNumberPrefix: 'has a space' });
+    expect(res.status).toBe(400);
+  });
+
+  it('updates the receipt template fields', async () => {
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        address: 'Updated Address',
+        receiptNumberPrefix: 'SR',
+        receiptSignatoryName: 'Ramesh Kulkarni',
+        receiptSignatoryTitle: 'Treasurer',
+        receiptFooterNote: 'Thank you.',
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.address).toBe('Updated Address');
+    expect(res.body.receiptNumberPrefix).toBe('SR');
+    expect(res.body.receiptSignatoryName).toBe('Ramesh Kulkarni');
+    expect(res.body.receiptSignatoryTitle).toBe('Treasurer');
+    expect(res.body.receiptFooterNote).toBe('Thank you.');
+  });
+
+  describe('signature endpoints', () => {
+    it('rejects a non-admin token on upload (403)', async () => {
+      const res = await request(app)
+        .post('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', Buffer.from('fake-png'), { filename: 'sig.png', contentType: 'image/png' });
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects an unsupported file type (e.g. PDF)', async () => {
+      const res = await request(app)
+        .post('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', Buffer.from('%PDF-fake'), { filename: 'sig.pdf', contentType: 'application/pdf' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 when no signature is set yet', async () => {
+      const res = await request(app)
+        .get('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('uploads a signature, then serves it back and reflects hasSignature in settings', async () => {
+      const uploadRes = await request(app)
+        .post('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', Buffer.from('fake-png-bytes'), { filename: 'sig.png', contentType: 'image/png' });
+      expect(uploadRes.status).toBe(200);
+      expect(uploadRes.body.hasSignature).toBe(true);
+
+      const viewRes = await request(app)
+        .get('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(viewRes.status).toBe(200);
+      expect(viewRes.headers['content-type']).toBe('image/png');
+
+      const settingsRes = await request(app)
+        .get('/api/admin/settings')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(settingsRes.body.hasSignature).toBe(true);
+    });
+
+    it('removes the signature and reverts hasSignature to false', async () => {
+      const removeRes = await request(app)
+        .delete('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(removeRes.status).toBe(200);
+      expect(removeRes.body.hasSignature).toBe(false);
+
+      const viewRes = await request(app)
+        .get('/api/admin/settings/signature')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(viewRes.status).toBe(404);
+    });
   });
 });

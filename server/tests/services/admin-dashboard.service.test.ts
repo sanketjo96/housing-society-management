@@ -219,18 +219,19 @@ describe('admin-dashboard service', () => {
     it('computes totals and collection rate across every flat', async () => {
       const summary = await getDashboardSummary(societyId);
       // totalBilled = 1000(B)+500(B)+800(C)+800(D)+800(D)+800(E)+800(E) = 5500;
-      // totalPaid only counts approvedDeposits (actual money collected), never
-      // Credit — 800(C's deposit) + 800(D's deposit) = 1600. Flat E's 800 Credit is a
-      // real adjustment reducing what's owed, but it isn't "collected" cash, so it
-      // must not inflate the collection rate.
+      // totalPaid counts approvedDeposits + approvedCredits (2026-08-08 pivot — an
+      // approved Credit counts as paid the same as a Deposit) — 800(C's deposit) +
+      // 800(D's deposit) + 800(E's credit) = 2400.
       expect(summary.totalBilled).toBe(5500);
-      expect(summary.totalPaid).toBe(1600);
+      expect(summary.totalPaid).toBe(2400);
       // outstandingTotal = sum of per-flat Outstanding: A=0, B=1500, C=0 (800 charge
       // fully covered by the approved deposit; the second pending deposit doesn't
       // count), D=800 (one of its two 800 charges covered, the other still open),
       // E=800 (same shape as D, but covered by an approved Credit instead).
       expect(summary.outstandingTotal).toBe(3100);
       expect(summary.pendingReviewTotal).toBe(1200); // C's pending deposit
+      // collectionRatePercent (2026-08-09 pivot) is deposits-only, unlike totalPaid —
+      // C's deposit 800 + D's deposit 800 = 1600 (E's 800 is a Credit, excluded).
       expect(summary.collectionRatePercent).toBe(29); // round(1600/5500*100)
     });
   });
@@ -241,21 +242,40 @@ describe('admin-dashboard service', () => {
       const flatA = dues.find((d) => d.flat.id === flatAId);
       expect(flatA).toBeDefined();
       expect(flatA!.outstandingTotal).toBe(0);
-      expect(flatA!.unpaidCount).toBe(0);
+      expect(flatA!.creditTotal).toBe(0);
     });
 
-    it("surfaces each flat's Outstanding, sorted highest first, with pending-entry counts", async () => {
+    it("surfaces each flat's Outstanding, sorted highest first", async () => {
       const dues = await getFlatWiseDues(societyId);
       const flatB = dues.find((d) => d.flat.id === flatBId)!;
       const flatC = dues.find((d) => d.flat.id === flatCId)!;
       expect(flatB.outstandingTotal).toBe(1500); // fully unpaid
-      expect(flatB.unpaidCount).toBe(0); // no pending LedgerEntry rows
       expect(flatC.outstandingTotal).toBe(0); // charge fully covered by the approved deposit
-      expect(flatC.unpaidCount).toBe(1); // the second, pending deposit
 
       const indexB = dues.findIndex((d) => d.flat.id === flatBId);
       const indexC = dues.findIndex((d) => d.flat.id === flatCId);
       expect(indexB).toBeLessThan(indexC); // 1500 > 0
+    });
+
+    it("surfaces each flat's paidTotal as its approvedDeposits + approvedCredits", async () => {
+      const dues = await getFlatWiseDues(societyId);
+      const flatB = dues.find((d) => d.flat.id === flatBId)!;
+      const flatC = dues.find((d) => d.flat.id === flatCId)!;
+      const flatE = dues.find((d) => d.flat.id === flatEId)!;
+      expect(flatB.paidTotal).toBe(0); // nothing paid
+      expect(flatC.paidTotal).toBe(800); // the approved deposit, not the pending one
+      expect(flatE.paidTotal).toBe(800); // settled via an approved Credit, which now counts as paid too
+    });
+
+    it("surfaces each flat's creditTotal as its availableCredit, the flip side of outstandingTotal", async () => {
+      const dues = await getFlatWiseDues(societyId);
+      // None of the seeded flats here are overpaid, so every creditTotal is 0 — the
+      // formula itself (exactly one of outstanding/availableCredit ever nonzero) is
+      // exhaustively covered by ledger.service.test.ts's balancesFromRows suite.
+      for (const d of dues) {
+        expect(d.creditTotal).toBe(0);
+        expect(d.creditTotal === 0 || d.outstandingTotal === 0).toBe(true);
+      }
     });
   });
 

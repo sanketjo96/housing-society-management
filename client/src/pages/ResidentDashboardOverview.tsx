@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, CheckCircle2, PlusCircle, QrCode, X } from 'lucide-react';
+import { Check, CheckCircle2, Download, PlusCircle, QrCode, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { DataTable } from '../components/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass } from '../components/FormField';
@@ -21,6 +21,10 @@ interface LedgerRow {
   amount: number;
   status: LedgerStatus;
   note?: string | null;
+  // Only meaningful on DEPOSIT/CREDIT rows — true once a Receipt exists for this
+  // entry (Receipt Generation & Approval Workflow, 2026-08-11). A still-pending row
+  // or a legacy entry approved before this feature shipped has no receipt to show.
+  hasReceipt?: boolean;
 }
 
 interface LedgerTotals {
@@ -97,6 +101,41 @@ function TypeBadge({ type }: { type: LedgerEntryType }) {
     <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
       {meta.label}
     </span>
+  );
+}
+
+// The issued-receipt endpoint is authenticated (never a public URL), so a plain
+// <a href> won't carry the Bearer token — fetch it ourselves and hand the browser
+// a blob: URL instead, same pattern the admin Payment Proofs queue uses for both
+// proof files and receipts.
+async function downloadReceipt(entryId: string) {
+  const res = await authedFetch(`/api/ledger-entries/${entryId}/receipt`);
+  if (!res.ok) throw new Error('Could not load your receipt.');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// Own its own error state — same reasoning as PaymentProofsPage.tsx's per-cell
+// components (doesn't fit TanStack Table's per-cell rendering model otherwise).
+function ReceiptDownloadButton({ entryId }: { entryId: string }) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          downloadReceipt(entryId).catch((e: Error) => setError(e.message));
+        }}
+        className="flex items-center gap-1 border-none bg-transparent p-0 text-xs font-semibold text-teal"
+      >
+        <Download size={12} /> Receipt
+      </button>
+      {error && <p className="mt-1 text-xs text-coral">{error}</p>}
+    </>
   );
 }
 
@@ -387,12 +426,20 @@ export function ResidentDashboardOverview() {
         meta: { align: 'right' },
         cell: ({ row }) => <ApprovalBadge status={row.original.status} />,
       },
+      {
+        id: 'receipt',
+        header: '',
+        cell: ({ row }) =>
+          row.original.status === 'APPROVED' && row.original.hasReceipt ? (
+            <ReceiptDownloadButton entryId={row.original.id} />
+          ) : null,
+      },
     ],
     [],
   );
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <h1 className="m-0 mb-6 font-display text-xl text-ink">Dashboard</h1>
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}

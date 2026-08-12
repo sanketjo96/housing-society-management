@@ -8,6 +8,7 @@ import {
   manualDeposit,
   rejectLedgerEntry,
 } from '../services/ledger.service';
+import { previewReceiptPdf } from '../services/receipt.service';
 
 const listQuerySchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
@@ -43,6 +44,35 @@ export async function approveLedgerEntryHandler(req: Request, res: Response) {
       return;
     }
     res.status(200).json(entry);
+  } catch (err) {
+    if (err instanceof LedgerEntryAlreadyReviewedError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Streams the *exact* PDF that will be issued if this entry is approved right now
+// — reuses the same buildReceiptData/renderReceiptPdf path the real approval uses
+// (receipt.service.ts), so the admin's pre-approval preview modal and the
+// eventually-issued receipt are guaranteed byte-for-byte identical. Purely a read:
+// no storage.save(), no DB write, no Receipt row created here.
+export async function previewReceiptHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  try {
+    const buffer = await previewReceiptPdf(req.params.id, req.user.societyId);
+    if (!buffer) {
+      res.status(404).json({ error: 'Ledger entry not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="receipt-preview.pdf"');
+    res.status(200).send(buffer);
   } catch (err) {
     if (err instanceof LedgerEntryAlreadyReviewedError) {
       res.status(409).json({ error: err.message });

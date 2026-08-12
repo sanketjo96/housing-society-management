@@ -201,7 +201,7 @@ describe('FlatsListPage', () => {
 
     await waitFor(() => expect(screen.getByText(/bulk import/i)).toBeInTheDocument());
 
-    const csvText = 'wing,flatNumber,baseRate,ownerName,ownerEmail\nA,101,1500,Test Owner,test-owner@example.com';
+    const csvText = 'wing,flatNumber,ownerName,ownerPhone,ownerEmail\nA,101,Test Owner,9876543210,test-owner@example.com';
     const file = new File([csvText], 'flats.csv', { type: 'text/csv' });
     await user.upload(screen.getByLabelText(/upload csv file/i), file);
 
