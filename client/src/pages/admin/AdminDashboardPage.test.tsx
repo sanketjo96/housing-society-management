@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
 import { AdminDashboardPage } from './AdminDashboardPage';
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-function renderPage(onNavigateToProofs?: () => void) {
-  // retry: false — React Query's default retries would otherwise outlast waitFor's
-  // default timeout on the error-state test below.
+function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AdminDashboardPage onNavigateToProofs={onNavigateToProofs} />
+      <MemoryRouter>
+        <AdminDashboardPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -76,18 +76,22 @@ describe('AdminDashboardPage', () => {
 
     await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
     expect(screen.getByText('23%')).toBeInTheDocument();
-    expect(screen.getByText('₹2,000')).toBeInTheDocument();
   });
 
-  it('shows the pending proofs widget with the correct count and navigates on click', async () => {
-    mockFetch({ pendingProofsCount: 3 });
-    const onNavigate = vi.fn();
-    renderPage(onNavigate);
-    const user = userEvent.setup();
+  it('no longer shows the numeric "Pending review" amount card', async () => {
+    mockFetch();
+    renderPage();
 
-    await waitFor(() => expect(screen.getByText(/3 payment proofs pending review/i)).toBeInTheDocument());
-    await user.click(screen.getByText(/3 payment proofs pending review/i));
-    expect(onNavigate).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+    expect(screen.queryByText(/^pending review$/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the pending proofs widget with the correct count, linking to Payment proofs', async () => {
+    mockFetch({ pendingProofsCount: 3 });
+    renderPage();
+
+    const link = await screen.findByRole('link', { name: /3 payment proofs pending review/i });
+    expect(link).toHaveAttribute('href', '/payment-proofs');
   });
 
   it('uses singular phrasing for exactly one pending proof', async () => {
@@ -97,43 +101,45 @@ describe('AdminDashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/1 payment proof pending review/i)).toBeInTheDocument());
   });
 
-  it('shows the flat-wise dues table, including settled flats', async () => {
+  it('does not render the flat-wise dues table on this page', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    expect(screen.getByText('A-102')).toBeInTheDocument(); // the ₹0 flat is still listed
+    await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+    expect(screen.queryByText('A-101')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
-  // 'Paid' column hidden for now (AdminDashboardPage.tsx) — re-enable this test
-  // alongside that column.
-  it.skip('shows how much each flat has paid', async () => {
+  it('links the Outstanding tile to the flat-wise dues page', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    expect(screen.getByText('₹900')).toBeInTheDocument();
-    expect(screen.getByText('₹800')).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: /maintenance outstanding total/i });
+    expect(link).toHaveAttribute('href', '/flat-dues');
   });
 
-  it('does not show a Paid column for now', async () => {
+  it('links the Total Owners tile to the flats and residents page', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    expect(screen.queryByRole('columnheader', { name: 'Paid' })).not.toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: /total owners/i });
+    expect(link).toHaveAttribute('href', '/flats');
   });
 
-  it('shows each flat\'s available credit, with no separate Tenant/Unpaid columns', async () => {
+  it('links the Total Flats tile to the flats and residents page', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    const section = screen.getByText('Flat-wise dues').closest('div') as HTMLElement;
-    expect(within(section).getByText('₹300')).toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'Tenant' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'Unpaid' })).not.toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Credit' })).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: /total flats/i });
+    expect(link).toHaveAttribute('href', '/flats');
+  });
+
+  it('links the Total Tenants tile to the tenants page', async () => {
+    mockFetch();
+    renderPage();
+
+    const link = await screen.findByRole('link', { name: /total tenants/i });
+    expect(link).toHaveAttribute('href', '/tenants');
   });
 
   it('shows a Total Credits card summing every flat\'s available credit', async () => {
@@ -141,41 +147,18 @@ describe('AdminDashboardPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Total Credits')).toBeInTheDocument());
-    const card = screen.getByText('Total Credits').closest('div') as HTMLElement;
-    expect(within(card).getByText('₹300')).toBeInTheDocument();
+    const card = screen.getByText('Total Credits').closest('a,div') as HTMLElement;
+    expect(card).toHaveTextContent('₹300');
   });
 
-  it("indicates a tenant's presence under the owner's name, without a separate Tenant column", async () => {
+  it('shows Total Owners, Total Tenants, and Total Flats counts', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    expect(screen.getByText('Tenant: Carol Tenant')).toBeInTheDocument();
-  });
-
-  it('sorts the flat-wise dues table when a sortable column header is clicked', async () => {
-    mockFetch();
-    renderPage();
-
-    await waitFor(() => expect(screen.getByText('Flat-wise dues')).toBeInTheDocument());
-    const section = screen.getByText('Flat-wise dues').closest('div') as HTMLElement;
-
-    const rowsBefore = within(section).getAllByRole('row').slice(1); // drop header row
-    expect(rowsBefore[0]).toHaveTextContent('A-101');
-    expect(rowsBefore[1]).toHaveTextContent('A-102');
-
-    // First click on a numeric column sorts descending (TanStack's default first
-    // direction for non-string values) — the ₹1,500 flat (A-101) stays on top.
-    await userEvent.click(within(section).getByRole('button', { name: 'Outstanding' }));
-    const rowsDescending = within(section).getAllByRole('row').slice(1);
-    expect(rowsDescending[0]).toHaveTextContent('A-101');
-    expect(rowsDescending[1]).toHaveTextContent('A-102');
-
-    // Second click reverses to ascending — the ₹0 flat (A-102) now leads.
-    await userEvent.click(within(section).getByRole('button', { name: 'Outstanding' }));
-    const rowsAscending = within(section).getAllByRole('row').slice(1);
-    expect(rowsAscending[0]).toHaveTextContent('A-102');
-    expect(rowsAscending[1]).toHaveTextContent('A-101');
+    await waitFor(() => expect(screen.getByText('Total Flats')).toBeInTheDocument());
+    expect(screen.getByText('Total Owners').nextSibling).toHaveTextContent('2');
+    expect(screen.getByText('Total Tenants').nextSibling).toHaveTextContent('1');
+    expect(screen.getByText('Total Flats').nextSibling).toHaveTextContent('2');
   });
 
   it('shows an error state when a request fails', async () => {

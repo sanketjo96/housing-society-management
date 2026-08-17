@@ -4,7 +4,9 @@ import { DashboardLayout } from './components/DashboardLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
+import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
+import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
 import { ReceiptTemplatePage } from './pages/admin/settings/ReceiptTemplatePage'
 import { SocietyDetailsPage } from './pages/admin/settings/SocietyDetailsPage'
@@ -49,6 +51,20 @@ function App() {
               <Route
                 path="/payment-proofs"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><PaymentProofsPage /></ProtectedRoute>}
+              />
+              {/* Not a sidebar nav item — reached only via the "Maintenance Outstanding
+                  Total" tile on AdminDashboardPage, same admin-only guard as every
+                  other admin route here. */}
+              <Route
+                path="/flat-dues"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><FlatWiseDuesPage /></ProtectedRoute>}
+              />
+              {/* Not a sidebar nav item — reached only via the "Total Tenants" tile on
+                  AdminDashboardPage, same admin-only guard as every other admin route
+                  here. */}
+              <Route
+                path="/tenants"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><TenantsListPage /></ProtectedRoute>}
               />
               <Route
                 path="/settings/society"

@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AdminDashboardPage } from './admin/AdminDashboardPage';
 import { ResidentDashboardOverview } from './ResidentDashboardOverview';
@@ -10,11 +9,6 @@ import { ResidentDashboardOverview } from './ResidentDashboardOverview';
 // sibling top-level route in App.tsx, not a sub-path of this one.
 export function DashboardPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
-  return user?.role === 'ADMIN' ? (
-    <AdminDashboardPage onNavigateToProofs={() => navigate('/payment-proofs')} />
-  ) : (
-    <ResidentDashboardOverview />
-  );
+  return user?.role === 'ADMIN' ? <AdminDashboardPage /> : <ResidentDashboardOverview />;
 }

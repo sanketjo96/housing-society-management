@@ -5,6 +5,7 @@ import {
   getReceiptSignatureForViewing,
   getSocietySettings,
   IncompleteBankDetailsError,
+  InvalidCommitteeMemberError,
   removeReceiptSignature,
   setReceiptSignature,
   updateSocietySettings,
@@ -15,6 +16,10 @@ import {
 // these in uppercase, so lowercase input is rejected with a clear message rather
 // than silently normalized.
 const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+// Date-only, no time component — matches the <input type="date"> value format the
+// frontend sends.
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 // Matches Society.tenantRateFactor's @db.Decimal(3,2) column headroom (up to 9.99).
 // receiptNumberPrefix restricted to a short alphanumeric/hyphen token — it's
@@ -30,6 +35,20 @@ const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const updateSettingsSchema = z.object({
   name: z.string().min(1, 'Society name is required').optional(),
   address: z.string().min(1, 'Society address is required').optional(),
+  // Required fields (Basic information tab) — unlike upiVpa etc. below, an empty
+  // string is rejected rather than treated as "clear it back to null". Still
+  // `.optional()` at the key level so a PATCH from a different tab (Committee,
+  // Payment) that never touches these can't fail validation just for omitting them.
+  constructionDate: z
+    .string()
+    .min(1, 'Construction date is required')
+    .refine((v) => DATE_REGEX.test(v) && !Number.isNaN(Date.parse(v)), 'Enter a valid construction date')
+    .optional(),
+  formationDate: z
+    .string()
+    .min(1, 'Society formation date is required')
+    .refine((v) => DATE_REGEX.test(v) && !Number.isNaN(Date.parse(v)), 'Enter a valid society formation date')
+    .optional(),
   upiVpa: z.string().optional(),
   bankAccountNumber: z.string().max(34).optional(),
   bankIfsc: z
@@ -40,6 +59,12 @@ const updateSettingsSchema = z.object({
     }),
   tenantRateFactor: z.coerce.number().positive().max(9.99).optional(),
   defaultBaseRate: z.coerce.number().positive().optional(),
+  // Committee tab — each a User id from the owners dropdown, or '' to unassign.
+  // Format/existence (must be an OWNER in this society) is validated in the
+  // service, not here — this controller has no owner list to check against.
+  chairmanId: z.string().optional(),
+  secretaryId: z.string().optional(),
+  treasurerId: z.string().optional(),
   receiptNumberPrefix: z
     .string()
     .regex(/^[A-Za-z0-9-]{1,20}$/, 'Receipt number prefix must be 1-20 letters, digits, or hyphens')
@@ -74,7 +99,7 @@ export async function updateSocietySettingsHandler(req: Request, res: Response) 
     const settings = await updateSocietySettings(req.user.societyId, parsed.data);
     res.status(200).json(settings);
   } catch (err) {
-    if (err instanceof IncompleteBankDetailsError) {
+    if (err instanceof IncompleteBankDetailsError || err instanceof InvalidCommitteeMemberError) {
       res.status(400).json({ error: err.message });
       return;
     }

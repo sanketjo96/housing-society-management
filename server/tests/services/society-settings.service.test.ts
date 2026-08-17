@@ -5,6 +5,7 @@ import {
   getReceiptSignatureForViewing,
   getSocietySettings,
   IncompleteBankDetailsError,
+  InvalidCommitteeMemberError,
   removeReceiptSignature,
   setReceiptSignature,
   updateSocietySettings,
@@ -27,6 +28,9 @@ async function expectFileGone(key: string): Promise<void> {
 describe('society-settings service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
+  let ownerId: string;
+  let otherSocietyId: string;
+  let otherSocietyOwnerId: string;
 
   beforeAll(async () => {
     const society = await prisma.society.create({
@@ -39,9 +43,44 @@ describe('society-settings service', () => {
       },
     });
     societyId = society.id;
+
+    const owner = await prisma.user.create({
+      data: {
+        name: 'Priya Owner',
+        email: `priya-owner-${suffix}@example.com`,
+        passwordHash: 'x',
+        role: 'OWNER',
+        societyId,
+      },
+    });
+    ownerId = owner.id;
+
+    // A different society's owner — used to prove committee validation is
+    // society-scoped, not just "any OWNER anywhere".
+    const otherSociety = await prisma.society.create({
+      data: { name: `Other Society ${suffix}`, address: '2 Other St' },
+    });
+    otherSocietyId = otherSociety.id;
+    const otherOwner = await prisma.user.create({
+      data: {
+        name: 'Other Owner',
+        email: `other-owner-${suffix}@example.com`,
+        passwordHash: 'x',
+        role: 'OWNER',
+        societyId: otherSociety.id,
+      },
+    });
+    otherSocietyOwnerId = otherOwner.id;
   });
 
   afterAll(async () => {
+    await prisma.society.update({
+      where: { id: societyId },
+      data: { chairmanId: null, secretaryId: null, treasurerId: null },
+    });
+    await prisma.user.delete({ where: { id: otherSocietyOwnerId } });
+    await prisma.society.delete({ where: { id: otherSocietyId } });
+    await prisma.user.delete({ where: { id: ownerId } });
     await prisma.society.delete({ where: { id: societyId } });
     await prisma.$disconnect();
   });
@@ -51,6 +90,8 @@ describe('society-settings service', () => {
     expect(settings).toEqual({
       name: `Settings Test Society ${suffix}`,
       address: '1 Test St',
+      constructionDate: null,
+      formationDate: null,
       upiVpa: 'settings-test@okhdfcbank',
       bankAccountNumber: null,
       bankIfsc: null,
@@ -61,6 +102,9 @@ describe('society-settings service', () => {
       receiptSignatoryTitle: null,
       receiptFooterNote: null,
       hasSignature: false,
+      chairman: null,
+      secretary: null,
+      treasurer: null,
     });
   });
 
@@ -74,6 +118,15 @@ describe('society-settings service', () => {
     const updated = await updateSocietySettings(societyId, { defaultBaseRate: 1800 });
     expect(updated.defaultBaseRate).toBe(1800);
     expect(updated.tenantRateFactor).toBe(1.75);
+  });
+
+  it('updates constructionDate and formationDate', async () => {
+    const updated = await updateSocietySettings(societyId, {
+      constructionDate: '1998-04-12',
+      formationDate: '1999-01-20',
+    });
+    expect(updated.constructionDate).toBe('1998-04-12');
+    expect(updated.formationDate).toBe('1999-01-20');
   });
 
   it('updates the society name, address, and UPI ID', async () => {
@@ -137,6 +190,45 @@ describe('society-settings service', () => {
     expect(updated.receiptFooterNote).toBeNull();
     // Unrelated receipt fields stay untouched.
     expect(updated.receiptSignatoryName).toBe('Ramesh Kulkarni');
+  });
+
+  describe('committee roles', () => {
+    it('assigns an owner as chairman', async () => {
+      const updated = await updateSocietySettings(societyId, { chairmanId: ownerId });
+      expect(updated.chairman).toEqual({
+        id: ownerId,
+        name: 'Priya Owner',
+        email: `priya-owner-${suffix}@example.com`,
+        phone: null,
+      });
+      expect(updated.secretary).toBeNull();
+      expect(updated.treasurer).toBeNull();
+    });
+
+    it('assigns the same owner to multiple roles independently', async () => {
+      const updated = await updateSocietySettings(societyId, { secretaryId: ownerId, treasurerId: ownerId });
+      expect(updated.chairman?.id).toBe(ownerId);
+      expect(updated.secretary?.id).toBe(ownerId);
+      expect(updated.treasurer?.id).toBe(ownerId);
+    });
+
+    it('clears a role back to unassigned when given an empty string', async () => {
+      const updated = await updateSocietySettings(societyId, { secretaryId: '' });
+      expect(updated.secretary).toBeNull();
+      expect(updated.chairman?.id).toBe(ownerId);
+    });
+
+    it('rejects a user id that is not an owner in this society', async () => {
+      await expect(updateSocietySettings(societyId, { chairmanId: otherSocietyOwnerId })).rejects.toThrow(
+        InvalidCommitteeMemberError,
+      );
+    });
+
+    it('rejects a nonexistent user id', async () => {
+      await expect(updateSocietySettings(societyId, { treasurerId: 'does-not-exist' })).rejects.toThrow(
+        InvalidCommitteeMemberError,
+      );
+    });
   });
 
   it('updates all core fields together', async () => {

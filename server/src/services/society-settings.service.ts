@@ -16,9 +16,31 @@ export class IncompleteBankDetailsError extends Error {
   }
 }
 
+// Thrown when a committee role (chairman/secretary/treasurer) is set to a user id
+// that doesn't resolve to an existing OWNER in this society — the dropdown only
+// ever offers real owners, so this only fires on a stale/tampered request.
+export class InvalidCommitteeMemberError extends Error {
+  constructor(role: string) {
+    super(`Selected ${role} must be an existing owner in this society`);
+    this.name = 'InvalidCommitteeMemberError';
+  }
+}
+
+export interface CommitteeMemberSummary {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+}
+
 export interface SocietySettings {
   name: string;
   address: string;
+  // Basic information tab — required going forward (enforced in the controller's
+  // Zod schema, not the DB, since existing societies predate these fields). Date
+  // strings, "YYYY-MM-DD" — time-of-day is never meaningful for either.
+  constructionDate: string | null;
+  formationDate: string | null;
   // UPI always takes precedence over bank details when both are configured — see
   // ledger.service.ts's buildPaymentIntentResult, the one place that choice
   // actually matters.
@@ -36,11 +58,23 @@ export interface SocietySettings {
   receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
   hasSignature: boolean;
+  // Committee tab (Society details) — each nullable, independently set from a
+  // dropdown of this society's owners. Informational only; nothing in billing or
+  // permissions reads these.
+  chairman: CommitteeMemberSummary | null;
+  secretary: CommitteeMemberSummary | null;
+  treasurer: CommitteeMemberSummary | null;
 }
 
 export interface UpdateSocietySettingsInput {
   name?: string;
   address?: string;
+  // Required — unlike upiVpa etc. below, an empty string is rejected rather than
+  // clearing the field back to null (validated in the controller's Zod schema,
+  // which is where "required when present" is enforced; the service just parses
+  // whatever valid date string arrives). "YYYY-MM-DD".
+  constructionDate?: string;
+  formationDate?: string;
   // An empty string clears the field back to null — same PATCH convention as the
   // receipt text fields below (there's a real "not configured" state, distinct
   // from "leave whatever was there").
@@ -53,11 +87,25 @@ export interface UpdateSocietySettingsInput {
   receiptSignatoryName?: string;
   receiptSignatoryTitle?: string;
   receiptFooterNote?: string;
+  // Empty string clears the role back to unassigned (same convention as upiVpa
+  // etc. above); a non-empty value must resolve to an OWNER in this society.
+  chairmanId?: string;
+  secretaryId?: string;
+  treasurerId?: string;
+}
+
+interface CommitteeMemberRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
 }
 
 interface SocietyRow {
   name: string;
   address: string;
+  constructionDate: Date | null;
+  formationDate: Date | null;
   upiVpa: string | null;
   bankAccountNumber: string | null;
   bankIfsc: string | null;
@@ -68,11 +116,18 @@ interface SocietyRow {
   receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
   receiptSignatureFileKey: string | null;
+  chairman: CommitteeMemberRow | null;
+  secretary: CommitteeMemberRow | null;
+  treasurer: CommitteeMemberRow | null;
 }
+
+const COMMITTEE_MEMBER_SELECT = { select: { id: true, name: true, email: true, phone: true } } as const;
 
 const SETTINGS_SELECT = {
   name: true,
   address: true,
+  constructionDate: true,
+  formationDate: true,
   upiVpa: true,
   bankAccountNumber: true,
   bankIfsc: true,
@@ -83,12 +138,23 @@ const SETTINGS_SELECT = {
   receiptSignatoryTitle: true,
   receiptFooterNote: true,
   receiptSignatureFileKey: true,
+  chairman: COMMITTEE_MEMBER_SELECT,
+  secretary: COMMITTEE_MEMBER_SELECT,
+  treasurer: COMMITTEE_MEMBER_SELECT,
 } as const;
+
+// Date-only fields are stored as DateTime (midnight UTC) but never shown/edited
+// with a time component — always rendered back as "YYYY-MM-DD".
+function toDateString(date: Date | null): string | null {
+  return date ? date.toISOString().slice(0, 10) : null;
+}
 
 function toSettings(society: SocietyRow): SocietySettings {
   return {
     name: society.name,
     address: society.address,
+    constructionDate: toDateString(society.constructionDate),
+    formationDate: toDateString(society.formationDate),
     upiVpa: society.upiVpa,
     bankAccountNumber: society.bankAccountNumber,
     bankIfsc: society.bankIfsc,
@@ -99,7 +165,22 @@ function toSettings(society: SocietyRow): SocietySettings {
     receiptSignatoryTitle: society.receiptSignatoryTitle,
     receiptFooterNote: society.receiptFooterNote,
     hasSignature: !!society.receiptSignatureFileKey,
+    chairman: society.chairman,
+    secretary: society.secretary,
+    treasurer: society.treasurer,
   };
+}
+
+async function resolveCommitteeMemberUpdate(
+  societyId: string,
+  userId: string | undefined,
+  roleLabel: string,
+): Promise<string | undefined | null> {
+  if (userId === undefined) return undefined;
+  if (userId === '') return null;
+  const owner = await prisma.user.findFirst({ where: { id: userId, societyId, role: 'OWNER' } });
+  if (!owner) throw new InvalidCommitteeMemberError(roleLabel);
+  return userId;
 }
 
 export async function getSocietySettings(societyId: string): Promise<SocietySettings> {
@@ -132,16 +213,31 @@ export async function updateSocietySettings(
     }
   }
 
+  // Resolved (and validated against this society's owners) before the write, so an
+  // invalid committee selection never gets mixed into a partially-applied update.
+  const [chairmanId, secretaryId, treasurerId] = await Promise.all([
+    resolveCommitteeMemberUpdate(societyId, input.chairmanId, 'chairman'),
+    resolveCommitteeMemberUpdate(societyId, input.secretaryId, 'secretary'),
+    resolveCommitteeMemberUpdate(societyId, input.treasurerId, 'treasurer'),
+  ]);
+
   const society = await prisma.society.update({
     where: { id: societyId },
     data: {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.address !== undefined ? { address: input.address } : {}),
+      // Format ("YYYY-MM-DD") and non-emptiness are already validated by the
+      // controller's Zod schema before this ever runs.
+      ...(input.constructionDate !== undefined ? { constructionDate: new Date(input.constructionDate) } : {}),
+      ...(input.formationDate !== undefined ? { formationDate: new Date(input.formationDate) } : {}),
       ...(input.upiVpa !== undefined ? { upiVpa: input.upiVpa || null } : {}),
       ...(input.bankAccountNumber !== undefined ? { bankAccountNumber: input.bankAccountNumber || null } : {}),
       ...(input.bankIfsc !== undefined ? { bankIfsc: input.bankIfsc || null } : {}),
       ...(input.tenantRateFactor !== undefined ? { tenantRateFactor: input.tenantRateFactor } : {}),
       ...(input.defaultBaseRate !== undefined ? { defaultBaseRate: input.defaultBaseRate } : {}),
+      ...(chairmanId !== undefined ? { chairmanId } : {}),
+      ...(secretaryId !== undefined ? { secretaryId } : {}),
+      ...(treasurerId !== undefined ? { treasurerId } : {}),
       ...(input.receiptNumberPrefix !== undefined ? { receiptNumberPrefix: input.receiptNumberPrefix } : {}),
       ...(input.receiptSignatoryName !== undefined
         ? { receiptSignatoryName: input.receiptSignatoryName || null }

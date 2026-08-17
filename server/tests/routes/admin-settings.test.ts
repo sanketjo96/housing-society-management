@@ -81,6 +81,8 @@ describe('/api/admin/settings', () => {
     expect(res.body).toEqual({
       name: `Settings Route Society ${suffix}`,
       address: '1 Test St',
+      constructionDate: null,
+      formationDate: null,
       upiVpa: 'settings-route@okhdfcbank',
       bankAccountNumber: null,
       bankIfsc: null,
@@ -91,6 +93,9 @@ describe('/api/admin/settings', () => {
       receiptSignatoryTitle: null,
       receiptFooterNote: null,
       hasSignature: false,
+      chairman: null,
+      secretary: null,
+      treasurer: null,
     });
   });
 
@@ -110,6 +115,38 @@ describe('/api/admin/settings', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects an empty or malformed constructionDate/formationDate with a 400', async () => {
+    const empty = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ constructionDate: '' });
+    expect(empty.status).toBe(400);
+
+    const malformed = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ formationDate: '12th Jan 1999' });
+    expect(malformed.status).toBe(400);
+  });
+
+  it('updates constructionDate and formationDate, and omitting them on another PATCH leaves them untouched', async () => {
+    const set = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ constructionDate: '1998-04-12', formationDate: '1999-01-20' });
+    expect(set.status).toBe(200);
+    expect(set.body.constructionDate).toBe('1998-04-12');
+    expect(set.body.formationDate).toBe('1999-01-20');
+
+    const unrelated = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ tenantRateFactor: 1.6 });
+    expect(unrelated.status).toBe(200);
+    expect(unrelated.body.constructionDate).toBe('1998-04-12');
+    expect(unrelated.body.formationDate).toBe('1999-01-20');
+  });
+
   it('updates the society name and UPI ID', async () => {
     const res = await request(app)
       .patch('/api/admin/settings')
@@ -118,6 +155,29 @@ describe('/api/admin/settings', () => {
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Renamed via API');
     expect(res.body.upiVpa).toBe('renamed-via-api@upi');
+  });
+
+  it('assigns a committee role from the owners list, and rejects a non-owner id', async () => {
+    const assignRes = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ chairmanId: createdUserIds[1] }); // the OWNER created in beforeAll
+    expect(assignRes.status).toBe(200);
+    expect(assignRes.body.chairman.id).toBe(createdUserIds[1]);
+
+    // The admin user itself isn't an OWNER — the dropdown only ever offers owners.
+    const rejectRes = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ secretaryId: createdUserIds[0] });
+    expect(rejectRes.status).toBe(400);
+
+    const clearRes = await request(app)
+      .patch('/api/admin/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ chairmanId: '' });
+    expect(clearRes.status).toBe(200);
+    expect(clearRes.body.chairman).toBeNull();
   });
 
   it('updates settings, and generation immediately reflects the new values end to end', async () => {

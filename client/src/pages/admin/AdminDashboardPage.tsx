@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ColumnDef } from '@tanstack/react-table';
 import { ReceiptText } from 'lucide-react';
-import { useMemo } from 'react';
-import { DataTable } from '../../components/DataTable';
+import { Link } from 'react-router-dom';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
 
@@ -51,14 +49,16 @@ function SummaryCard({
   value,
   accent,
   note,
+  to,
 }: {
   label: string;
   value: string;
   accent?: 'coral' | 'teal';
   note?: string;
+  to?: string;
 }) {
-  return (
-    <div className="rounded-2xl border border-line bg-white p-5">
+  const content = (
+    <>
       <p className="m-0 text-xs uppercase tracking-wide text-muted">{label}</p>
       <p
         className={`m-0 mt-1 truncate whitespace-nowrap font-mono-brand text-xl font-semibold ${accent === 'coral' ? 'text-coral' : accent === 'teal' ? 'text-teal' : 'text-ink'}`}
@@ -66,11 +66,24 @@ function SummaryCard({
         {value}
       </p>
       {note && <p className="m-0 mt-1.5 text-[11px] text-muted">{note}</p>}
-    </div>
+    </>
   );
+
+  if (to) {
+    return (
+      <Link to={to} className="block rounded-2xl border border-line bg-white p-5 hover:border-teal">
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className="rounded-2xl border border-line bg-white p-5">{content}</div>;
 }
 
-export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?: () => void }) {
+// Flat-wise dues moved off this page entirely (admin-only /flat-dues, reached only by
+// clicking the Outstanding tile below) — this page now only shows society-wide
+// headline numbers, never the per-flat table.
+export function AdminDashboardPage() {
   const summaryQuery = useQuery({ queryKey: ['admin-dashboard-summary'], queryFn: fetchSummary });
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
   const pendingProofsQuery = useQuery({
@@ -78,68 +91,20 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
     queryFn: fetchPendingProofsCount,
   });
 
-  const duesColumns = useMemo<ColumnDef<FlatDues, unknown>[]>(
-    () => [
-      {
-        id: 'flat',
-        header: 'Flat',
-        accessorFn: (row) => `${row.flat.wing}-${row.flat.flatNumber}`,
-        cell: ({ row }) => (
-          <span className="font-mono-brand text-ink">
-            {row.original.flat.wing}-{row.original.flat.flatNumber}
-          </span>
-        ),
-      },
-      {
-        id: 'owner',
-        header: 'Owner',
-        accessorFn: (row) => row.owner.name,
-        cell: ({ row }) => (
-          <div>
-            <span className="text-ink">{row.original.owner.name}</span>
-            {row.original.currentTenant && (
-              <p className="m-0 text-xs text-muted">Tenant: {row.original.currentTenant.name}</p>
-            )}
-          </div>
-        ),
-      },
-      {
-        id: 'outstanding',
-        header: 'Outstanding',
-        accessorFn: (row) => row.outstandingTotal,
-        meta: { align: 'right' },
-        cell: ({ row }) => (
-          <span
-            className={`font-mono-brand ${row.original.outstandingTotal > 0 ? 'text-coral' : 'text-ink'}`}
-          >
-            ₹{row.original.outstandingTotal.toLocaleString('en-IN')}
-          </span>
-        ),
-      },
-      // 'Paid' column (row.paidTotal) hidden for now — FlatDues still returns
-      // paidTotal, only this column definition was removed.
-      {
-        id: 'credit',
-        header: 'Credit',
-        accessorFn: (row) => row.creditTotal,
-        meta: { align: 'right' },
-        cell: ({ row }) => (
-          <span className={`font-mono-brand ${row.original.creditTotal > 0 ? 'text-teal' : 'text-muted'}`}>
-            ₹{row.original.creditTotal.toLocaleString('en-IN')}
-          </span>
-        ),
-      },
-    ],
-    [],
-  );
-
   const isLoading = summaryQuery.isLoading || duesQuery.isLoading || pendingProofsQuery.isLoading;
   const isError = summaryQuery.isError || duesQuery.isError || pendingProofsQuery.isError;
 
-  // Society-wide available credit — the same per-flat `creditTotal` the "Credit"
-  // table column below already shows, just summed across every flat. No new
-  // backend endpoint needed: duesQuery already fetches this per flat.
+  // Society-wide available credit — the same per-flat `creditTotal` the flat-wise
+  // dues table's "Credit" column shows, just summed across every flat.
   const totalCredits = duesQuery.data?.reduce((sum, row) => sum + row.creditTotal, 0) ?? 0;
+
+  // Occupancy headcounts, derived from the same flat-dues fetch — a flat always has
+  // exactly one owner, and at most one current tenant.
+  const totalFlats = duesQuery.data?.length ?? 0;
+  const totalOwners = new Set(duesQuery.data?.map((row) => row.owner.id)).size;
+  const totalTenants = new Set(
+    duesQuery.data?.filter((row) => row.currentTenant).map((row) => row.currentTenant!.id),
+  ).size;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -151,11 +116,13 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
       )}
 
       {summaryQuery.data && duesQuery.data && (
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <SummaryCard
             label="Maintenance Outstanding Total"
             value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
             accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
+            note="View flat-wise dues →"
+            to="/flat-dues"
           />
           <SummaryCard
             label="Maintenance Collection Rate"
@@ -164,22 +131,35 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
             note="Share of total dues actually paid in so far. Approved credit adjustments aren't counted."
           />
           <SummaryCard
-            label="Pending review"
-            value={`₹${summaryQuery.data.pendingReviewTotal.toLocaleString('en-IN')}`}
-          />
-          <SummaryCard
             label="Total Credits"
             value={`₹${totalCredits.toLocaleString('en-IN')}`}
             accent={totalCredits > 0 ? 'teal' : undefined}
+          />
+          <SummaryCard
+            label="Total Owners"
+            value={totalOwners.toLocaleString('en-IN')}
+            note="View flats and residents →"
+            to="/flats"
+          />
+          <SummaryCard
+            label="Total Tenants"
+            value={totalTenants.toLocaleString('en-IN')}
+            note="View tenants →"
+            to="/tenants"
+          />
+          <SummaryCard
+            label="Total Flats"
+            value={totalFlats.toLocaleString('en-IN')}
+            note="View flats and residents →"
+            to="/flats"
           />
         </div>
       )}
 
       {pendingProofsQuery.data !== undefined && (
-        <button
-          type="button"
-          onClick={onNavigateToProofs}
-          className="mb-6 flex w-full items-center justify-between rounded-2xl border border-line bg-white p-5 text-left"
+        <Link
+          to="/payment-proofs"
+          className="mt-6 flex w-full items-center justify-between rounded-2xl border border-line bg-white p-5 text-left"
         >
           <span className="flex items-center gap-2.5">
             <ReceiptText size={16} className="text-brass" />
@@ -188,19 +168,7 @@ export function AdminDashboardPage({ onNavigateToProofs }: { onNavigateToProofs?
             </span>
           </span>
           <span className="text-xs font-semibold text-teal">Review →</span>
-        </button>
-      )}
-
-      {duesQuery.data && (
-        <div>
-          <h2 className="m-0 mb-3 font-display text-base text-ink">Flat-wise dues</h2>
-          <DataTable
-            data={duesQuery.data}
-            columns={duesColumns}
-            getRowId={(d) => d.flat.id}
-            emptyMessage="No flats yet."
-          />
-        </div>
+        </Link>
       )}
     </div>
   );

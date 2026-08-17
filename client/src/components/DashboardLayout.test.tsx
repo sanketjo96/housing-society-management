@@ -136,23 +136,24 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the admin nav links (Dashboard, Flats and residents, Payment proofs, Billing plan) for an ADMIN', async () => {
+  it('shows only the admin nav links (Dashboard, Payment proofs, Billing plan) for an ADMIN', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /flats and residents/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my details/i })).not.toBeInTheDocument();
+    // Flats and residents, Tenants, and Flat-wise dues are real routes but no longer
+    // sidebar nav items — reached only via dashboard tiles.
+    expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
   it('the nav links are real top-level URLs, not sub-paths of /dashboard', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /flats and residents/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /flats and residents/i })).toHaveAttribute('href', '/flats');
+    await waitFor(() => expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /payment proofs/i })).toHaveAttribute('href', '/payment-proofs');
     expect(screen.getByRole('link', { name: /billing plan/i })).toHaveAttribute('href', '/settings/billing');
   });

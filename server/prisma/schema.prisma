@@ -61,6 +61,13 @@ model Society {
   name    String
   address String
 
+  // Basic information tab — required going forward for any Basic Info save
+  // (enforced in the controller/frontend Zod schemas, not here), but nullable at
+  // the DB level so this migration doesn't break already-existing societies that
+  // predate these fields. Date-only; time-of-day is never meaningful for either.
+  constructionDate DateTime?
+  formationDate    DateTime?
+
   // UPI payment address QR codes are generated against (Task 6.1). Optional as of
   // the bank-transfer-fallback addition — a society without a UPI VPA can instead
   // configure bankAccountNumber+bankIfsc below. UPI always takes precedence when
@@ -107,6 +114,20 @@ model Society {
   receiptSignatureFileKey  String?
   receiptSignatureMimeType String?
 
+  // Committee tab (Society details): each role points at an existing OWNER User in
+  // this same society, picked from a dropdown — never freely-typed text. Validated
+  // in society-settings.service.ts's updateSocietySettings (must resolve to a User
+  // with role=OWNER and the same societyId); nullable/independent of one another,
+  // and simply informational — no billing/permission logic reads these.
+  chairmanId String?
+  chairman   User?   @relation("SocietyChairman", fields: [chairmanId], references: [id])
+
+  secretaryId String?
+  secretary   User?   @relation("SocietySecretary", fields: [secretaryId], references: [id])
+
+  treasurerId String?
+  treasurer   User?   @relation("SocietyTreasurer", fields: [treasurerId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -130,6 +151,9 @@ model User {
 
   ownedFlats            Flat[]               @relation("FlatOwner")
   currentTenantFlats    Flat[]               @relation("FlatCurrentTenant")
+  chairmanOfSocieties   Society[]            @relation("SocietyChairman")
+  secretaryOfSocieties  Society[]            @relation("SocietySecretary")
+  treasurerOfSocieties  Society[]            @relation("SocietyTreasurer")
   occupancyChanges      OccupancyChange[]
   ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
   reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
