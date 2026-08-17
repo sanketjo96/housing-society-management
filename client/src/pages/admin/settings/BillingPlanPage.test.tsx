@@ -23,8 +23,6 @@ const baseSettings = {
   tenantRateFactor: 1.5,
   defaultBaseRate: 1500,
   receiptNumberPrefix: 'RCPT',
-  receiptSignatoryName: null,
-  receiptSignatoryTitle: null,
   receiptFooterNote: null,
   hasSignature: false,
 };

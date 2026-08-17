@@ -28,8 +28,6 @@ const baseSettings: SocietySettings = {
   tenantRateFactor: 1.5,
   defaultBaseRate: 1500,
   receiptNumberPrefix: 'RCPT',
-  receiptSignatoryName: null,
-  receiptSignatoryTitle: null,
   receiptFooterNote: null,
   hasChairmanSignature: false,
   hasSecretarySignature: false,

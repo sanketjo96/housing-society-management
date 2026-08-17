@@ -19,8 +19,8 @@ const baseData: ReceiptData = {
   transactionType: 'DEPOSIT',
   purpose: 'Maintenance dues payment',
   amount: 1500.5,
-  signatoryName: 'Ramesh Kulkarni',
-  signatoryTitle: 'Treasurer',
+  chairmanName: 'Ramesh Kulkarni',
+  secretaryName: 'Sunita Deshmukh',
   footerNote: 'This is a computer-generated receipt.',
 };
 
@@ -49,7 +49,9 @@ describe('renderReceiptPdf', () => {
     expect(text).toContain('Rupees One Thousand Five Hundred and Fifty Paise Only');
     expect(text).toContain('Sunrise Residency');
     expect(text).toContain('Ramesh Kulkarni');
-    expect(text).toContain('Treasurer');
+    expect(text).toContain('Chairman');
+    expect(text).toContain('Sunita Deshmukh');
+    expect(text).toContain('Secretary');
     expect(text).toContain('This is a computer-generated receipt.');
   });
 
@@ -65,29 +67,45 @@ describe('renderReceiptPdf', () => {
     expect(text).toContain('Repair cost settled against maintenance');
   });
 
-  it('renders without a signature, without throwing', async () => {
+  it('renders without either signatory name, without throwing', async () => {
     const buffer = await renderReceiptPdf({
       ...baseData,
-      signatoryName: undefined,
-      signatoryTitle: undefined,
+      chairmanName: undefined,
+      secretaryName: undefined,
     });
     expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
   });
 
-  it('embeds a signature image when supplied', async () => {
-    const withSignature = await renderReceiptPdf(baseData, TINY_PNG);
-    const withoutSignature = await renderReceiptPdf(baseData);
-
-    expect(withSignature.subarray(0, 5).toString('ascii')).toBe('%PDF-');
-    // Embedding an image meaningfully increases the PDF's byte size versus the
-    // blank-line fallback — a cheap way to assert the image path actually ran.
-    expect(withSignature.length).toBeGreaterThan(withoutSignature.length);
-  });
-
-  it('falls back to the blank signature line if the signature buffer is corrupt', async () => {
-    const buffer = await renderReceiptPdf(baseData, Buffer.from('not a real image'));
+  it('renders with only one signatory assigned (the other role vacant)', async () => {
+    const buffer = await renderReceiptPdf({ ...baseData, secretaryName: undefined });
     expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     const text = await extractText(buffer);
     expect(text).toContain('Ramesh Kulkarni');
+    expect(text).toContain('Chairman');
+    expect(text).toContain('Secretary');
+  });
+
+  it('embeds signature images when supplied', async () => {
+    const withSignatures = await renderReceiptPdf(baseData, {
+      chairman: TINY_PNG,
+      secretary: TINY_PNG,
+    });
+    const withoutSignatures = await renderReceiptPdf(baseData);
+
+    expect(withSignatures.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    // Embedding images meaningfully increases the PDF's byte size versus the
+    // blank-line fallback — a cheap way to assert the image path actually ran.
+    expect(withSignatures.length).toBeGreaterThan(withoutSignatures.length);
+  });
+
+  it('falls back to the blank signature line if a signature buffer is corrupt', async () => {
+    const buffer = await renderReceiptPdf(baseData, {
+      chairman: Buffer.from('not a real image'),
+      secretary: Buffer.from('not a real image'),
+    });
+    expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    const text = await extractText(buffer);
+    expect(text).toContain('Ramesh Kulkarni');
+    expect(text).toContain('Sunita Deshmukh');
   });
 });

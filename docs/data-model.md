@@ -23,8 +23,6 @@ model Society {
   defaultBaseRate   Decimal  @default(1500) @db.Decimal(10, 2)
 
   receiptNumberPrefix      String  @default("RCPT")
-  receiptSignatoryName     String?
-  receiptSignatoryTitle    String?
   receiptFooterNote        String?
   receiptSignatureFileKey  String?
   receiptSignatureMimeType String?

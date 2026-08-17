@@ -101,19 +101,19 @@ model Society {
   // Receipt template customization (Settings tab) — admin-configurable letterhead
   // for the PDF receipt issued when a Deposit/Credit is approved (see Receipt
   // model below). receiptNumberPrefix needs a working default so receipts issue
-  // correctly out of the box before an admin ever visits Settings; the rest are
-  // optional and simply omitted from a rendered receipt when unset.
-  receiptNumberPrefix   String  @default("RCPT")
-  receiptSignatoryName  String?
-  receiptSignatoryTitle String?
-  receiptFooterNote     String?
+  // correctly out of the box before an admin ever visits Settings; the footer note
+  // is optional and simply omitted from a rendered receipt when unset. The
+  // signatory name/title used to be free text here too, but every receipt is now
+  // signed by the Chairman and Secretary (2026-08-17 addendum) — those fields were
+  // dropped as unused; see the Chairman/Secretary signature columns below.
+  receiptNumberPrefix String  @default("RCPT")
+  receiptFooterNote   String?
 
   // Opaque StorageAdapter key for the treasurer's signature image, never a public
   // URL — same "opaque key, not a browsable path" contract as LedgerEntry.fileUrl.
-  // Optional: a receipt renders with a blank signature line when unset. Reused
-  // as-is (not renamed) as the treasurer's Committee-tab signature (2026-08-17
-  // addition, below) — "the treasurer's signature" and "the receipt's signature"
-  // are deliberately defined to be the exact same thing, managed from one place.
+  // Kept unrenamed from when this field doubled as "the receipt's signature" too
+  // (pre-2026-08-17) — it's now only a Committee-tab record of the treasurer's own
+  // signature; receipts read the chairman/secretary pair below instead.
   receiptSignatureFileKey  String?
   receiptSignatureMimeType String?
 

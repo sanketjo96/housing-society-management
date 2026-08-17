@@ -93,8 +93,6 @@ describe('/api/admin/settings', () => {
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
       receiptNumberPrefix: 'RCPT',
-      receiptSignatoryName: null,
-      receiptSignatoryTitle: null,
       receiptFooterNote: null,
       hasChairmanSignature: false,
       hasSecretarySignature: false,
@@ -238,15 +236,11 @@ describe('/api/admin/settings', () => {
       .send({
         address: 'Updated Address',
         receiptNumberPrefix: 'SR',
-        receiptSignatoryName: 'Ramesh Kulkarni',
-        receiptSignatoryTitle: 'Treasurer',
         receiptFooterNote: 'Thank you.',
       });
     expect(res.status).toBe(200);
     expect(res.body.address).toBe('Updated Address');
     expect(res.body.receiptNumberPrefix).toBe('SR');
-    expect(res.body.receiptSignatoryName).toBe('Ramesh Kulkarni');
-    expect(res.body.receiptSignatoryTitle).toBe('Treasurer');
     expect(res.body.receiptFooterNote).toBe('Thank you.');
   });
 

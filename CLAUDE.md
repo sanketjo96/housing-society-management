@@ -645,6 +645,35 @@ resident-facing view.
 columns. See `docs/data-model.md`'s "Receipt" section for the full model and
 `docs/receipts.md` for the endpoint-by-endpoint contract.
 
+### Addendum (2026-08-17): receipt signed by Chairman & Secretary, not a treasurer
+
+Confirmed decision, following the same-day introduction of committee roles
+(Chairman/Secretary/Treasurer, each an existing `OWNER` linked from Society details
+→ Committee, each with their own uploadable signature image). The receipt's
+signatory block — previously one admin-typed name/title pair plus one uploaded
+signature image, framed as "the treasurer's signature" — now shows **two**
+signatory blocks side by side: **Chairman** and **Secretary**, using the real
+committee members' names (`Society.chairman`/`secretary`) and their own
+Committee-tab signature images (`chairmanSignatureFileKey`/
+`secretarySignatureFileKey`). The treasurer's signature image is unaffected as a
+Committee-tab record, but is no longer read anywhere in receipt rendering.
+
+Either role may be unassigned (or unsigned) — that block falls back to the same
+blank-line rendering the single signatory used to fall back to, per role
+independently, so a receipt is never blocked on both roles being filled in.
+
+`receiptSignatoryName`/`receiptSignatoryTitle` (the old free-text fields) were
+dropped outright — schema column, migration
+(`20260817172205_drop_unused_receipt_signatory_fields`), Zod schema, service, and
+client type — rather than left as dead columns, since nothing reads them anymore.
+One live society had real data in these columns at the time of removal (a stale
+manually-entered "Sanjay Gujrathi" / "Treasurer" pair); dropping it was confirmed
+explicitly before running the migration, since it's superseded by the real
+Chairman/Secretary committee data now. The admin Receipt template page dropped the
+now-inert "Signatory name"/"Signatory title" inputs, pointing instead at the
+Committee tab (the same pointer it already showed for the treasurer's signature
+upload). Full mechanism: `docs/receipts.md`'s "Addendum (2026-08-17)" section.
+
 ### Addition (2026-08-12): bank-transfer fallback for societies without a UPI VPA
 
 Confirmed: not every society can accept UPI (some collection accounts are
@@ -710,7 +739,7 @@ section.
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| Society | name, address, upiVpa (optional), bankAccountNumber/bankIfsc (optional, added 2026-08-12), tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptSignatoryName/Title, receiptFooterNote, receiptSignatureFileKey/MimeType | Root tenant entity. `upiVpa` was required until the 2026-08-12 bank-transfer-fallback addition; a payment intent still needs *some* payment method configured (UPI, or a complete bankAccountNumber+bankIfsc pair — UPI takes precedence), enforced at payment-intent-creation time, not the schema; `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the six `receipt*` fields (2026-08-11 addendum) configure the receipt letterhead/signature — see `docs/receipts.md` |
+| Society | name, address, upiVpa (optional), bankAccountNumber/bankIfsc (optional, added 2026-08-12), tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptFooterNote, receiptSignatureFileKey/MimeType, chairman/secretary/treasurer relations + their signature file keys (2026-08-17) | Root tenant entity. `upiVpa` was required until the 2026-08-12 bank-transfer-fallback addition; a payment intent still needs *some* payment method configured (UPI, or a complete bankAccountNumber+bankIfsc pair — UPI takes precedence), enforced at payment-intent-creation time, not the schema; `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the receipt fields (2026-08-11 addendum, `receiptSignatoryName`/`Title` dropped 2026-08-17) configure the receipt letterhead — see `docs/receipts.md` |
 | User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |

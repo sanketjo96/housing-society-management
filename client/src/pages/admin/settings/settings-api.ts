@@ -23,11 +23,10 @@ export interface SocietySettings {
   // Receipt template customization (Receipt Generation & Approval Workflow,
   // 2026-08-11) — see docs/receipts.md.
   receiptNumberPrefix: string;
-  receiptSignatoryName: string | null;
-  receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
   // Committee-member signatures (2026-08-17), managed from the Committee tab.
-  // Treasurer's flag reflects the same file printed on every receipt's letterhead.
+  // Chairman/secretary print on every receipt's letterhead (2026-08-17 addendum);
+  // treasurer's is a Committee-tab-only record, unrelated to receipts.
   hasChairmanSignature: boolean;
   hasSecretarySignature: boolean;
   hasTreasurerSignature: boolean;

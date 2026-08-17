@@ -109,8 +109,6 @@ export interface SocietySettings {
   // Receipt template customization (Receipt Generation & Approval Workflow,
   // 2026-08-11) — see docs/receipts.md.
   receiptNumberPrefix: string;
-  receiptSignatoryName: string | null;
-  receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
   // Committee-member signatures (2026-08-17) — hasXSignature flags (not the raw
   // storage keys) are returned to the client; the actual bytes are only ever
@@ -146,8 +144,6 @@ export interface UpdateSocietySettingsInput {
   tenantRateFactor?: number;
   defaultBaseRate?: number;
   receiptNumberPrefix?: string;
-  receiptSignatoryName?: string;
-  receiptSignatoryTitle?: string;
   receiptFooterNote?: string;
   // A non-empty value must resolve to an OWNER in this society. The controller's
   // Zod schema rejects an empty string (roles are required, 2026-08-17) before it
@@ -177,8 +173,6 @@ interface SocietyRow extends SignatureColumns {
   tenantRateFactor: unknown;
   defaultBaseRate: unknown;
   receiptNumberPrefix: string;
-  receiptSignatoryName: string | null;
-  receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
   chairman: CommitteeMemberRow | null;
   secretary: CommitteeMemberRow | null;
@@ -200,8 +194,6 @@ const SETTINGS_SELECT = {
   tenantRateFactor: true,
   defaultBaseRate: true,
   receiptNumberPrefix: true,
-  receiptSignatoryName: true,
-  receiptSignatoryTitle: true,
   receiptFooterNote: true,
   receiptSignatureFileKey: true,
   receiptSignatureMimeType: true,
@@ -232,8 +224,6 @@ function toSettings(society: SocietyRow): SocietySettings {
     tenantRateFactor: Number(society.tenantRateFactor),
     defaultBaseRate: Number(society.defaultBaseRate),
     receiptNumberPrefix: society.receiptNumberPrefix,
-    receiptSignatoryName: society.receiptSignatoryName,
-    receiptSignatoryTitle: society.receiptSignatoryTitle,
     receiptFooterNote: society.receiptFooterNote,
     hasChairmanSignature: !!readCommitteeSignatureFileKey(society, 'CHAIRMAN'),
     hasSecretarySignature: !!readCommitteeSignatureFileKey(society, 'SECRETARY'),
@@ -390,12 +380,6 @@ export async function updateSocietySettings(
         : {}),
       ...(input.receiptNumberPrefix !== undefined
         ? { receiptNumberPrefix: input.receiptNumberPrefix }
-        : {}),
-      ...(input.receiptSignatoryName !== undefined
-        ? { receiptSignatoryName: input.receiptSignatoryName || null }
-        : {}),
-      ...(input.receiptSignatoryTitle !== undefined
-        ? { receiptSignatoryTitle: input.receiptSignatoryTitle || null }
         : {}),
       ...(input.receiptFooterNote !== undefined
         ? { receiptFooterNote: input.receiptFooterNote || null }

@@ -98,8 +98,6 @@ describe('society-settings service', () => {
       tenantRateFactor: 1.5,
       defaultBaseRate: 1500,
       receiptNumberPrefix: 'RCPT',
-      receiptSignatoryName: null,
-      receiptSignatoryTitle: null,
       receiptFooterNote: null,
       hasChairmanSignature: false,
       hasSecretarySignature: false,
@@ -182,13 +180,9 @@ describe('society-settings service', () => {
   it('updates the receipt template fields', async () => {
     const updated = await updateSocietySettings(societyId, {
       receiptNumberPrefix: 'SR',
-      receiptSignatoryName: 'Ramesh Kulkarni',
-      receiptSignatoryTitle: 'Treasurer',
       receiptFooterNote: 'Thank you for your prompt payment.',
     });
     expect(updated.receiptNumberPrefix).toBe('SR');
-    expect(updated.receiptSignatoryName).toBe('Ramesh Kulkarni');
-    expect(updated.receiptSignatoryTitle).toBe('Treasurer');
     expect(updated.receiptFooterNote).toBe('Thank you for your prompt payment.');
   });
 
@@ -196,7 +190,7 @@ describe('society-settings service', () => {
     const updated = await updateSocietySettings(societyId, { receiptFooterNote: '' });
     expect(updated.receiptFooterNote).toBeNull();
     // Unrelated receipt fields stay untouched.
-    expect(updated.receiptSignatoryName).toBe('Ramesh Kulkarni');
+    expect(updated.receiptNumberPrefix).toBe('SR');
   });
 
   describe('committee roles', () => {

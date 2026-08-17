@@ -26,10 +26,15 @@ interface ReceiptSociety {
   name: string;
   address: string;
   receiptNumberPrefix: string;
-  receiptSignatoryName: string | null;
-  receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
-  receiptSignatureFileKey: string | null;
+  // Chairman/Secretary now sign every receipt (2026-08-17), replacing the single
+  // treasurer signatory — see CLAUDE.md's addendum. Name comes from the actual
+  // committee-member User record (Society.chairman/secretary), not free text; the
+  // signature image is the same opaque key set from the Committee tab.
+  chairman: { name: string } | null;
+  secretary: { name: string } | null;
+  chairmanSignatureFileKey: string | null;
+  secretarySignatureFileKey: string | null;
 }
 
 interface ReceiptEntry {
@@ -91,8 +96,8 @@ export function buildReceiptData(
     // never mutated by approve/reject (ledger.service.ts), so reading it directly
     // here already satisfies that rule with no extra bookkeeping.
     amount: Number(entry.amount),
-    signatoryName: society.receiptSignatoryName ?? undefined,
-    signatoryTitle: society.receiptSignatoryTitle ?? undefined,
+    chairmanName: society.chairman?.name,
+    secretaryName: society.secretary?.name,
     footerNote: society.receiptFooterNote ?? undefined,
   };
 }
@@ -109,13 +114,14 @@ function streamToBuffer(stream: Readable): Promise<Buffer> {
 // A broken/missing signature file must never block a financial transaction from
 // settling — catches any read failure and falls back to `undefined` (the
 // blank-signature-line rendering in receipt-pdf.ts), logging a warning rather than
-// throwing.
+// throwing. Takes a raw file key (not a society object) so the same function
+// serves both the chairman and secretary signature slots.
 export async function getSignatureBufferOrUndefined(
-  society: Pick<ReceiptSociety, 'receiptSignatureFileKey'>,
+  fileKey: string | null,
 ): Promise<Buffer | undefined> {
-  if (!society.receiptSignatureFileKey) return undefined;
+  if (!fileKey) return undefined;
   try {
-    const stream = await getStorageAdapter().read(society.receiptSignatureFileKey);
+    const stream = await getStorageAdapter().read(fileKey);
     return await streamToBuffer(stream);
   } catch (err) {
     console.warn(
@@ -123,6 +129,19 @@ export async function getSignatureBufferOrUndefined(
     );
     return undefined;
   }
+}
+
+// Fetches both signature images in parallel — either may be undefined (role
+// unassigned, no signature uploaded, or an unreadable file, all handled the same
+// way by getSignatureBufferOrUndefined above).
+async function getCommitteeSignatures(
+  society: Pick<ReceiptSociety, 'chairmanSignatureFileKey' | 'secretarySignatureFileKey'>,
+) {
+  const [chairman, secretary] = await Promise.all([
+    getSignatureBufferOrUndefined(society.chairmanSignatureFileKey),
+    getSignatureBufferOrUndefined(society.secretarySignatureFileKey),
+  ]);
+  return { chairman, secretary };
 }
 
 const RECEIPT_ENTRY_INCLUDE = {
@@ -147,10 +166,13 @@ export async function previewReceiptPdf(
   if (!entry) return null;
   if (entry.status !== 'PENDING') throw new LedgerEntryAlreadyReviewedError();
 
-  const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+  const society = await prisma.society.findUniqueOrThrow({
+    where: { id: societyId },
+    include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
+  });
   const data = buildReceiptData(entry, entry.flat, entry.payer, society, { date: new Date() });
-  const signatureBuffer = await getSignatureBufferOrUndefined(society);
-  return renderReceiptPdf(data, signatureBuffer);
+  const signatures = await getCommitteeSignatures(society);
+  return renderReceiptPdf(data, signatures);
 }
 
 // Renders and saves the actual receipt file — called by both approveLedgerEntry
@@ -166,8 +188,8 @@ export async function prepareReceiptForEntry(
   issuedAt: Date,
 ): Promise<{ receiptNumber: string; fileKey: string }> {
   const data = buildReceiptData(entry, flat, payer, society, { date: issuedAt });
-  const signatureBuffer = await getSignatureBufferOrUndefined(society);
-  const pdfBuffer = await renderReceiptPdf(data, signatureBuffer);
+  const signatures = await getCommitteeSignatures(society);
+  const pdfBuffer = await renderReceiptPdf(data, signatures);
   const { key } = await getStorageAdapter().save({
     buffer: pdfBuffer,
     societyId: society.id,

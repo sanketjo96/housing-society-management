@@ -11,10 +11,8 @@ import { SettingsFormActions } from './SettingsFormActions';
 
 const formSchema = z.object({
   receiptNumberPrefix: z.string().regex(/^[A-Za-z0-9-]{1,20}$/, 'Use 1-20 letters, digits, or hyphens'),
-  // Empty strings are valid here (they clear the field server-side) — only the
-  // prefix above is non-empty-required.
-  receiptSignatoryName: z.string(),
-  receiptSignatoryTitle: z.string(),
+  // Empty is valid (clears the field server-side) — only the prefix above is
+  // non-empty-required.
   receiptFooterNote: z.string(),
 });
 
@@ -23,8 +21,6 @@ type FormValues = z.infer<typeof formSchema>;
 function formValuesFromSettings(settings: SocietySettings): FormValues {
   return {
     receiptNumberPrefix: settings.receiptNumberPrefix,
-    receiptSignatoryName: settings.receiptSignatoryName ?? '',
-    receiptSignatoryTitle: settings.receiptSignatoryTitle ?? '',
     receiptFooterNote: settings.receiptFooterNote ?? '',
   };
 }
@@ -42,8 +38,6 @@ export function ReceiptTemplatePage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       receiptNumberPrefix: '',
-      receiptSignatoryName: '',
-      receiptSignatoryTitle: '',
       receiptFooterNote: '',
     },
   });
@@ -102,16 +96,6 @@ export function ReceiptTemplatePage() {
               <span className="font-mono-brand">RCPT-A101-...</span>.
             </p>
 
-            <Field label="Signatory name">
-              <input className={inputClass} placeholder="e.g. Ramesh Kulkarni" {...register('receiptSignatoryName')} />
-              {errors.receiptSignatoryName && <ErrMsg>{errors.receiptSignatoryName.message}</ErrMsg>}
-            </Field>
-
-            <Field label="Signatory title">
-              <input className={inputClass} placeholder="e.g. Treasurer" {...register('receiptSignatoryTitle')} />
-              {errors.receiptSignatoryTitle && <ErrMsg>{errors.receiptSignatoryTitle.message}</ErrMsg>}
-            </Field>
-
             <Field label="Footer note">
               <input
                 className={inputClass}
@@ -130,10 +114,11 @@ export function ReceiptTemplatePage() {
           </form>
 
           <div className="rounded-2xl border border-line bg-white p-6">
-            <SectionHeader icon={PenTool} title="Treasurer signature" />
+            <SectionHeader icon={PenTool} title="Chairman & secretary signatures" />
             <p className="m-0 text-xs text-muted">
-              Managed from <span className="font-semibold">Society details → Committee</span> tab,
-              alongside the chairman's and secretary's signatures.
+              Every receipt is signed by the society's Chairman and Secretary, using their names and
+              signature images from <span className="font-semibold">Society details → Committee</span>{' '}
+              tab.
             </p>
           </div>
         </>

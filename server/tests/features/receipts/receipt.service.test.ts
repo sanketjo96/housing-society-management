@@ -47,11 +47,35 @@ describe('receipt service', () => {
         name: `Receipt Test Society ${suffix}`,
         address: '42 Receipt Lane, Pune',
         upiVpa: 'receipt-test@okhdfcbank',
-        receiptSignatoryName: 'Ramesh Kulkarni',
-        receiptSignatoryTitle: 'Treasurer',
       },
     });
     societyId = society.id;
+
+    // Chairman/Secretary sign every receipt (2026-08-17) — set both up so the
+    // receipt-rendering tests below exercise the real committee-lookup path, not
+    // just the "role unassigned" fallback.
+    const chairman = await prisma.user.create({
+      data: {
+        name: 'Ramesh Kulkarni',
+        email: `receipt-chairman-${suffix}@example.com`,
+        passwordHash: 'not-a-real-hash',
+        role: 'OWNER',
+        societyId,
+      },
+    });
+    const secretary = await prisma.user.create({
+      data: {
+        name: 'Sunita Deshmukh',
+        email: `receipt-secretary-${suffix}@example.com`,
+        passwordHash: 'not-a-real-hash',
+        role: 'OWNER',
+        societyId,
+      },
+    });
+    await prisma.society.update({
+      where: { id: societyId },
+      data: { chairmanId: chairman.id, secretaryId: secretary.id },
+    });
 
     const flat = await createFlat({
       societyId,
@@ -118,10 +142,11 @@ describe('receipt service', () => {
       name: 'Sunrise Residency',
       address: '1 Garden Rd',
       receiptNumberPrefix: 'RCPT',
-      receiptSignatoryName: null,
-      receiptSignatoryTitle: null,
       receiptFooterNote: null,
-      receiptSignatureFileKey: null,
+      chairman: null,
+      secretary: null,
+      chairmanSignatureFileKey: null,
+      secretarySignatureFileKey: null,
     };
 
     it('uses the generic "Maintenance dues payment" purpose for a DEPOSIT', () => {
@@ -146,14 +171,12 @@ describe('receipt service', () => {
 
   describe('getSignatureBufferOrUndefined', () => {
     it('returns undefined when no signature file key is set', async () => {
-      const buffer = await getSignatureBufferOrUndefined({ receiptSignatureFileKey: null });
+      const buffer = await getSignatureBufferOrUndefined(null);
       expect(buffer).toBeUndefined();
     });
 
     it('falls back to undefined (does not throw) when the stored key cannot be read', async () => {
-      const buffer = await getSignatureBufferOrUndefined({
-        receiptSignatureFileKey: 'nonexistent/key.png',
-      });
+      const buffer = await getSignatureBufferOrUndefined('nonexistent/key.png');
       expect(buffer).toBeUndefined();
     });
 
@@ -163,7 +186,7 @@ describe('receipt service', () => {
         societyId,
         extension: '.png',
       });
-      const buffer = await getSignatureBufferOrUndefined({ receiptSignatureFileKey: key });
+      const buffer = await getSignatureBufferOrUndefined(key);
       expect(buffer?.toString()).toBe('fake-png-bytes');
     });
   });
@@ -184,6 +207,12 @@ describe('receipt service', () => {
       const text = await extractText(buffer!);
       expect(text).toContain('Maintenance dues payment');
       expect(text).toContain('R-101');
+      // Chairman and Secretary sign every receipt now (2026-08-17), not a single
+      // treasurer signatory — see CLAUDE.md's addendum.
+      expect(text).toContain('Ramesh Kulkarni');
+      expect(text).toContain('Chairman');
+      expect(text).toContain('Sunita Deshmukh');
+      expect(text).toContain('Secretary');
 
       const after = await prisma.receipt.count({
         where: { ledgerEntryId: (entry as { id: string }).id },

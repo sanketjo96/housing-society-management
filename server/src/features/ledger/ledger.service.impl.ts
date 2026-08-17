@@ -592,7 +592,10 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
   if (!entry) return null;
   if (entry.status !== 'PENDING') throw new LedgerEntryAlreadyReviewedError();
 
-  const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
+  const society = await prisma.society.findUniqueOrThrow({
+    where: { id: societyId },
+    include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
+  });
   const issuedAt = new Date();
   const { receiptNumber, fileKey } = await prepareReceiptForEntry(
     entry,
@@ -685,7 +688,10 @@ export async function manualDeposit(
   const payerId = flat.currentTenantId ?? flat.ownerId;
   const [payer, society] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: payerId }, select: { name: true } }),
-    prisma.society.findUniqueOrThrow({ where: { id: societyId } }),
+    prisma.society.findUniqueOrThrow({
+      where: { id: societyId },
+      include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
+    }),
   ]);
 
   const entryId = randomUUID();

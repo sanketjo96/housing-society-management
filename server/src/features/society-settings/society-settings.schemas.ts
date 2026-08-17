@@ -39,7 +39,5 @@ export const updateSettingsSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9-]{1,20}$/, 'Receipt number prefix must be 1-20 letters, digits, or hyphens')
     .optional(),
-  receiptSignatoryName: z.string().max(200).optional(),
-  receiptSignatoryTitle: z.string().max(200).optional(),
   receiptFooterNote: z.string().max(500).optional(),
 });

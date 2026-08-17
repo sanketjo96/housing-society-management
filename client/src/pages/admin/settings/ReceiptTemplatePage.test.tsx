@@ -23,8 +23,6 @@ const baseSettings = {
   tenantRateFactor: 1.5,
   defaultBaseRate: 1500,
   receiptNumberPrefix: 'RCPT',
-  receiptSignatoryName: null,
-  receiptSignatoryTitle: null,
   receiptFooterNote: null,
 };
 
@@ -80,7 +78,7 @@ describe('ReceiptTemplatePage', () => {
     });
   });
 
-  it('updates the signatory name/title and footer note', async () => {
+  it('updates the footer note', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     let sentBody: string | undefined;
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -90,8 +88,6 @@ describe('ReceiptTemplatePage', () => {
           ok: true,
           json: async () => ({
             ...baseSettings,
-            receiptSignatoryName: 'Ramesh Kulkarni',
-            receiptSignatoryTitle: 'Treasurer',
             receiptFooterNote: 'Thank you.',
           }),
         });
@@ -106,15 +102,11 @@ describe('ReceiptTemplatePage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByDisplayValue('RCPT')).toBeInTheDocument());
-    await user.type(screen.getByLabelText(/signatory name/i), 'Ramesh Kulkarni');
-    await user.type(screen.getByLabelText(/signatory title/i), 'Treasurer');
     await user.type(screen.getByLabelText(/footer note/i), 'Thank you.');
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
     const parsed = JSON.parse(sentBody!);
-    expect(parsed.receiptSignatoryName).toBe('Ramesh Kulkarni');
-    expect(parsed.receiptSignatoryTitle).toBe('Treasurer');
     expect(parsed.receiptFooterNote).toBe('Thank you.');
   });
 
@@ -129,7 +121,7 @@ describe('ReceiptTemplatePage', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/managed from/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/chairman and secretary/i)).toBeInTheDocument());
     expect(screen.getByText(/society details/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument();
   });

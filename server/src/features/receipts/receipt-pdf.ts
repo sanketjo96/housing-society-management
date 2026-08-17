@@ -11,9 +11,69 @@ export interface ReceiptData {
   transactionType: 'DEPOSIT' | 'CREDIT';
   purpose: string;
   amount: number;
-  signatoryName?: string;
-  signatoryTitle?: string;
+  // Chairman/secretary signatories (2026-08-17: replaced the single treasurer
+  // signatory this receipt used to show — see CLAUDE.md's "Receipt now signed by
+  // Chairman and Secretary" addendum). Either may be absent (role unassigned).
+  chairmanName?: string;
+  secretaryName?: string;
   footerNote?: string;
+}
+
+// The two signature images (if any) a receipt is rendered with — keyed by role,
+// not a single generic slot, since both blocks render side by side regardless of
+// whether either image exists (see drawSignatoryBlock's blank-line fallback).
+export interface ReceiptSignatures {
+  chairman?: Buffer;
+  secretary?: Buffer;
+}
+
+// Draws one signatory block (signature image or blank line, then name, then role
+// label) at a fixed x/width, and returns the y just past its bottom edge — used to
+// lay out the Chairman and Secretary blocks side by side and then position the
+// footer note below whichever one runs taller (a missing name still reserves the
+// same vertical space via the non-breaking-space fallback, so the two blocks stay
+// visually aligned even when only one role is assigned).
+function drawSignatoryBlock(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  name: string | undefined,
+  signatureBuffer: Buffer | undefined,
+): number {
+  let sigY = y;
+
+  const drawBlankLine = () => {
+    doc
+      .strokeColor(COLOR.ink)
+      .lineWidth(1)
+      .moveTo(x, sigY + 18)
+      .lineTo(x + width, sigY + 18)
+      .stroke();
+    sigY += 23;
+  };
+
+  if (signatureBuffer) {
+    try {
+      doc.image(signatureBuffer, x, sigY, { fit: [width, 45], align: 'center' });
+      sigY += 50;
+    } catch {
+      // A corrupt/unreadable signature buffer must never block a receipt from
+      // rendering — fall back to the blank-line signatory block below.
+      drawBlankLine();
+    }
+  } else {
+    drawBlankLine();
+  }
+
+  doc.fillColor(COLOR.ink).fontSize(10).font('Helvetica-Bold');
+  doc.text(name ?? ' ', x, sigY, { width, align: 'center' });
+  sigY = doc.y;
+
+  doc.fillColor(COLOR.muted).fontSize(9).font('Helvetica');
+  doc.text(title, x, sigY + 1, { width, align: 'center' });
+  return doc.y;
 }
 
 function formatDate(date: Date): string {
@@ -87,7 +147,7 @@ function drawLogoMark(doc: PDFKit.PDFDocument, x: number, y: number, size: numbe
 // HTTP response for the pre-approval preview) — see receipt.service.ts.
 export async function renderReceiptPdf(
   data: ReceiptData,
-  signatureBuffer?: Buffer,
+  signatures?: ReceiptSignatures,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A5', margin: 40 });
@@ -242,52 +302,37 @@ export async function renderReceiptPdf(
 
     y = y + boxHeight + 40;
 
-    // --- Signatory block, right-aligned. The image (if any) sits directly above
-    // the name — replacing the blank line, per the spec's "displays above the
-    // signatory name... replacing the blank signature line" requirement.
-    const blockWidth = 200;
-    const blockX = marginX + contentWidth - blockWidth;
-    let sigY = y;
+    // --- Signatory blocks: Chairman (left) and Secretary (right) — replaced the
+    // former single right-aligned treasurer block (2026-08-17). Each block's image
+    // (if any) sits directly above its name, replacing the blank line, same as the
+    // original single-signatory spec's requirement, just applied to two blocks.
+    const blockWidth = 150;
+    const chairmanX = marginX;
+    const secretaryX = marginX + contentWidth - blockWidth;
 
-    if (signatureBuffer) {
-      try {
-        doc.image(signatureBuffer, blockX, sigY, { fit: [blockWidth, 50], align: 'center' });
-        sigY += 55;
-      } catch {
-        // A corrupt/unreadable signature buffer must never block a receipt from
-        // rendering — fall back to the blank-line signatory block below.
-        doc
-          .strokeColor(COLOR.ink)
-          .lineWidth(1)
-          .moveTo(blockX, sigY + 20)
-          .lineTo(blockX + blockWidth, sigY + 20)
-          .stroke();
-        sigY += 25;
-      }
-    } else {
-      doc
-        .strokeColor(COLOR.ink)
-        .lineWidth(1)
-        .moveTo(blockX, sigY + 20)
-        .lineTo(blockX + blockWidth, sigY + 20)
-        .stroke();
-      sigY += 25;
-    }
-
-    if (data.signatoryName) {
-      doc.fillColor(COLOR.ink).fontSize(10).font('Helvetica-Bold');
-      doc.text(data.signatoryName, blockX, sigY, { width: blockWidth, align: 'center' });
-      sigY = doc.y;
-    }
-    if (data.signatoryTitle) {
-      doc.fillColor(COLOR.muted).fontSize(9).font('Helvetica');
-      doc.text(data.signatoryTitle, blockX, sigY + 1, { width: blockWidth, align: 'center' });
-      sigY = doc.y;
-    }
+    const chairmanBottom = drawSignatoryBlock(
+      doc,
+      chairmanX,
+      y,
+      blockWidth,
+      'Chairman',
+      data.chairmanName,
+      signatures?.chairman,
+    );
+    const secretaryBottom = drawSignatoryBlock(
+      doc,
+      secretaryX,
+      y,
+      blockWidth,
+      'Secretary',
+      data.secretaryName,
+      signatures?.secretary,
+    );
+    const sigBottom = Math.max(chairmanBottom, secretaryBottom);
 
     if (data.footerNote) {
       doc.fillColor(COLOR.muted).fontSize(8).font('Helvetica-Oblique');
-      doc.text(data.footerNote, marginX, sigY + 30, { width: contentWidth, align: 'center' });
+      doc.text(data.footerNote, marginX, sigBottom + 30, { width: contentWidth, align: 'center' });
     }
 
     doc.end();

@@ -10,6 +10,47 @@ happens *at the moment of approval* did. See `CLAUDE.md`'s "Addition (2026-08-11
 Receipt generation and approval workflow" for the confirmed decisions and the two
 judgment calls resolved during implementation (both covered below too).
 
+## Addendum (2026-08-17): signed by Chairman & Secretary, not a single treasurer
+
+The signatory block described below (originally: one free-text name/title pair,
+plus one uploaded signature image, all admin-configurable via `receiptSignatoryName`/
+`receiptSignatoryTitle`/`receiptSignatureFileKey`) is **replaced** with two fixed
+signatory blocks — **Chairman** and **Secretary** — rendered side by side at the
+bottom of every receipt. This follows directly from the same-day "Add committee
+signature management" work (`CLAUDE.md`'s Committee-roles addenda): the society now
+has real `Society.chairman`/`secretary` User relations with their own uploaded
+signature images (`chairmanSignatureFileKey`/`secretarySignatureFileKey`), so a
+receipt can show the *actual* office-holders instead of a free-text name an admin had
+to keep in sync by hand.
+
+- `receipt-pdf.ts`'s `ReceiptData` drops `signatoryName`/`signatoryTitle` in favor of
+  `chairmanName?`/`secretaryName?`; `renderReceiptPdf`'s second parameter becomes
+  `ReceiptSignatures` (`{ chairman?: Buffer; secretary?: Buffer }`) instead of a single
+  `Buffer`. Either role may be unassigned — that block just falls back to the
+  blank-line rendering, same fallback behavior as before, per role.
+- `receipt.service.ts`'s `buildReceiptData` reads `society.chairman?.name` /
+  `society.secretary?.name` (the committee relation, not a free-text column);
+  `getSignatureBufferOrUndefined` now takes a raw file key so the same function
+  serves both roles, fetched together via the new `getCommitteeSignatures` helper.
+- The treasurer's signature (`receiptSignatureFileKey`, still managed from the
+  Committee tab) is no longer read for receipt rendering at all — it remains only as
+  a Committee-tab record of the treasurer's own signature image, unrelated to
+  receipts going forward.
+- `receiptSignatoryName`/`receiptSignatoryTitle` (the old free-text fields) were
+  dropped entirely — `Society` schema columns, migration
+  (`20260817172205_drop_unused_receipt_signatory_fields`), the `updateSettingsSchema`
+  Zod fields, `society-settings.service.ts`'s `SocietySettings`/
+  `UpdateSocietySettingsInput`, and the client's `SocietySettings` type — rather than
+  left in place unused. One live society had real (now-stale) data in these columns;
+  dropping it was confirmed explicitly before running the migration. The Receipt
+  template admin page (`ReceiptTemplatePage.tsx`) dropped the "Signatory
+  name"/"Signatory title" inputs, replacing that section's copy with a pointer to the
+  Committee tab (same pattern the old "Treasurer signature" pointer already used,
+  just naming both roles now).
+- Everything else in this doc — approval flow, receipt number determinism, purpose
+  text, the rate-calculation rule, `manualDeposit`'s receipt issuance, and the legacy
+  no-backfill 404 — is unchanged.
+
 ## Approval flow
 
 Clicking **Approve** on a pending Deposit or Credit no longer settles it directly.
@@ -61,23 +102,25 @@ under the 2026-08-06 pivot, so there's nothing itemizable to list.
 
 ## Template customization — `GET`/`PATCH /api/admin/settings`
 
-`Society` gained five new columns, editable via the existing settings endpoints
+`Society` gained new columns, editable via the existing settings endpoints
 (`docs/maintenance-records.md`'s "Admin settings" section covers the
 pre-existing `tenantRateFactor`/`defaultBaseRate` pair; these are additive):
 
 | Field | Notes |
 |---|---|
 | `receiptNumberPrefix` | Defaults to `"RCPT"`. Validated `^[A-Za-z0-9-]{1,20}$` — it's concatenated directly into every receipt number, so free-form text has no business there. |
-| `receiptSignatoryName` | Optional. |
-| `receiptSignatoryTitle` | Optional. |
 | `receiptFooterNote` | Optional. |
 | `address` | Already existed on the schema (society onboarding), just never exposed via `GET`/`PATCH /api/admin/settings` until now — needed here since it's printed on every receipt's letterhead. |
 
-The three optional text fields accept an empty string on `PATCH` specifically to
-mean "clear this back to `null`" — `updateSocietySettings` treats an empty string
-as `null`, distinct from omitting the key entirely (which leaves the field
-untouched, ordinary PATCH semantics). `receiptNumberPrefix` cannot be cleared this
-way (schema-level default keeps it always non-empty).
+(`receiptSignatoryName`/`receiptSignatoryTitle` originally listed here were dropped
+entirely on 2026-08-17 — see the addendum above — once the signatory block moved to
+the Chairman/Secretary committee data instead of free text.)
+
+`receiptFooterNote` accepts an empty string on `PATCH` specifically to mean "clear
+this back to `null`" — `updateSocietySettings` treats an empty string as `null`,
+distinct from omitting the key entirely (which leaves the field untouched, ordinary
+PATCH semantics). `receiptNumberPrefix` cannot be cleared this way (schema-level
+default keeps it always non-empty).
 
 **Changes take effect for future receipts only.** A `Receipt`'s PDF is rendered
 and saved once, at approval time — it is never re-rendered on a later read. There
@@ -139,8 +182,6 @@ is the only way to retrieve the bytes, and it requires an admin's Bearer token.
 model Society {
   // ...existing fields unchanged...
   receiptNumberPrefix      String  @default("RCPT")
-  receiptSignatoryName     String?
-  receiptSignatoryTitle    String?
   receiptFooterNote        String?
   receiptSignatureFileKey  String?
   receiptSignatureMimeType String?
