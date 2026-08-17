@@ -26,7 +26,11 @@ export interface SocietySettings {
   receiptSignatoryName: string | null;
   receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
-  hasSignature: boolean;
+  // Committee-member signatures (2026-08-17), managed from the Committee tab.
+  // Treasurer's flag reflects the same file printed on every receipt's letterhead.
+  hasChairmanSignature: boolean;
+  hasSecretarySignature: boolean;
+  hasTreasurerSignature: boolean;
   // Committee tab — each independently nullable, set from a dropdown of this
   // society's owners (never freely typed). Informational only.
   chairman: CommitteeMember | null;

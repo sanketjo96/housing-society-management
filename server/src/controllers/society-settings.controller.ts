@@ -2,12 +2,13 @@ import path from 'node:path';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
-  getReceiptSignatureForViewing,
+  type CommitteeRole,
+  getCommitteeSignatureForViewing,
   getSocietySettings,
   IncompleteBankDetailsError,
   InvalidCommitteeMemberError,
-  removeReceiptSignature,
-  setReceiptSignature,
+  removeCommitteeSignature,
+  setCommitteeSignature,
   updateSocietySettings,
 } from '../services/society-settings.service';
 
@@ -59,12 +60,17 @@ const updateSettingsSchema = z.object({
     }),
   tenantRateFactor: z.coerce.number().positive().max(9.99).optional(),
   defaultBaseRate: z.coerce.number().positive().optional(),
-  // Committee tab — each a User id from the owners dropdown, or '' to unassign.
-  // Format/existence (must be an OWNER in this society) is validated in the
-  // service, not here — this controller has no owner list to check against.
-  chairmanId: z.string().optional(),
-  secretaryId: z.string().optional(),
-  treasurerId: z.string().optional(),
+  // Committee tab — each a User id from the owners dropdown, required (2026-08-17:
+  // all three roles must be filled once the tab is touched — unlike upiVpa etc.
+  // above, an empty string is rejected rather than clearing the role back to
+  // unassigned). Still `.optional()` at the key level so a PATCH from a different
+  // tab (Basic information, Payment) that never touches these can't fail
+  // validation just for omitting them. Existence (must be an OWNER in this
+  // society) is validated in the service, not here — this controller has no owner
+  // list to check against.
+  chairmanId: z.string().min(1, 'Chairman is required').optional(),
+  secretaryId: z.string().min(1, 'Secretary is required').optional(),
+  treasurerId: z.string().min(1, 'Treasurer is required').optional(),
   receiptNumberPrefix: z
     .string()
     .regex(/^[A-Za-z0-9-]{1,20}$/, 'Receipt number prefix must be 1-20 letters, digits, or hyphens')
@@ -107,9 +113,24 @@ export async function updateSocietySettingsHandler(req: Request, res: Response) 
   }
 }
 
-export async function uploadReceiptSignatureHandler(req: Request, res: Response) {
+const COMMITTEE_ROLE_PARAMS: Record<string, CommitteeRole> = {
+  chairman: 'CHAIRMAN',
+  secretary: 'SECRETARY',
+  treasurer: 'TREASURER',
+};
+
+function parseCommitteeRoleParam(raw: string): CommitteeRole | null {
+  return COMMITTEE_ROLE_PARAMS[raw] ?? null;
+}
+
+export async function uploadCommitteeSignatureHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  const role = parseCommitteeRoleParam(req.params.role);
+  if (!role) {
+    res.status(400).json({ error: 'Invalid committee role' });
     return;
   }
   if (!req.file) {
@@ -117,7 +138,7 @@ export async function uploadReceiptSignatureHandler(req: Request, res: Response)
     return;
   }
 
-  const settings = await setReceiptSignature(req.user.societyId, {
+  const settings = await setCommitteeSignature(req.user.societyId, role, {
     buffer: req.file.buffer,
     mimeType: req.file.mimetype,
     extension: path.extname(req.file.originalname) || '.png',
@@ -125,24 +146,34 @@ export async function uploadReceiptSignatureHandler(req: Request, res: Response)
   res.status(200).json(settings);
 }
 
-export async function removeReceiptSignatureHandler(req: Request, res: Response) {
+export async function removeCommitteeSignatureHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
     return;
   }
-  const settings = await removeReceiptSignature(req.user.societyId);
+  const role = parseCommitteeRoleParam(req.params.role);
+  if (!role) {
+    res.status(400).json({ error: 'Invalid committee role' });
+    return;
+  }
+  const settings = await removeCommitteeSignature(req.user.societyId, role);
   res.status(200).json(settings);
 }
 
 // Authenticated preview thumbnail for the Settings UI — same "fetch as blob"
 // pattern the frontend already uses for payment-proof files, never a public URL.
-export async function getReceiptSignatureHandler(req: Request, res: Response) {
+export async function getCommitteeSignatureHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
     return;
   }
+  const role = parseCommitteeRoleParam(req.params.role);
+  if (!role) {
+    res.status(400).json({ error: 'Invalid committee role' });
+    return;
+  }
 
-  const result = await getReceiptSignatureForViewing(req.user.societyId);
+  const result = await getCommitteeSignatureForViewing(req.user.societyId, role);
   if (!result) {
     res.status(404).json({ error: 'No signature uploaded' });
     return;

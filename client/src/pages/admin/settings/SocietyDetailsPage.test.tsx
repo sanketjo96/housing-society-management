@@ -31,7 +31,9 @@ const baseSettings: SocietySettings = {
   receiptSignatoryName: null,
   receiptSignatoryTitle: null,
   receiptFooterNote: null,
-  hasSignature: false,
+  hasChairmanSignature: false,
+  hasSecretarySignature: false,
+  hasTreasurerSignature: false,
   chairman: null,
   secretary: null,
   treasurer: null,
@@ -42,9 +44,28 @@ const owners = [
   { id: 'owner-2', name: 'Bob Owner', email: 'bob@example.com', phone: null },
 ];
 
-function mockFetch(overrides: { settings?: typeof baseSettings; onPatch?: (body: string) => unknown } = {}) {
+function mockFetch(
+  overrides: {
+    settings?: typeof baseSettings;
+    onPatch?: (body: string) => unknown;
+    onSignaturePost?: (role: string) => unknown;
+    onSignatureDelete?: (role: string) => unknown;
+  } = {},
+) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    const signatureMatch = url.match(/\/api\/admin\/settings\/committee\/([a-z]+)\/signature/);
+    if (signatureMatch && init?.method === 'POST') {
+      const response = overrides.onSignaturePost?.(signatureMatch[1]) ?? { ...baseSettings };
+      return Promise.resolve({ ok: true, json: async () => response });
+    }
+    if (signatureMatch && init?.method === 'DELETE') {
+      const response = overrides.onSignatureDelete?.(signatureMatch[1]) ?? { ...baseSettings };
+      return Promise.resolve({ ok: true, json: async () => response });
+    }
+    if (signatureMatch) {
+      return Promise.resolve({ ok: true, blob: async () => new Blob(['fake-png']) });
+    }
     if (url.includes('/api/admin/settings') && init?.method === 'PATCH') {
       const body = init.body as string;
       const response = overrides.onPatch ? overrides.onPatch(body) : { ...baseSettings };
@@ -171,12 +192,12 @@ describe('SocietyDetailsPage', () => {
       await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
       await user.click(screen.getByRole('tab', { name: /committee/i }));
 
-      await waitFor(() => expect(screen.getByLabelText(/chairman/i)).toBeInTheDocument());
-      expect(screen.getByLabelText(/secretary/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/treasurer/i)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByLabelText('Chairman')).toBeInTheDocument());
+      expect(screen.getByLabelText('Secretary')).toBeInTheDocument();
+      expect(screen.getByLabelText('Treasurer')).toBeInTheDocument();
       // Every field is a <select>, not a text input — nothing to type.
-      expect(screen.getByLabelText(/chairman/i).tagName).toBe('SELECT');
-      const chairmanSelect = screen.getByLabelText(/chairman/i) as HTMLSelectElement;
+      expect(screen.getByLabelText('Chairman').tagName).toBe('SELECT');
+      const chairmanSelect = screen.getByLabelText('Chairman') as HTMLSelectElement;
       expect(within(chairmanSelect).getByRole('option', { name: /alice owner/i })).toBeInTheDocument();
       expect(within(chairmanSelect).getByRole('option', { name: /bob owner/i })).toBeInTheDocument();
     });
@@ -189,17 +210,17 @@ describe('SocietyDetailsPage', () => {
       await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
       await user.click(screen.getByRole('tab', { name: /committee/i }));
 
-      await waitFor(() => expect(screen.getByLabelText(/chairman/i)).toHaveValue('owner-1'));
-      expect(screen.getByLabelText(/secretary/i)).toHaveValue('');
-      expect(screen.getByLabelText(/treasurer/i)).toHaveValue('owner-2');
+      await waitFor(() => expect(screen.getByLabelText('Chairman')).toHaveValue('owner-1'));
+      expect(screen.getByLabelText('Secretary')).toHaveValue('');
+      expect(screen.getByLabelText('Treasurer')).toHaveValue('owner-2');
     });
 
-    it('submits only the committee fields when a role is assigned', async () => {
+    it('submits all three committee fields once every role is picked', async () => {
       let sentBody: string | undefined;
       mockFetch({
         onPatch: (body) => {
           sentBody = body;
-          return { ...baseSettings, chairman: owners[0] };
+          return { ...baseSettings, chairman: owners[0], secretary: owners[1], treasurer: owners[0] };
         },
       });
       renderPage();
@@ -207,13 +228,120 @@ describe('SocietyDetailsPage', () => {
 
       await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
       await user.click(screen.getByRole('tab', { name: /committee/i }));
-      await waitFor(() => expect(screen.getByLabelText(/chairman/i)).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByLabelText('Chairman')).toBeInTheDocument());
 
-      await user.selectOptions(screen.getByLabelText(/chairman/i), 'owner-1');
+      await user.selectOptions(screen.getByLabelText('Chairman'), 'owner-1');
+      await user.selectOptions(screen.getByLabelText('Secretary'), 'owner-2');
+      await user.selectOptions(screen.getByLabelText('Treasurer'), 'owner-1');
       await user.click(screen.getByRole('button', { name: /save changes/i }));
 
       await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
-      expect(JSON.parse(sentBody!)).toEqual({ chairmanId: 'owner-1', secretaryId: '', treasurerId: '' });
+      expect(JSON.parse(sentBody!)).toEqual({ chairmanId: 'owner-1', secretaryId: 'owner-2', treasurerId: 'owner-1' });
+    });
+
+    it('blocks saving until all three roles are picked', async () => {
+      mockFetch({
+        onPatch: () => {
+          throw new Error('PATCH should not have been called');
+        },
+      });
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
+      await user.click(screen.getByRole('tab', { name: /committee/i }));
+      await waitFor(() => expect(screen.getByLabelText('Chairman')).toBeInTheDocument());
+
+      await user.selectOptions(screen.getByLabelText('Chairman'), 'owner-1');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/secretary is required/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/treasurer is required/i)).toBeInTheDocument();
+    });
+
+    describe('signature widget', () => {
+      it('shows "No signature yet" for an assigned role with no signature, and no widget for an unassigned one', async () => {
+        mockFetch({ settings: { ...baseSettings, chairman: owners[0], hasChairmanSignature: false } });
+        renderPage();
+        const user = userEvent.setup();
+
+        await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
+        await user.click(screen.getByRole('tab', { name: /committee/i }));
+
+        await waitFor(() => expect(screen.getByText(/no signature yet — required/i)).toBeInTheDocument());
+        // Secretary/treasurer are unassigned — no signature widget renders for them.
+        expect(screen.getAllByText(/no signature yet — required/i)).toHaveLength(1);
+        // No signature set at all — upload/draw show by default, no Remove button.
+        expect(screen.getByRole('button', { name: /^upload$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^draw$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument();
+      });
+
+      it("hides the widget and shows a save-first note when a role's selection changes", async () => {
+        mockFetch({ settings: { ...baseSettings, chairman: owners[0], hasChairmanSignature: true } });
+        renderPage();
+        const user = userEvent.setup();
+
+        await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
+        await user.click(screen.getByRole('tab', { name: /committee/i }));
+        await waitFor(() => expect(screen.getByLabelText('Chairman')).toHaveValue('owner-1'));
+
+        await user.selectOptions(screen.getByLabelText('Chairman'), 'owner-2');
+
+        await waitFor(() => {
+          expect(screen.getByText(/save the chairman change above before adding a signature/i)).toBeInTheDocument();
+        });
+      });
+
+      it('uploads a signature via the per-role endpoint and shows a Remove button', async () => {
+        mockFetch({
+          settings: { ...baseSettings, chairman: owners[0], hasChairmanSignature: false },
+          onSignaturePost: () => ({ ...baseSettings, chairman: owners[0], hasChairmanSignature: true }),
+        });
+        renderPage();
+        const user = userEvent.setup();
+
+        await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
+        await user.click(screen.getByRole('tab', { name: /committee/i }));
+
+        await waitFor(() => expect(screen.getByText(/upload chairman signature image/i)).toBeInTheDocument());
+        const fileInput = screen.getByLabelText(/upload chairman signature image/i, { selector: 'input' });
+        const file = new File(['fake-png'], 'sig.png', { type: 'image/png' });
+        await user.upload(fileInput, file);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /remove signature/i })).toBeInTheDocument());
+        // Signature is now set — upload/draw controls hide, only Remove is shown.
+        expect(screen.queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^draw$/i })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/upload chairman signature image/i, { selector: 'input' })).not.toBeInTheDocument();
+      });
+
+      it('removes an existing signature via the per-role endpoint', async () => {
+        mockFetch({
+          settings: { ...baseSettings, chairman: owners[0], hasChairmanSignature: true },
+          onSignatureDelete: () => ({ ...baseSettings, chairman: owners[0], hasChairmanSignature: false }),
+        });
+        renderPage();
+        const user = userEvent.setup();
+
+        await waitFor(() => expect(screen.getByDisplayValue('Sunrise Residency')).toBeInTheDocument());
+        await user.click(screen.getByRole('tab', { name: /committee/i }));
+
+        const removeButton = await screen.findByRole('button', { name: /remove signature/i });
+        // Signature is already set — upload/draw stay hidden while only Remove shows.
+        expect(screen.queryByRole('button', { name: /^upload$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^draw$/i })).not.toBeInTheDocument();
+
+        await user.click(removeButton);
+
+        // Only once removal actually completes do upload/draw reappear.
+        await waitFor(() => expect(screen.getByText(/no signature yet — required/i)).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: /^upload$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^draw$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument();
+      });
     });
   });
 

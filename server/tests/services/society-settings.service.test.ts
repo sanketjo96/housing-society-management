@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../src/db';
 import { getStorageAdapter } from '../../src/lib/storage';
 import {
-  getReceiptSignatureForViewing,
+  getCommitteeSignatureForViewing,
   getSocietySettings,
   IncompleteBankDetailsError,
   InvalidCommitteeMemberError,
-  removeReceiptSignature,
-  setReceiptSignature,
+  removeCommitteeSignature,
+  setCommitteeSignature,
   updateSocietySettings,
 } from '../../src/services/society-settings.service';
 
@@ -101,7 +101,9 @@ describe('society-settings service', () => {
       receiptSignatoryName: null,
       receiptSignatoryTitle: null,
       receiptFooterNote: null,
-      hasSignature: false,
+      hasChairmanSignature: false,
+      hasSecretarySignature: false,
+      hasTreasurerSignature: false,
       chairman: null,
       secretary: null,
       treasurer: null,
@@ -231,6 +233,92 @@ describe('society-settings service', () => {
     });
   });
 
+  describe('committee signature auto-clear on reassignment', () => {
+    let reassignOwnerId: string;
+
+    beforeAll(async () => {
+      const reassignOwner = await prisma.user.create({
+        data: {
+          name: 'Reassign Owner',
+          email: `reassign-owner-${suffix}@example.com`,
+          passwordHash: 'x',
+          role: 'OWNER',
+          societyId,
+        },
+      });
+      reassignOwnerId = reassignOwner.id;
+    });
+
+    afterAll(async () => {
+      await prisma.user.delete({ where: { id: reassignOwnerId } });
+    });
+
+    it("clears and deletes a role's signature when its assignee genuinely changes", async () => {
+      await updateSocietySettings(societyId, { chairmanId: ownerId });
+      const withSig = await setCommitteeSignature(societyId, 'CHAIRMAN', {
+        buffer: Buffer.from('chairman-sig-1'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(withSig.hasChairmanSignature).toBe(true);
+      const before = await prisma.society.findUniqueOrThrow({
+        where: { id: societyId },
+        select: { chairmanSignatureFileKey: true },
+      });
+      const oldKey = before.chairmanSignatureFileKey!;
+
+      const reassigned = await updateSocietySettings(societyId, { chairmanId: reassignOwnerId });
+      expect(reassigned.chairman?.id).toBe(reassignOwnerId);
+      expect(reassigned.hasChairmanSignature).toBe(false);
+      await expectFileGone(oldKey);
+    });
+
+    it('leaves the signature untouched when re-saving the same person', async () => {
+      const withSig = await setCommitteeSignature(societyId, 'CHAIRMAN', {
+        buffer: Buffer.from('chairman-sig-2'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(withSig.hasChairmanSignature).toBe(true);
+
+      const resaved = await updateSocietySettings(societyId, { chairmanId: reassignOwnerId });
+      expect(resaved.hasChairmanSignature).toBe(true);
+    });
+
+    it("leaves an unrelated role's signature untouched, and only clears the reassigned role's", async () => {
+      await updateSocietySettings(societyId, { secretaryId: ownerId });
+      const withSig = await setCommitteeSignature(societyId, 'SECRETARY', {
+        buffer: Buffer.from('secretary-sig-1'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(withSig.hasSecretarySignature).toBe(true);
+      expect(withSig.hasChairmanSignature).toBe(true); // still set from the previous test
+
+      // Reassigns chairman (reassignOwnerId -> ownerId) — a genuine change.
+      const reassignedChairman = await updateSocietySettings(societyId, { chairmanId: ownerId });
+      expect(reassignedChairman.hasChairmanSignature).toBe(false);
+      expect(reassignedChairman.hasSecretarySignature).toBe(true);
+    });
+
+    it('clears a legacy treasurer signature (set before any treasurer was ever assigned) the first time a treasurer is assigned', async () => {
+      // Simulate the old standalone Receipt-template upload: a signature exists
+      // even though no treasurer has ever been assigned via the Committee tab.
+      await prisma.society.update({ where: { id: societyId }, data: { treasurerId: null } });
+      const legacy = await setCommitteeSignature(societyId, 'TREASURER', {
+        buffer: Buffer.from('legacy-treasurer-sig'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(legacy.treasurer).toBeNull();
+      expect(legacy.hasTreasurerSignature).toBe(true);
+
+      const assigned = await updateSocietySettings(societyId, { treasurerId: ownerId });
+      expect(assigned.treasurer?.id).toBe(ownerId);
+      expect(assigned.hasTreasurerSignature).toBe(false);
+    });
+  });
+
   it('updates all core fields together', async () => {
     const updated = await updateSocietySettings(societyId, {
       name: 'Final Society Name',
@@ -246,16 +334,16 @@ describe('society-settings service', () => {
     expect(updated.defaultBaseRate).toBe(2000);
   });
 
-  describe('receipt signature lifecycle', () => {
-    it('sets a signature, reports hasSignature true, and serves the bytes back', async () => {
-      const updated = await setReceiptSignature(societyId, {
+  describe('committee signature lifecycle', () => {
+    it('sets a treasurer signature, reports hasTreasurerSignature true, and serves the bytes back', async () => {
+      const updated = await setCommitteeSignature(societyId, 'TREASURER', {
         buffer: Buffer.from('fake-png-bytes-1'),
         mimeType: 'image/png',
         extension: '.png',
       });
-      expect(updated.hasSignature).toBe(true);
+      expect(updated.hasTreasurerSignature).toBe(true);
 
-      const view = await getReceiptSignatureForViewing(societyId);
+      const view = await getCommitteeSignatureForViewing(societyId, 'TREASURER');
       expect(view).not.toBeNull();
       expect(view!.mimeType).toBe('image/png');
     });
@@ -267,41 +355,77 @@ describe('society-settings service', () => {
       });
       const oldKey = before.receiptSignatureFileKey!;
 
-      const updated = await setReceiptSignature(societyId, {
+      const updated = await setCommitteeSignature(societyId, 'TREASURER', {
         buffer: Buffer.from('fake-png-bytes-2'),
         mimeType: 'image/png',
         extension: '.png',
       });
-      expect(updated.hasSignature).toBe(true);
+      expect(updated.hasTreasurerSignature).toBe(true);
 
       // The old file is gone (deleted only *after* the replacement succeeded)...
       await expectFileGone(oldKey);
 
       // ...and the new one is what's actually served now.
-      const view = await getReceiptSignatureForViewing(societyId);
+      const view = await getCommitteeSignatureForViewing(societyId, 'TREASURER');
       const chunks: Buffer[] = [];
       for await (const chunk of view!.stream) chunks.push(chunk as Buffer);
       expect(Buffer.concat(chunks).toString()).toBe('fake-png-bytes-2');
     });
 
-    it('removing a signature clears hasSignature and deletes the stored file', async () => {
+    it('removing a signature clears hasTreasurerSignature and deletes the stored file', async () => {
       const before = await prisma.society.findUniqueOrThrow({
         where: { id: societyId },
         select: { receiptSignatureFileKey: true },
       });
       const key = before.receiptSignatureFileKey!;
 
-      const updated = await removeReceiptSignature(societyId);
-      expect(updated.hasSignature).toBe(false);
+      const updated = await removeCommitteeSignature(societyId, 'TREASURER');
+      expect(updated.hasTreasurerSignature).toBe(false);
 
-      const view = await getReceiptSignatureForViewing(societyId);
+      const view = await getCommitteeSignatureForViewing(societyId, 'TREASURER');
       expect(view).toBeNull();
       await expectFileGone(key);
     });
 
     it('removing when no signature is set is a harmless no-op', async () => {
-      const updated = await removeReceiptSignature(societyId);
-      expect(updated.hasSignature).toBe(false);
+      const updated = await removeCommitteeSignature(societyId, 'TREASURER');
+      expect(updated.hasTreasurerSignature).toBe(false);
+    });
+
+    it("chairman, secretary, and treasurer signatures are stored and served independently", async () => {
+      const withChairman = await setCommitteeSignature(societyId, 'CHAIRMAN', {
+        buffer: Buffer.from('chairman-bytes'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      const withSecretary = await setCommitteeSignature(societyId, 'SECRETARY', {
+        buffer: Buffer.from('secretary-bytes'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      const withTreasurer = await setCommitteeSignature(societyId, 'TREASURER', {
+        buffer: Buffer.from('treasurer-bytes'),
+        mimeType: 'image/png',
+        extension: '.png',
+      });
+      expect(withTreasurer.hasChairmanSignature).toBe(true);
+      expect(withTreasurer.hasSecretarySignature).toBe(true);
+      expect(withTreasurer.hasTreasurerSignature).toBe(true);
+
+      const chairmanView = await getCommitteeSignatureForViewing(societyId, 'CHAIRMAN');
+      const secretaryView = await getCommitteeSignatureForViewing(societyId, 'SECRETARY');
+      const chairmanChunks: Buffer[] = [];
+      for await (const chunk of chairmanView!.stream) chairmanChunks.push(chunk as Buffer);
+      const secretaryChunks: Buffer[] = [];
+      for await (const chunk of secretaryView!.stream) secretaryChunks.push(chunk as Buffer);
+      expect(Buffer.concat(chairmanChunks).toString()).toBe('chairman-bytes');
+      expect(Buffer.concat(secretaryChunks).toString()).toBe('secretary-bytes');
+
+      // Removing one role's signature doesn't touch the others.
+      const afterRemove = await removeCommitteeSignature(societyId, 'CHAIRMAN');
+      expect(afterRemove.hasChairmanSignature).toBe(false);
+      expect(afterRemove.hasSecretarySignature).toBe(true);
+      expect(afterRemove.hasTreasurerSignature).toBe(true);
     });
   });
 });

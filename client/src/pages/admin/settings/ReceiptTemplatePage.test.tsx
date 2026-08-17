@@ -26,7 +26,6 @@ const baseSettings = {
   receiptSignatoryName: null,
   receiptSignatoryTitle: null,
   receiptFooterNote: null,
-  hasSignature: false,
 };
 
 describe('ReceiptTemplatePage', () => {
@@ -119,71 +118,19 @@ describe('ReceiptTemplatePage', () => {
     expect(parsed.receiptFooterNote).toBe('Thank you.');
   });
 
-  describe('signature widget', () => {
-    it('shows an upload control and no remove button when no signature is set', async () => {
-      const fetchMock = fetch as unknown as FetchMock;
-      fetchMock.mockImplementation((url: string) => {
-        if (url.includes('/api/admin/settings')) {
-          return Promise.resolve({ ok: true, json: async () => baseSettings });
-        }
-        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-      });
-
-      renderPage();
-
-      await waitFor(() => expect(screen.getByText(/upload signature image/i)).toBeInTheDocument());
-      expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument();
+  it('points to the Committee tab instead of showing its own signature upload', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/admin/settings')) {
+        return Promise.resolve({ ok: true, json: async () => baseSettings });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
 
-    it('uploads a signature file and reflects hasSignature afterward', async () => {
-      const fetchMock = fetch as unknown as FetchMock;
-      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-        if (url.includes('/api/admin/settings/signature') && init?.method === 'POST') {
-          return Promise.resolve({ ok: true, json: async () => ({ ...baseSettings, hasSignature: true }) });
-        }
-        if (url.includes('/api/admin/settings/signature')) {
-          return Promise.resolve({ ok: true, blob: async () => new Blob(['fake-png']) });
-        }
-        if (url.includes('/api/admin/settings')) {
-          return Promise.resolve({ ok: true, json: async () => baseSettings });
-        }
-        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-      });
+    renderPage();
 
-      renderPage();
-      const user = userEvent.setup();
-
-      await waitFor(() => expect(screen.getByText(/upload signature image/i)).toBeInTheDocument());
-      const fileInput = screen.getByLabelText(/upload signature image/i, { selector: 'input' });
-      const file = new File(['fake-png'], 'sig.png', { type: 'image/png' });
-      await user.upload(fileInput, file);
-
-      await waitFor(() => expect(screen.getByRole('button', { name: /remove signature/i })).toBeInTheDocument());
-    });
-
-    it('removes an existing signature', async () => {
-      const withSignature = { ...baseSettings, hasSignature: true };
-      const fetchMock = fetch as unknown as FetchMock;
-      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-        if (url.includes('/api/admin/settings/signature') && init?.method === 'DELETE') {
-          return Promise.resolve({ ok: true, json: async () => ({ ...baseSettings, hasSignature: false }) });
-        }
-        if (url.includes('/api/admin/settings/signature')) {
-          return Promise.resolve({ ok: true, blob: async () => new Blob(['fake-png']) });
-        }
-        if (url.includes('/api/admin/settings')) {
-          return Promise.resolve({ ok: true, json: async () => withSignature });
-        }
-        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-      });
-
-      renderPage();
-      const user = userEvent.setup();
-
-      const removeButton = await screen.findByRole('button', { name: /remove signature/i });
-      await user.click(removeButton);
-
-      await waitFor(() => expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument());
-    });
+    await waitFor(() => expect(screen.getByText(/managed from/i)).toBeInTheDocument());
+    expect(screen.getByText(/society details/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /remove signature/i })).not.toBeInTheDocument();
   });
 });

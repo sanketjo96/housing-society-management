@@ -110,9 +110,22 @@ model Society {
 
   // Opaque StorageAdapter key for the treasurer's signature image, never a public
   // URL — same "opaque key, not a browsable path" contract as LedgerEntry.fileUrl.
-  // Optional: a receipt renders with a blank signature line when unset.
+  // Optional: a receipt renders with a blank signature line when unset. Reused
+  // as-is (not renamed) as the treasurer's Committee-tab signature (2026-08-17
+  // addition, below) — "the treasurer's signature" and "the receipt's signature"
+  // are deliberately defined to be the exact same thing, managed from one place.
   receiptSignatureFileKey  String?
   receiptSignatureMimeType String?
+
+  // Chairman/secretary signature images (Committee tab, 2026-08-17) — same opaque-
+  // key storage contract as the treasurer's pair above. See
+  // society-settings.service.ts's CommitteeRole helpers for the read/write mapping,
+  // and its updateSocietySettings for the "cleared on reassignment" rule (a
+  // signature belongs to a specific person, not a role slot in the abstract).
+  chairmanSignatureFileKey   String?
+  chairmanSignatureMimeType  String?
+  secretarySignatureFileKey  String?
+  secretarySignatureMimeType String?
 
   // Committee tab (Society details): each role points at an existing OWNER User in
   // this same society, picked from a dropdown — never freely-typed text. Validated

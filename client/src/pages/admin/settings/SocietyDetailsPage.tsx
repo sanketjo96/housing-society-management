@@ -4,7 +4,9 @@ import { Building2, Landmark, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 import { z } from 'zod';
-import { Divider, ErrMsg, Field, inputClass, SectionHeader } from '../../../components/FormField';
+import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../../components/FormField';
+import { FileUploadField } from '../../../components/FileUploadField';
+import { SignaturePad } from '../../../components/SignaturePad';
 import { authedFetch } from '../../../lib/api';
 import { fetchOwners, fetchSettings, type CommitteeMember, type SocietySettings } from './settings-api';
 import { SettingsFormActions } from './SettingsFormActions';
@@ -119,9 +121,9 @@ function BasicInfoTab({ settings }: { settings: SocietySettings }) {
 // ---- Committee ----
 
 const committeeSchema = z.object({
-  chairmanId: z.string(),
-  secretaryId: z.string(),
-  treasurerId: z.string(),
+  chairmanId: z.string().min(1, 'Chairman is required'),
+  secretaryId: z.string().min(1, 'Secretary is required'),
+  treasurerId: z.string().min(1, 'Treasurer is required'),
 });
 type CommitteeValues = z.infer<typeof committeeSchema>;
 
@@ -143,23 +145,182 @@ function CommitteeSelectField({
   owners,
   ownersLoading,
   registration,
+  error,
 }: {
   label: string;
   owners: CommitteeMember[] | undefined;
   ownersLoading: boolean;
   registration: UseFormRegisterReturn;
+  error?: string;
 }) {
   return (
     <Field label={label}>
       <select className={inputClass} disabled={ownersLoading} {...registration}>
-        <option value="">— Not assigned —</option>
+        <option value="" disabled>
+          Select an owner…
+        </option>
         {owners?.map((owner) => (
           <option key={owner.id} value={owner.id}>
             {owner.name} ({owner.email})
           </option>
         ))}
       </select>
+      {error && <ErrMsg>{error}</ErrMsg>}
     </Field>
+  );
+}
+
+// Authenticated preview thumbnail — GET .../signature is never a public path, so a
+// plain <img src> won't carry the Bearer token; fetch it ourselves and hand the
+// <img> a blob: URL, same pattern used for proof files elsewhere in this app.
+// Parameterized by endpoint (one per committee role) rather than hardcoded.
+function SignaturePreview({ endpoint, hasSignature, alt }: { endpoint: string; hasSignature: boolean; alt: string }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasSignature) {
+      setPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    authedFetch(endpoint)
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      })
+      .catch(() => {
+        // A broken preview fetch just means no thumbnail shows — not worth its own
+        // error banner on a settings page.
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [endpoint, hasSignature]);
+
+  if (!previewUrl) return null;
+  return (
+    <img src={previewUrl} alt={alt} className="mb-2 h-16 rounded-lg border border-line bg-paper object-contain p-2" />
+  );
+}
+
+const COMMITTEE_ROLE_PARAM: Record<'chairman' | 'secretary' | 'treasurer', string> = {
+  chairman: 'chairman',
+  secretary: 'secretary',
+  treasurer: 'treasurer',
+};
+
+// Signing operates only on whoever is actually, currently, on record for this role
+// — never on an unsaved dropdown pick. If the form's pending value differs from
+// what's saved, this shows a "save first" note instead of the upload/draw widget.
+// This isn't just a UX nicety: the backend clears a role's signature the instant
+// its assignee id genuinely changes (society-settings.service.ts's
+// isGenuineReassignment), so uploading "for" someone before their id is even saved
+// would just get wiped out the moment Save runs afterward.
+function CommitteeSignatureField({
+  role,
+  label,
+  savedMemberId,
+  pendingMemberId,
+  hasSignature,
+  onChanged,
+}: {
+  role: 'chairman' | 'secretary' | 'treasurer';
+  label: string;
+  savedMemberId: string;
+  pendingMemberId: string;
+  hasSignature: boolean;
+  onChanged: (settings: SocietySettings) => void;
+}) {
+  const [mode, setMode] = useState<'upload' | 'draw'>('upload');
+  const endpoint = `/api/admin/settings/committee/${COMMITTEE_ROLE_PARAM[role]}/signature`;
+
+  const uploadMutation = useMutation<SocietySettings, Error, File>({
+    mutationFn: async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await authedFetch(endpoint, { method: 'POST', body: formData });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not save the signature.');
+      return body;
+    },
+    onSuccess: onChanged,
+  });
+  const removeMutation = useMutation<SocietySettings, Error, void>({
+    mutationFn: async () => {
+      const res = await authedFetch(endpoint, { method: 'DELETE' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not remove the signature.');
+      return body;
+    },
+    onSuccess: onChanged,
+  });
+
+  if (pendingMemberId !== savedMemberId) {
+    return (
+      <p className="mb-3.5 text-xs text-muted">Save the {label.toLowerCase()} change above before adding a signature.</p>
+    );
+  }
+  if (!savedMemberId) return null; // required field — shouldn't render unassigned, but stay defensive
+
+  return (
+    <div className="mb-3.5">
+      <SignaturePreview endpoint={endpoint} hasSignature={hasSignature} alt={`Current ${label.toLowerCase()} signature`} />
+      {!hasSignature && (
+        <p role="status" className="mb-1.5 text-xs font-semibold text-brass">
+          No signature yet — required.
+        </p>
+      )}
+      {/* Once a signature is set, only "Remove signature" is shown — upload/draw
+          reappear the moment removal actually completes (hasSignature flips back
+          to false via onChanged's refetch), not on click. */}
+      {!hasSignature && (
+        <>
+          <div className="mb-2 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setMode('upload')}
+              className={`text-xs ${mode === 'upload' ? 'font-semibold text-teal' : 'text-muted'}`}
+            >
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('draw')}
+              className={`text-xs ${mode === 'draw' ? 'font-semibold text-teal' : 'text-muted'}`}
+            >
+              Draw
+            </button>
+          </div>
+          {mode === 'upload' ? (
+            <FileUploadField
+              file={null}
+              onFileChange={(file) => file && uploadMutation.mutate(file)}
+              accept="image/png,image/jpeg,image/webp"
+              placeholder={`Upload ${label.toLowerCase()} signature image`}
+            />
+          ) : (
+            <SignaturePad onSave={(file) => uploadMutation.mutate(file)} />
+          )}
+        </>
+      )}
+      {hasSignature && (
+        <button
+          type="button"
+          onClick={() => removeMutation.mutate()}
+          disabled={removeMutation.isPending}
+          className="mt-2.5 text-xs font-semibold text-coral disabled:opacity-70"
+        >
+          {removeMutation.isPending ? 'Removing…' : 'Remove signature'}
+        </button>
+      )}
+      {uploadMutation.error && <ErrorBanner>{uploadMutation.error.message}</ErrorBanner>}
+      {removeMutation.error && <ErrorBanner>{removeMutation.error.message}</ErrorBanner>}
+    </div>
   );
 }
 
@@ -175,7 +336,8 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
     register,
     handleSubmit,
     reset,
-    formState: { isDirty },
+    watch,
+    formState: { errors, isDirty },
   } = useForm<CommitteeValues>({
     resolver: zodResolver(committeeSchema),
     defaultValues: committeeValuesFromSettings(settings),
@@ -203,6 +365,17 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
     },
   });
 
+  // A signature change (upload/remove) never touches chairmanId et al., so the
+  // committee form itself doesn't need resetting — just refresh the shared cache
+  // the way every other settings mutation in this file already does.
+  function handleSignatureChanged(updated: SocietySettings) {
+    queryClient.setQueryData(['society-settings'], updated);
+  }
+
+  const pendingChairmanId = watch('chairmanId');
+  const pendingSecretaryId = watch('secretaryId');
+  const pendingTreasurerId = watch('treasurerId');
+
   return (
     <form
       onSubmit={handleSubmit((values) => mutation.mutate(values))}
@@ -211,8 +384,7 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
     >
       <SectionHeader icon={Users} title="Managing committee" />
       <p className="m-0 mb-3.5 text-xs text-muted">
-        Pick from the society's current owners — nothing to type here. Leave a role unassigned if
-        it's currently vacant.
+        Pick from the society's current owners — nothing to type here. All three roles are required.
       </p>
 
       {ownersError && (
@@ -226,18 +398,47 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
         owners={owners}
         ownersLoading={ownersLoading}
         registration={register('chairmanId')}
+        error={errors.chairmanId?.message}
       />
+      <CommitteeSignatureField
+        role="chairman"
+        label="Chairman"
+        savedMemberId={settings.chairman?.id ?? ''}
+        pendingMemberId={pendingChairmanId}
+        hasSignature={settings.hasChairmanSignature}
+        onChanged={handleSignatureChanged}
+      />
+
       <CommitteeSelectField
         label="Secretary"
         owners={owners}
         ownersLoading={ownersLoading}
         registration={register('secretaryId')}
+        error={errors.secretaryId?.message}
       />
+      <CommitteeSignatureField
+        role="secretary"
+        label="Secretary"
+        savedMemberId={settings.secretary?.id ?? ''}
+        pendingMemberId={pendingSecretaryId}
+        hasSignature={settings.hasSecretarySignature}
+        onChanged={handleSignatureChanged}
+      />
+
       <CommitteeSelectField
         label="Treasurer"
         owners={owners}
         ownersLoading={ownersLoading}
         registration={register('treasurerId')}
+        error={errors.treasurerId?.message}
+      />
+      <CommitteeSignatureField
+        role="treasurer"
+        label="Treasurer"
+        savedMemberId={settings.treasurer?.id ?? ''}
+        pendingMemberId={pendingTreasurerId}
+        hasSignature={settings.hasTreasurerSignature}
+        onChanged={handleSignatureChanged}
       />
 
       <SettingsFormActions

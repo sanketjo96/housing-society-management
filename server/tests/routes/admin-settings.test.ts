@@ -92,7 +92,9 @@ describe('/api/admin/settings', () => {
       receiptSignatoryName: null,
       receiptSignatoryTitle: null,
       receiptFooterNote: null,
-      hasSignature: false,
+      hasChairmanSignature: false,
+      hasSecretarySignature: false,
+      hasTreasurerSignature: false,
       chairman: null,
       secretary: null,
       treasurer: null,
@@ -171,13 +173,14 @@ describe('/api/admin/settings', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ secretaryId: createdUserIds[0] });
     expect(rejectRes.status).toBe(400);
+  });
 
-    const clearRes = await request(app)
+  it('rejects an empty chairmanId/secretaryId/treasurerId with a 400 — roles are required, not clearable', async () => {
+    const res = await request(app)
       .patch('/api/admin/settings')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ chairmanId: '' });
-    expect(clearRes.status).toBe(200);
-    expect(clearRes.body.chairman).toBeNull();
+    expect(res.status).toBe(400);
   });
 
   it('updates settings, and generation immediately reflects the new values end to end', async () => {
@@ -243,10 +246,10 @@ describe('/api/admin/settings', () => {
     expect(res.body.receiptFooterNote).toBe('Thank you.');
   });
 
-  describe('signature endpoints', () => {
+  describe('committee signature endpoints', () => {
     it('rejects a non-admin token on upload (403)', async () => {
       const res = await request(app)
-        .post('/api/admin/settings/signature')
+        .post('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${ownerToken}`)
         .attach('file', Buffer.from('fake-png'), { filename: 'sig.png', contentType: 'image/png' });
       expect(res.status).toBe(403);
@@ -254,29 +257,38 @@ describe('/api/admin/settings', () => {
 
     it('rejects an unsupported file type (e.g. PDF)', async () => {
       const res = await request(app)
-        .post('/api/admin/settings/signature')
+        .post('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`)
         .attach('file', Buffer.from('%PDF-fake'), { filename: 'sig.pdf', contentType: 'application/pdf' });
       expect(res.status).toBe(400);
     });
 
-    it('returns 404 when no signature is set yet', async () => {
+    it('rejects an invalid :role param with a 400', async () => {
       const res = await request(app)
-        .get('/api/admin/settings/signature')
+        .post('/api/admin/settings/committee/bogus/signature')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', TINY_PNG_BYTES, { filename: 'sig.png', contentType: 'image/png' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid committee role/i);
+    });
+
+    it('returns 404 when no treasurer signature is set yet', async () => {
+      const res = await request(app)
+        .get('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(404);
     });
 
-    it('uploads a signature, then serves it back and reflects hasSignature in settings', async () => {
+    it('uploads a treasurer signature, then serves it back and reflects hasTreasurerSignature in settings', async () => {
       const uploadRes = await request(app)
-        .post('/api/admin/settings/signature')
+        .post('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`)
         .attach('file', TINY_PNG_BYTES, { filename: 'sig.png', contentType: 'image/png' });
       expect(uploadRes.status).toBe(200);
-      expect(uploadRes.body.hasSignature).toBe(true);
+      expect(uploadRes.body.hasTreasurerSignature).toBe(true);
 
       const viewRes = await request(app)
-        .get('/api/admin/settings/signature')
+        .get('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(viewRes.status).toBe(200);
       expect(viewRes.headers['content-type']).toBe('image/png');
@@ -284,20 +296,44 @@ describe('/api/admin/settings', () => {
       const settingsRes = await request(app)
         .get('/api/admin/settings')
         .set('Authorization', `Bearer ${adminToken}`);
-      expect(settingsRes.body.hasSignature).toBe(true);
+      expect(settingsRes.body.hasTreasurerSignature).toBe(true);
     });
 
-    it('removes the signature and reverts hasSignature to false', async () => {
+    it('removes the treasurer signature and reverts hasTreasurerSignature to false', async () => {
       const removeRes = await request(app)
-        .delete('/api/admin/settings/signature')
+        .delete('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(removeRes.status).toBe(200);
-      expect(removeRes.body.hasSignature).toBe(false);
+      expect(removeRes.body.hasTreasurerSignature).toBe(false);
 
       const viewRes = await request(app)
-        .get('/api/admin/settings/signature')
+        .get('/api/admin/settings/committee/treasurer/signature')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(viewRes.status).toBe(404);
+    });
+
+    it('reaches distinct storage for chairman and secretary, independent of treasurer', async () => {
+      const chairmanRes = await request(app)
+        .post('/api/admin/settings/committee/chairman/signature')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', TINY_PNG_BYTES, { filename: 'sig.png', contentType: 'image/png' });
+      expect(chairmanRes.status).toBe(200);
+      expect(chairmanRes.body.hasChairmanSignature).toBe(true);
+      expect(chairmanRes.body.hasSecretarySignature).toBe(false);
+
+      const secretaryRes = await request(app)
+        .post('/api/admin/settings/committee/secretary/signature')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', TINY_PNG_BYTES, { filename: 'sig.png', contentType: 'image/png' });
+      expect(secretaryRes.status).toBe(200);
+      expect(secretaryRes.body.hasChairmanSignature).toBe(true);
+      expect(secretaryRes.body.hasSecretarySignature).toBe(true);
+      expect(secretaryRes.body.hasTreasurerSignature).toBe(false);
+
+      const viewRes = await request(app)
+        .get('/api/admin/settings/committee/chairman/signature')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(viewRes.status).toBe(200);
     });
   });
 });

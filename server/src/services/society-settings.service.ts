@@ -33,6 +33,53 @@ export interface CommitteeMemberSummary {
   phone: string | null;
 }
 
+// Treasurer deliberately reuses the pre-existing receiptSignatureFileKey/
+// receiptSignatureMimeType columns rather than getting its own — see the schema
+// comment on Society.receiptSignatureFileKey.
+export type CommitteeRole = 'CHAIRMAN' | 'SECRETARY' | 'TREASURER';
+
+interface SignatureColumns {
+  chairmanSignatureFileKey: string | null;
+  chairmanSignatureMimeType: string | null;
+  secretarySignatureFileKey: string | null;
+  secretarySignatureMimeType: string | null;
+  receiptSignatureFileKey: string | null;
+  receiptSignatureMimeType: string | null;
+}
+
+function committeeSignatureUpdateData(role: CommitteeRole, key: string | null, mimeType: string | null) {
+  switch (role) {
+    case 'CHAIRMAN':
+      return { chairmanSignatureFileKey: key, chairmanSignatureMimeType: mimeType };
+    case 'SECRETARY':
+      return { secretarySignatureFileKey: key, secretarySignatureMimeType: mimeType };
+    case 'TREASURER':
+      return { receiptSignatureFileKey: key, receiptSignatureMimeType: mimeType };
+  }
+}
+
+function readCommitteeSignatureFileKey(society: SignatureColumns, role: CommitteeRole): string | null {
+  switch (role) {
+    case 'CHAIRMAN':
+      return society.chairmanSignatureFileKey;
+    case 'SECRETARY':
+      return society.secretarySignatureFileKey;
+    case 'TREASURER':
+      return society.receiptSignatureFileKey;
+  }
+}
+
+function readCommitteeSignatureMimeType(society: SignatureColumns, role: CommitteeRole): string | null {
+  switch (role) {
+    case 'CHAIRMAN':
+      return society.chairmanSignatureMimeType;
+    case 'SECRETARY':
+      return society.secretarySignatureMimeType;
+    case 'TREASURER':
+      return society.receiptSignatureMimeType;
+  }
+}
+
 export interface SocietySettings {
   name: string;
   address: string;
@@ -50,14 +97,19 @@ export interface SocietySettings {
   tenantRateFactor: number;
   defaultBaseRate: number;
   // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/receipts.md. hasSignature (not the raw storage key) is
-  // returned to the client; the actual bytes are only ever served through the
-  // dedicated authenticated GET /api/admin/settings/signature endpoint below.
+  // 2026-08-11) — see docs/receipts.md.
   receiptNumberPrefix: string;
   receiptSignatoryName: string | null;
   receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
-  hasSignature: boolean;
+  // Committee-member signatures (2026-08-17) — hasXSignature flags (not the raw
+  // storage keys) are returned to the client; the actual bytes are only ever
+  // served through the dedicated authenticated
+  // GET /api/admin/settings/committee/:role/signature endpoint below. Treasurer's
+  // flag reflects the same underlying file the receipt letterhead uses.
+  hasChairmanSignature: boolean;
+  hasSecretarySignature: boolean;
+  hasTreasurerSignature: boolean;
   // Committee tab (Society details) — each nullable, independently set from a
   // dropdown of this society's owners. Informational only; nothing in billing or
   // permissions reads these.
@@ -87,8 +139,11 @@ export interface UpdateSocietySettingsInput {
   receiptSignatoryName?: string;
   receiptSignatoryTitle?: string;
   receiptFooterNote?: string;
-  // Empty string clears the role back to unassigned (same convention as upiVpa
-  // etc. above); a non-empty value must resolve to an OWNER in this society.
+  // A non-empty value must resolve to an OWNER in this society. The controller's
+  // Zod schema rejects an empty string (roles are required, 2026-08-17) before it
+  // ever reaches here — resolveCommitteeMemberUpdate's '' → null clear path below
+  // is kept only as a defensive fallback for any other future caller, not reachable
+  // through the actual API today.
   chairmanId?: string;
   secretaryId?: string;
   treasurerId?: string;
@@ -101,7 +156,7 @@ interface CommitteeMemberRow {
   phone: string | null;
 }
 
-interface SocietyRow {
+interface SocietyRow extends SignatureColumns {
   name: string;
   address: string;
   constructionDate: Date | null;
@@ -115,7 +170,6 @@ interface SocietyRow {
   receiptSignatoryName: string | null;
   receiptSignatoryTitle: string | null;
   receiptFooterNote: string | null;
-  receiptSignatureFileKey: string | null;
   chairman: CommitteeMemberRow | null;
   secretary: CommitteeMemberRow | null;
   treasurer: CommitteeMemberRow | null;
@@ -138,6 +192,11 @@ const SETTINGS_SELECT = {
   receiptSignatoryTitle: true,
   receiptFooterNote: true,
   receiptSignatureFileKey: true,
+  receiptSignatureMimeType: true,
+  chairmanSignatureFileKey: true,
+  chairmanSignatureMimeType: true,
+  secretarySignatureFileKey: true,
+  secretarySignatureMimeType: true,
   chairman: COMMITTEE_MEMBER_SELECT,
   secretary: COMMITTEE_MEMBER_SELECT,
   treasurer: COMMITTEE_MEMBER_SELECT,
@@ -164,7 +223,9 @@ function toSettings(society: SocietyRow): SocietySettings {
     receiptSignatoryName: society.receiptSignatoryName,
     receiptSignatoryTitle: society.receiptSignatoryTitle,
     receiptFooterNote: society.receiptFooterNote,
-    hasSignature: !!society.receiptSignatureFileKey,
+    hasChairmanSignature: !!readCommitteeSignatureFileKey(society, 'CHAIRMAN'),
+    hasSecretarySignature: !!readCommitteeSignatureFileKey(society, 'SECRETARY'),
+    hasTreasurerSignature: !!readCommitteeSignatureFileKey(society, 'TREASURER'),
     chairman: society.chairman,
     secretary: society.secretary,
     treasurer: society.treasurer,
@@ -221,6 +282,50 @@ export async function updateSocietySettings(
     resolveCommitteeMemberUpdate(societyId, input.treasurerId, 'treasurer'),
   ]);
 
+  // Auto-clear a role's signature when its assignee is genuinely changing — a
+  // signature belongs to a specific person, so it must not silently keep
+  // representing someone no longer in the role. Only fetched when this PATCH
+  // actually touches a committee field (same discipline as the bank-details check
+  // above). Re-saving the same person, or the (currently unreachable-via-API)
+  // ''-clears-to-null path, must NOT clear anything — isGenuineReassignment only
+  // fires on a real, resolved, non-null id that differs from what's on record.
+  //
+  // Note: a society that had a signature set via the old standalone Receipt
+  // template page before ever assigning a treasurer (treasurerId still null,
+  // receiptSignatureFileKey already set) will have that legacy signature cleared
+  // the first time a treasurer is actually assigned here — intentional, not a
+  // bug: nothing yet confirms that stray file belongs to whoever is being
+  // assigned.
+  let currentCommittee: {
+    chairmanId: string | null;
+    secretaryId: string | null;
+    treasurerId: string | null;
+  } & SignatureColumns | null = null;
+  if (input.chairmanId !== undefined || input.secretaryId !== undefined || input.treasurerId !== undefined) {
+    currentCommittee = await prisma.society.findUniqueOrThrow({
+      where: { id: societyId },
+      select: {
+        chairmanId: true,
+        secretaryId: true,
+        treasurerId: true,
+        chairmanSignatureFileKey: true,
+        chairmanSignatureMimeType: true,
+        secretarySignatureFileKey: true,
+        secretarySignatureMimeType: true,
+        receiptSignatureFileKey: true,
+        receiptSignatureMimeType: true,
+      },
+    });
+  }
+
+  function isGenuineReassignment(resolvedId: string | undefined | null, currentId: string | null | undefined): boolean {
+    return resolvedId !== undefined && resolvedId !== null && resolvedId !== currentId;
+  }
+
+  const clearChairmanSignature = currentCommittee !== null && isGenuineReassignment(chairmanId, currentCommittee.chairmanId);
+  const clearSecretarySignature = currentCommittee !== null && isGenuineReassignment(secretaryId, currentCommittee.secretaryId);
+  const clearTreasurerSignature = currentCommittee !== null && isGenuineReassignment(treasurerId, currentCommittee.treasurerId);
+
   const society = await prisma.society.update({
     where: { id: societyId },
     data: {
@@ -236,8 +341,11 @@ export async function updateSocietySettings(
       ...(input.tenantRateFactor !== undefined ? { tenantRateFactor: input.tenantRateFactor } : {}),
       ...(input.defaultBaseRate !== undefined ? { defaultBaseRate: input.defaultBaseRate } : {}),
       ...(chairmanId !== undefined ? { chairmanId } : {}),
+      ...(clearChairmanSignature ? { chairmanSignatureFileKey: null, chairmanSignatureMimeType: null } : {}),
       ...(secretaryId !== undefined ? { secretaryId } : {}),
+      ...(clearSecretarySignature ? { secretarySignatureFileKey: null, secretarySignatureMimeType: null } : {}),
       ...(treasurerId !== undefined ? { treasurerId } : {}),
+      ...(clearTreasurerSignature ? { receiptSignatureFileKey: null, receiptSignatureMimeType: null } : {}),
       ...(input.receiptNumberPrefix !== undefined ? { receiptNumberPrefix: input.receiptNumberPrefix } : {}),
       ...(input.receiptSignatoryName !== undefined
         ? { receiptSignatoryName: input.receiptSignatoryName || null }
@@ -249,6 +357,19 @@ export async function updateSocietySettings(
     },
     select: SETTINGS_SELECT,
   });
+
+  // Delete the now-orphaned files only once the row is confirmed cleared — same
+  // ordering principle as removeCommitteeSignature below.
+  if (clearChairmanSignature && currentCommittee!.chairmanSignatureFileKey) {
+    await getStorageAdapter().delete(currentCommittee!.chairmanSignatureFileKey);
+  }
+  if (clearSecretarySignature && currentCommittee!.secretarySignatureFileKey) {
+    await getStorageAdapter().delete(currentCommittee!.secretarySignatureFileKey);
+  }
+  if (clearTreasurerSignature && currentCommittee!.receiptSignatureFileKey) {
+    await getStorageAdapter().delete(currentCommittee!.receiptSignatureFileKey);
+  }
+
   return toSettings(society);
 }
 
@@ -258,49 +379,68 @@ export interface SignatureFileInput {
   extension: string;
 }
 
+const SIGNATURE_COLUMNS_SELECT = {
+  chairmanSignatureFileKey: true,
+  chairmanSignatureMimeType: true,
+  secretarySignatureFileKey: true,
+  secretarySignatureMimeType: true,
+  receiptSignatureFileKey: true,
+  receiptSignatureMimeType: true,
+} as const;
+
 // Ordering matters: save the new file, point the Society row at it, and only then
 // delete the old one (if replacing) — never delete-then-save. A failure between
 // those steps must never leave Settings referencing a file that no longer exists;
 // worst case on a failed replace, the *old* signature simply stays in effect a bit
-// longer, which is harmless.
-export async function setReceiptSignature(societyId: string, file: SignatureFileInput): Promise<SocietySettings> {
+// longer, which is harmless. One role-parameterized implementation replaces the
+// former treasurer-only setReceiptSignature — its one caller (the Receipt
+// template page's standalone signature upload) was removed in favor of managing
+// every committee member's signature from this one place.
+export async function setCommitteeSignature(
+  societyId: string,
+  role: CommitteeRole,
+  file: SignatureFileInput,
+): Promise<SocietySettings> {
   const existing = await prisma.society.findUniqueOrThrow({
     where: { id: societyId },
-    select: { receiptSignatureFileKey: true },
+    select: SIGNATURE_COLUMNS_SELECT,
   });
+  const existingKey = readCommitteeSignatureFileKey(existing, role);
 
   const { key } = await getStorageAdapter().save({ buffer: file.buffer, societyId, extension: file.extension });
 
   const society = await prisma.society.update({
     where: { id: societyId },
-    data: { receiptSignatureFileKey: key, receiptSignatureMimeType: file.mimeType },
+    data: committeeSignatureUpdateData(role, key, file.mimeType),
     select: SETTINGS_SELECT,
   });
 
-  if (existing.receiptSignatureFileKey) {
-    await getStorageAdapter().delete(existing.receiptSignatureFileKey);
+  if (existingKey) {
+    await getStorageAdapter().delete(existingKey);
   }
 
   return toSettings(society);
 }
 
-// Reverts to the blank-signature-line fallback on every future receipt. Deletes
-// the stored file only after the DB row is confirmed cleared, same ordering
-// principle as setReceiptSignature above.
-export async function removeReceiptSignature(societyId: string): Promise<SocietySettings> {
+// Reverts to the blank-signature-line fallback on every future receipt (for the
+// treasurer role) or simply clears the Committee tab's stored image (chairman/
+// secretary). Deletes the stored file only after the DB row is confirmed cleared,
+// same ordering principle as setCommitteeSignature above.
+export async function removeCommitteeSignature(societyId: string, role: CommitteeRole): Promise<SocietySettings> {
   const existing = await prisma.society.findUniqueOrThrow({
     where: { id: societyId },
-    select: { receiptSignatureFileKey: true },
+    select: SIGNATURE_COLUMNS_SELECT,
   });
+  const existingKey = readCommitteeSignatureFileKey(existing, role);
 
   const society = await prisma.society.update({
     where: { id: societyId },
-    data: { receiptSignatureFileKey: null, receiptSignatureMimeType: null },
+    data: committeeSignatureUpdateData(role, null, null),
     select: SETTINGS_SELECT,
   });
 
-  if (existing.receiptSignatureFileKey) {
-    await getStorageAdapter().delete(existing.receiptSignatureFileKey);
+  if (existingKey) {
+    await getStorageAdapter().delete(existingKey);
   }
 
   return toSettings(society);
@@ -309,15 +449,17 @@ export async function removeReceiptSignature(societyId: string): Promise<Society
 // Authenticated stream-back for the Settings UI's own preview thumbnail — never a
 // public path, same "opaque key, private access" contract as every other stored
 // file in this app.
-export async function getReceiptSignatureForViewing(
+export async function getCommitteeSignatureForViewing(
   societyId: string,
+  role: CommitteeRole,
 ): Promise<{ stream: Readable; mimeType: string } | null> {
   const society = await prisma.society.findUniqueOrThrow({
     where: { id: societyId },
-    select: { receiptSignatureFileKey: true, receiptSignatureMimeType: true },
+    select: SIGNATURE_COLUMNS_SELECT,
   });
-  if (!society.receiptSignatureFileKey) return null;
+  const key = readCommitteeSignatureFileKey(society, role);
+  if (!key) return null;
 
-  const stream = await getStorageAdapter().read(society.receiptSignatureFileKey);
-  return { stream, mimeType: society.receiptSignatureMimeType ?? 'application/octet-stream' };
+  const stream = await getStorageAdapter().read(key);
+  return { stream, mimeType: readCommitteeSignatureMimeType(society, role) ?? 'application/octet-stream' };
 }
