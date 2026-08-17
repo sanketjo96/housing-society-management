@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { prisma } from '../src/db';
+import { prisma } from '../src/infrastructure/prisma/client';
 
 describe('database connection', () => {
   afterAll(async () => {

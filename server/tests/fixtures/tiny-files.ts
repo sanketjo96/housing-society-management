@@ -1,5 +1,5 @@
 // Minimal buffers whose leading bytes match a real file signature
-// (src/lib/file-signature.ts) — enough to pass the Phase 9 content-based upload
+// (src/shared/security/file-signature.ts) — enough to pass the Phase 9 content-based upload
 // validation (src/middleware/verify-file-signature.ts) without needing a fully
 // valid image/PDF structure, since that middleware only sniffs the magic bytes at
 // the start of the file, never parses the rest.

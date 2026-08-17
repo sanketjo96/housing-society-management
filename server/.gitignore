@@ -5,7 +5,7 @@ dist/
 *.tsbuildinfo
 coverage/
 
-/src/generated/prisma
+/src/infrastructure/prisma/generated
 
 # LocalStorageAdapter's default target (Task 6.2) — real proof files when running
 # outside Docker; the Docker Compose stack uses a named volume instead

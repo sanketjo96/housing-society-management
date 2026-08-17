@@ -11,16 +11,16 @@ import express from 'express';
 // Express itself uses), and before any `app.use(...Router)` call below.
 import 'express-async-errors';
 import { errorHandler } from './middleware/error-handler';
-import { adminDashboardRouter } from './routes/admin-dashboard.route';
-import { adminLedgerRouter } from './routes/admin-ledger.route';
-import { adminUsersRouter } from './routes/admin-users.route';
-import { authRouter } from './routes/auth.route';
-import { flatsRouter } from './routes/flats.route';
-import { ledgerRouter } from './routes/ledger.route';
-import { maintenanceRecordsRouter } from './routes/maintenance-records.route';
-import { meRouter } from './routes/me.route';
-import { passwordResetRouter } from './routes/password-reset.route';
-import { societySettingsRouter } from './routes/society-settings.route';
+import { adminDashboardRouter } from './features/dashboard/admin-dashboard.route';
+import { adminLedgerRouter } from './features/ledger/admin-ledger.route';
+import { adminUsersRouter } from './features/users/admin-users.route';
+import { authRouter } from './features/auth/auth.route';
+import { flatsRouter } from './features/flats/flats.route';
+import { ledgerRouter } from './features/ledger/ledger.route';
+import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
+import { meRouter } from './features/flats/me.route';
+import { passwordResetRouter } from './features/auth/password-reset.route';
+import { societySettingsRouter } from './features/society-settings/society-settings.route';
 
 export const app = express();
 

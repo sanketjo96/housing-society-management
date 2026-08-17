@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import cron from 'node-cron';
 import { app } from './app';
+import { env } from './config/env';
 import { runMonthlyMaintenanceGeneration } from './jobs/monthly-maintenance-generation.job';
 
-const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+const port = Number(env('PORT', '3000'));
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);

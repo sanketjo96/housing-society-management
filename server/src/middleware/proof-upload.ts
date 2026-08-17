@@ -2,7 +2,7 @@ import multer from 'multer';
 
 // Cross-cutting requirement (CLAUDE.md): file upload validation enforced server-side,
 // not just by the frontend's <input accept>. memoryStorage, not diskStorage — the
-// buffer is handed to whichever StorageAdapter is active (src/lib/storage), which may
+// buffer is handed to whichever StorageAdapter is active (src/infrastructure/storage), which may
 // not even be local disk.
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;

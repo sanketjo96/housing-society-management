@@ -1,5 +1,5 @@
-import { prisma } from '../db';
-import { generateMaintenanceRecords } from '../services/maintenance-record.service';
+import { prisma } from '../infrastructure/prisma/client';
+import { generateMaintenanceRecords } from '../features/maintenance/maintenance-record.service';
 
 // Runs generation for every society (this MVP only ever has one — CLAUDE.md's scope
 // note — but the loop costs nothing and is what "onboard a second society without a

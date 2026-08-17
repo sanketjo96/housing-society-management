@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { detectFileType, type DetectableFileType } from '../lib/file-signature';
+import { detectFileType, type DetectableFileType } from '../shared/security/file-signature';
 
 // Runs *after* multer (proof-upload.ts/signature-upload.ts), never instead of it —
 // multer's memoryStorage only populates `req.file.buffer` once the whole file has

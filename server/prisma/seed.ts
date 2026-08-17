@@ -1,6 +1,9 @@
 import bcrypt from 'bcrypt';
-import { prisma } from '../src/db';
-import { generateMaintenanceRecords, previousPeriod } from '../src/services/maintenance-record.service';
+import { prisma } from '../src/infrastructure/prisma/client';
+import {
+  generateMaintenanceRecords,
+  previousPeriod,
+} from '../src/features/maintenance/maintenance-record.service';
 
 export const SEED_SOCIETY_NAME = 'Sunrise Residency';
 export const SEED_DEFAULT_PASSWORD = 'password123';
@@ -95,7 +98,9 @@ async function hash(password: string) {
 export async function main() {
   const existing = await prisma.society.findFirst({ where: { name: SEED_SOCIETY_NAME } });
   if (existing) {
-    console.log(`Seed data already exists for "${SEED_SOCIETY_NAME}", skipping user/flat creation.`);
+    console.log(
+      `Seed data already exists for "${SEED_SOCIETY_NAME}", skipping user/flat creation.`,
+    );
     await backfillMaintenanceRecords(existing.id);
     return { society: existing, skipped: true };
   }
@@ -103,7 +108,11 @@ export async function main() {
   const passwordHash = await hash(SEED_DEFAULT_PASSWORD);
 
   const society = await prisma.society.create({
-    data: { name: SEED_SOCIETY_NAME, address: '1 Garden Road, Pune', upiVpa: 'sunrise-residency@okhdfcbank' },
+    data: {
+      name: SEED_SOCIETY_NAME,
+      address: '1 Garden Road, Pune',
+      upiVpa: 'sunrise-residency@okhdfcbank',
+    },
   });
 
   const admin = await prisma.user.create({
@@ -147,7 +156,13 @@ export async function main() {
 
   // A-101 and A-102: owner-occupied, never had a tenant.
   await prisma.flat.create({
-    data: { wing: 'A', flatNumber: '101', baseRate: 1500, societyId: society.id, ownerId: alice.id },
+    data: {
+      wing: 'A',
+      flatNumber: '101',
+      baseRate: 1500,
+      societyId: society.id,
+      ownerId: alice.id,
+    },
   });
   await prisma.flat.create({
     data: { wing: 'A', flatNumber: '102', baseRate: 1600, societyId: society.id, ownerId: bob.id },
@@ -165,7 +180,12 @@ export async function main() {
     },
   });
   await prisma.occupancyChange.create({
-    data: { flatId: a103.id, tenantId: dave.id, effectiveStart: new Date('2026-05-01'), effectiveEnd: null },
+    data: {
+      flatId: a103.id,
+      tenantId: dave.id,
+      effectiveStart: new Date('2026-05-01'),
+      effectiveEnd: null,
+    },
   });
 
   // B-201: mid-history — Frank occupied and moved out, Grace is the current tenant.
@@ -188,7 +208,12 @@ export async function main() {
     },
   });
   await prisma.occupancyChange.create({
-    data: { flatId: b201.id, tenantId: grace.id, effectiveStart: new Date('2026-05-01'), effectiveEnd: null },
+    data: {
+      flatId: b201.id,
+      tenantId: grace.id,
+      effectiveStart: new Date('2026-05-01'),
+      effectiveEnd: null,
+    },
   });
 
   // B-202: had a tenant (Ivan) who moved out — currently reverted to owner-occupied.

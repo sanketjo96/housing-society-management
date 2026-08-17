@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { prisma } from '../src/db';
+import { prisma } from '../src/infrastructure/prisma/client';
 import { SEED_SOCIETY_NAME, main as runSeed } from '../prisma/seed';
 
 describe('seed script', () => {
