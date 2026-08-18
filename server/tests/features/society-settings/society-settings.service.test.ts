@@ -3,13 +3,15 @@ import { prisma } from '../../../src/infrastructure/prisma/client';
 import { getStorageAdapter } from '../../../src/infrastructure/storage';
 import {
   getCommitteeSignatureForViewing,
+  removeCommitteeSignature,
+  setCommitteeSignature,
+} from '../../../src/features/society-settings/committee-signature-service';
+import {
   getSocietySettings,
   IncompleteBankDetailsError,
   InvalidCommitteeMemberError,
-  removeCommitteeSignature,
-  setCommitteeSignature,
   updateSocietySettings,
-} from '../../../src/features/society-settings/society-settings.service';
+} from '../../../src/features/society-settings/settings-service';
 
 // LocalStorageAdapter.read() resolves synchronously with a stream — a missing
 // file only surfaces as an 'error' event once the stream is actually consumed,

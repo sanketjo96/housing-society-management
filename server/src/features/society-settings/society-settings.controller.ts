@@ -6,13 +6,13 @@ import {
   getCommitteeSignatureForViewing,
   removeCommitteeSignature,
   setCommitteeSignature,
-} from './committee-signature.service';
+} from './committee-signature-service';
 import {
   getSocietySettings,
   IncompleteBankDetailsError,
   InvalidCommitteeMemberError,
   updateSocietySettings,
-} from './settings.service';
+} from './settings-service';
 
 // Standard 11-character Indian bank IFSC format: 4-letter bank code, a literal
 // '0', then 6 alphanumeric branch chars — e.g. HDFC0001234. Banks always issue
