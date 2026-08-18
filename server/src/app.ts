@@ -12,7 +12,7 @@ import swaggerUi from 'swagger-ui-express';
 // Express itself uses), and before any `app.use(...Router)` call below.
 import 'express-async-errors';
 import { errorHandler } from './middleware/error-handler';
-import { adminDashboardRouter } from './features/dashboard/admin-dashboard.route';
+import { adminDashboardRouter } from './features/admin-dashboard/admin-dashboard.route';
 import { adminLedgerRouter } from './features/ledger/admin-ledger.route';
 import { adminUsersRouter } from './features/users/admin-users.route';
 import { authRouter } from './features/auth/auth.route';

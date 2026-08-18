@@ -5,7 +5,7 @@ import {
   getDashboardSummary,
   getFlaggedFlats,
   getFlatWiseDues,
-} from '../../../src/features/dashboard/admin-dashboard.service';
+} from '../../../src/features/admin-dashboard/admin-dashboard.service';
 
 function daysAgo(n: number): Date {
   const d = new Date();

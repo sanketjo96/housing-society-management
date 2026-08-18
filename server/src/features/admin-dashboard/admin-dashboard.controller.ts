@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { getDashboardSummary, getFlaggedFlats, getFlatWiseDues } from './admin-dashboard.service';
-import { flaggedFlatsQuerySchema } from './dashboard.schemas';
+import { flaggedFlatsQuerySchema } from './admin-dashboard.schemas';
 
 export async function getDashboardSummaryHandler(req: Request, res: Response) {
   if (!req.user) {
