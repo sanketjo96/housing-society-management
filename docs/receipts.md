@@ -298,3 +298,66 @@ curl http://localhost/api/ledger-entries/<pendingEntryId>/receipt \
 ```
 
 Read-only/throwaway-data verification — no seeded demo data was left mutated.
+
+## Addendum (2026-08-18): Receipt Book — admin register of every issued receipt
+
+Confirmed gap: an admin who wanted to browse *all* issued receipts had to reuse
+Payment Proofs' "Approved" tab, a pending-review queue repurposed for the job, not a
+real register. Added a dedicated **Receipt Book** page — a read-only list of every
+`Receipt` row ever issued for the society, searchable/filterable, each row
+downloadable.
+
+**`GET /api/admin/receipts`** (admin-only): returns every `Receipt` for the caller's
+society, newest (`issuedAt desc`) first, each joined to its `LedgerEntry`'s
+`type`/`amount`/`note`/`payer`/`flat`. No query params, no pagination — same
+unbounded-`findMany`-then-filter-client-side convention as
+`GET /api/admin/ledger-entries` (`listPendingLedgerEntries`), consistent with this
+24-flat MVP's philosophy (`DataTable.tsx`'s own comment). Example response row:
+
+```json
+{
+  "id": "cmsvyakfv000c01o6njeefp8x",
+  "receiptNumber": "R-A2-cr3c93md",
+  "issuedAt": "2026-08-16T15:19:26.926Z",
+  "ledgerEntry": {
+    "id": "cmsvy9oyb000a01o6cr3c93md",
+    "type": "CREDIT",
+    "amount": "500",
+    "note": "wlwejnlqe",
+    "payer": { "id": "...", "name": "Mr. Chaware", "email": "chaware@yahoo.com" },
+    "flat": { "id": "...", "wing": "A", "flatNumber": "2" }
+  }
+}
+```
+
+(`fileKey`/`issuedById`/`societyId` are also present on each row — internal fields
+the frontend ignores, not stripped, same shape Prisma returns.) Manually verified
+against the real running stack (seeded society, 5 issued receipts): `GET
+/api/admin/receipts` with a valid admin token returned all 5 rows in the shape
+above; unauthenticated/malformed-token requests get `401` (`requireRole`'s existing
+behavior, exercised directly rather than re-demonstrated here); a non-admin role
+gets `403`, covered by the automated test suite below, not re-run manually.
+
+**Backend location**: `server/src/features/receipts/admin/` (new `admin/` subfolder,
+mirroring `flats/admin/` and `ledger/admin/`) — `admin-receipts-service.ts`
+(`listReceipts`), `-controller.ts`, `-route.ts`, `-openapi.ts`. `receipt.service.ts`/
+`receipt-pdf.ts` (issuance logic) are untouched; this is purely a new read query.
+`ledger/admin/admin-ledger-service.ts`'s `LEDGER_ENTRY_LIST_INCLUDE` was exported (was
+previously module-private) so `listReceipts` reuses the same payer/flat select shape
+rather than redefining it.
+
+**Frontend**: `client/src/pages/admin/ReceiptBookPage.tsx` (new), reachable from a new
+"Receipt Book" sidebar item next to "Payment proofs" (`DashboardLayout.tsx`), routed at
+`/receipt-book` (admin-only, `App.tsx`). Fetched once via React Query, then filtered
+client-side by an issued-date range and a free-text search (matches receipt number,
+flat, or resident name) — same pattern as `MaintenanceBookPage.tsx`'s date-range
+filter. Two small helpers were extracted for reuse rather than copied a third time:
+`components/LedgerTypeBadge.tsx` (the Deposit/Credit badge, previously private to
+`PaymentProofsPage.tsx`) and `lib/download-file.ts`'s `downloadAuthedFile` (the
+authenticated-blob-then-`window.open` idiom, previously duplicated locally in both
+`PaymentProofsPage.tsx` and `ResidentDashboardOverview.tsx`) — both pages now import
+from these shared locations instead of keeping their own copies.
+
+Tests: `server/tests/features/receipts/admin/admin-receipts.test.ts` (admin-only
+403, empty list, an approved deposit appears with the right shape after approval,
+society isolation from another society's manually-recorded deposit).

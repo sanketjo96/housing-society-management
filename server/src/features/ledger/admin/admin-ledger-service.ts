@@ -11,7 +11,9 @@ import { InvalidAmountError } from '../ledger-shared';
 
 export { InvalidAmountError, LedgerEntryAlreadyReviewedError };
 
-const LEDGER_ENTRY_LIST_INCLUDE = {
+// Exported for reuse by ../../receipts/admin/admin-receipts-service.ts's listReceipts,
+// which needs the same payer/flat summary shape for its receipt-book rows.
+export const LEDGER_ENTRY_LIST_INCLUDE = {
   payer: { select: { id: true, name: true, email: true } },
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;

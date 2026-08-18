@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
+import { ReceiptBookPage } from './pages/admin/ReceiptBookPage'
 import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
 import { ReceiptTemplatePage } from './pages/admin/settings/ReceiptTemplatePage'
@@ -51,6 +52,10 @@ function App() {
               <Route
                 path="/payment-proofs"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><PaymentProofsPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/receipt-book"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><ReceiptBookPage /></ProtectedRoute>}
               />
               {/* Not a sidebar nav item — reached only via the "Maintenance Outstanding
                   Total" tile on AdminDashboardPage, same admin-only guard as every

@@ -226,6 +226,33 @@ const definition: swaggerJsdoc.Options['definition'] = {
           receiptFooterNote: { type: 'string', maxLength: 500 },
         },
       },
+      Receipt: {
+        type: 'object',
+        description: 'An issued receipt (1:1 with a LedgerEntry), as returned by the Receipt Book list.',
+        properties: {
+          id: { type: 'string' },
+          receiptNumber: { type: 'string', example: 'RCPT-M301-1a2b3c4d' },
+          issuedAt: { type: 'string', format: 'date-time' },
+          ledgerEntry: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string', enum: ['DEPOSIT', 'CREDIT'] },
+              amount: { type: 'string', description: 'Decimal, serialized as a string.' },
+              note: { type: 'string', nullable: true },
+              payer: { $ref: '#/components/schemas/ContactSummary' },
+              flat: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  wing: { type: 'string' },
+                  flatNumber: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
       PaymentIntent: {
         type: 'object',
         description:
@@ -254,6 +281,7 @@ const definition: swaggerJsdoc.Options['definition'] = {
     { name: 'My Profile', description: 'Any authenticated user updating their own contact details.' },
     { name: 'My Ledger', description: "A resident's own Passbook, payments, and credit requests." },
     { name: 'Ledger (Admin)', description: 'Reviewing/approving pending Deposits and Credits.' },
+    { name: 'Receipts (Admin)', description: 'Receipt Book — every issued receipt for the society.' },
     { name: 'Maintenance Records (Admin)', description: 'Monthly charge generation and listing.' },
     { name: 'Dashboard (Admin)', description: 'Society-wide collection summary and dues.' },
     { name: 'Society Settings (Admin)', description: 'Billing rules, payment config, receipt template, committee signatures.' },

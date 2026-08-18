@@ -674,6 +674,23 @@ now-inert "Signatory name"/"Signatory title" inputs, pointing instead at the
 Committee tab (the same pointer it already showed for the treasurer's signature
 upload). Full mechanism: `docs/receipts.md`'s "Addendum (2026-08-17)" section.
 
+### Addition (2026-08-18): admin Receipt Book — a register of every issued receipt
+
+Confirmed gap: an admin browsing past receipts had no dedicated view — only Payment
+Proofs' "Approved" tab, a pending-review queue repurposed for the job. Added
+`GET /api/admin/receipts` (admin-only, no query params, no pagination — same
+unbounded-list-then-client-filters convention as every other list endpoint in this
+app) plus a new "Receipt Book" page/nav item, listing every `Receipt` row for the
+society newest-first, filterable by issued-date range and free-text search
+(receipt number, flat, resident name), each row downloadable via the existing
+`GET /api/ledger-entries/:id/receipt`.
+
+Purely additive — no change to issuance (`receipt.service.ts`/`receipt-pdf.ts`),
+the approval flow, or any existing endpoint's contract. Backend lives in a new
+`server/src/features/receipts/admin/` subfolder, mirroring the `flats/`+`ledger/`
+admin/resident reorg pattern already established in this codebase. Full contract:
+`docs/receipts.md`'s "Addendum (2026-08-18)" section.
+
 ### Addition (2026-08-12): bank-transfer fallback for societies without a UPI VPA
 
 Confirmed: not every society can accept UPI (some collection accounts are

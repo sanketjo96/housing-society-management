@@ -3,10 +3,11 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Check, Download, Eye, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
+import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
 import { ReceiptApprovalModal } from '../../components/ReceiptApprovalModal';
 import { authedFetch } from '../../lib/api';
+import { downloadAuthedFile } from '../../lib/download-file';
 
-type LedgerEntryType = 'DEPOSIT' | 'CREDIT';
 type LedgerEntryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 interface LedgerEntryListItem {
@@ -21,25 +22,6 @@ interface LedgerEntryListItem {
   flat: { id: string; wing: string; flatNumber: string };
 }
 
-// Credit re-introduced 2026-08-07 — there's something to distinguish in this queue
-// again (a Deposit is a UPI payment with a screenshot; a Credit is a committee-
-// approved adjustment with a required reason instead), so the Type column returns
-// after the 2026-08-07 Credit-removal pivot had dropped it for having nothing left
-// to show.
-const TYPE_META: Record<LedgerEntryType, { className: string; label: string }> = {
-  DEPOSIT: { className: 'border border-line text-ink', label: 'Deposit' },
-  CREDIT: { className: 'border border-brass text-brass', label: 'Credit' },
-};
-
-function TypeBadge({ type }: { type: LedgerEntryType }) {
-  const meta = TYPE_META[type];
-  return (
-    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
-      {meta.label}
-    </span>
-  );
-}
-
 const STATUS_TABS: { value: LedgerEntryStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'APPROVED', label: 'Approved' },
@@ -50,19 +32,6 @@ async function fetchLedgerEntries(status: LedgerEntryStatus): Promise<LedgerEntr
   const res = await authedFetch(`/api/admin/ledger-entries?status=${status}`);
   if (!res.ok) throw new Error('Could not load ledger entries.');
   return res.json();
-}
-
-// Both the proof-file and issued-receipt endpoints are authenticated (never a
-// public URL), so a plain <a href> won't carry the Bearer token — fetch the bytes
-// ourselves and hand the browser a blob: URL instead. Works for both images and
-// PDFs — the browser's own viewer opens either in the new tab.
-async function openAuthedFile(path: string, errorMessage: string) {
-  const res = await authedFetch(path);
-  if (!res.ok) throw new Error(errorMessage);
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // Owns just the "View proof" button's own error state — split out from the row so
@@ -80,7 +49,7 @@ function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean
         type="button"
         onClick={() => {
           setViewError(null);
-          openAuthedFile(`/api/ledger-entries/${entryId}/file`, 'Could not load the proof file.').catch(
+          downloadAuthedFile(`/api/ledger-entries/${entryId}/file`, 'Could not load the proof file.').catch(
             (e: Error) => setViewError(e.message),
           );
         }}
@@ -105,7 +74,7 @@ function ReceiptDownloadCell({ entryId }: { entryId: string }) {
         type="button"
         onClick={() => {
           setError(null);
-          openAuthedFile(`/api/ledger-entries/${entryId}/receipt`, 'No receipt was issued for this entry.').catch(
+          downloadAuthedFile(`/api/ledger-entries/${entryId}/receipt`, 'No receipt was issued for this entry.').catch(
             (e: Error) => setError(e.message),
           );
         }}
@@ -243,7 +212,7 @@ export function PaymentProofsPage() {
       {
         id: 'type',
         header: 'Type',
-        cell: ({ row }) => <TypeBadge type={row.original.type} />,
+        cell: ({ row }) => <LedgerTypeBadge type={row.original.type} />,
       },
       {
         id: 'amount',
