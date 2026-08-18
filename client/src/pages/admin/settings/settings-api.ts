@@ -1,9 +1,9 @@
 import { authedFetch } from '../../../lib/api';
 
-// Shared across the three settings pages (SocietyDetailsPage, BillingPlanPage,
-// ReceiptTemplatePage) plus FlatsListPage's FlatForm (pre-fills a new flat's base
-// rate) — one settings shape, one query key (['society-settings']), so React Query
-// dedups the fetch across pages instead of each page hitting the endpoint again.
+// Shared across the settings pages (SocietyDetailsPage, BillingPlanPage) plus
+// FlatsListPage's FlatForm (pre-fills a new flat's base rate) — one settings shape,
+// one query key (['society-settings']), so React Query dedups the fetch across
+// pages instead of each page hitting the endpoint again.
 export interface SocietySettings {
   name: string;
   address: string;
@@ -21,7 +21,10 @@ export interface SocietySettings {
   tenantRateFactor: number;
   defaultBaseRate: number;
   // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/receipts.md.
+  // 2026-08-11) — see docs/receipts.md. receiptNumberPrefix is editable from the
+  // Basic information tab above (2026-08-18 addendum: the standalone Receipt
+  // template page was removed). receiptFooterNote has no admin UI anymore but
+  // stays a valid, API-settable field — still rendered on a receipt if already set.
   receiptNumberPrefix: string;
   receiptFooterNote: string | null;
   // Committee-member signatures (2026-08-17), managed from the Committee tab.

@@ -691,6 +691,30 @@ the approval flow, or any existing endpoint's contract. Backend lives in a new
 admin/resident reorg pattern already established in this codebase. Full contract:
 `docs/receipts.md`'s "Addendum (2026-08-18)" section.
 
+### Addition (2026-08-18, same day): standalone Receipt template page removed
+
+Confirmed decision: the admin Receipt template page (`ReceiptTemplatePage.tsx`,
+`/settings/receipt-template`) is removed outright, not reduced — a whole page was
+overkill for what had shrunk to a single meaningful field once the 2026-08-17
+signatory-fields removal and the Committee-tab signature work landed. **Receipt
+number prefix** moves to Society details' Basic information tab, as a plain
+additional input alongside name/address/dates — no backend change, since `PATCH
+/api/admin/settings` already accepted `receiptNumberPrefix` before this (only
+which page sends it changed).
+
+**Footer note dropped from the UI entirely, confirmed explicitly rather than
+migrated somewhere else.** `Society.receiptFooterNote` stays on the schema,
+`updateSettingsSchema` still accepts it, and a receipt still renders it if a
+value is already stored — there is simply no admin UI left to set or change it.
+This is a real scope-narrowing decision, not an oversight: revisit if a society
+actually needs to configure one.
+
+No route/nav/backend deletion beyond the frontend page itself: `App.tsx`'s
+`/settings/receipt-template` route and `DashboardLayout.tsx`'s "Receipt template"
+nav item are removed; `settings-service.ts`, `society-settings.schemas.ts`, and
+`society-settings-shared.ts` (server) are untouched. Full contract:
+`docs/receipts.md`'s "Addendum (2026-08-18, same day)" section.
+
 ### Addition (2026-08-12): bank-transfer fallback for societies without a UPI VPA
 
 Confirmed: not every society can accept UPI (some collection accounts are

@@ -9,7 +9,6 @@ import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
 import { ReceiptBookPage } from './pages/admin/ReceiptBookPage'
 import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
-import { ReceiptTemplatePage } from './pages/admin/settings/ReceiptTemplatePage'
 import { SocietyDetailsPage } from './pages/admin/settings/SocietyDetailsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -78,10 +77,6 @@ function App() {
               <Route
                 path="/settings/billing"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><BillingPlanPage /></ProtectedRoute>}
-              />
-              <Route
-                path="/settings/receipt-template"
-                element={<ProtectedRoute allowedRoles={['ADMIN']}><ReceiptTemplatePage /></ProtectedRoute>}
               />
 
               <Route

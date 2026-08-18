@@ -108,8 +108,8 @@ pre-existing `tenantRateFactor`/`defaultBaseRate` pair; these are additive):
 
 | Field | Notes |
 |---|---|
-| `receiptNumberPrefix` | Defaults to `"RCPT"`. Validated `^[A-Za-z0-9-]{1,20}$` — it's concatenated directly into every receipt number, so free-form text has no business there. |
-| `receiptFooterNote` | Optional. |
+| `receiptNumberPrefix` | Defaults to `"RCPT"`. Validated `^[A-Za-z0-9-]{1,20}$` — it's concatenated directly into every receipt number, so free-form text has no business there. Editable from Society details' Basic information tab (2026-08-18 addendum, below) — the standalone Receipt template page this table originally described no longer exists. |
+| `receiptFooterNote` | Optional. Still API-settable and still rendered on a receipt if a value is already stored, but has had no admin UI since the 2026-08-18 addendum below. |
 | `address` | Already existed on the schema (society onboarding), just never exposed via `GET`/`PATCH /api/admin/settings` until now — needed here since it's printed on every receipt's letterhead. |
 
 (`receiptSignatoryName`/`receiptSignatoryTitle` originally listed here were dropped
@@ -361,3 +361,35 @@ from these shared locations instead of keeping their own copies.
 Tests: `server/tests/features/receipts/admin/admin-receipts.test.ts` (admin-only
 403, empty list, an approved deposit appears with the right shape after approval,
 society isolation from another society's manually-recorded deposit).
+
+## Addendum (2026-08-18, same day): standalone Receipt template page removed
+
+Confirmed decision: the whole `ReceiptTemplatePage.tsx` (`/settings/receipt-template`)
+is removed, not just trimmed — by this point it held exactly one field with any real
+admin-facing purpose (`receiptNumberPrefix`); the signatory name/title inputs were
+already dropped 2026-08-17, and the "Chairman & secretary signatures" section was
+just a static pointer to the Committee tab, not an editable field.
+
+**Receipt number prefix** moves to Society details' Basic information tab
+(`SocietyDetailsPage.tsx`'s `BasicInfoTab`), as a plain additional field alongside
+name/address/construction-date/formation-date — same validation
+(`^[A-Za-z0-9-]{1,20}$`), same helper text. No backend change: `PATCH
+/api/admin/settings` already accepted `receiptNumberPrefix` (it's one field among
+several `updateSettingsSchema` already validated); only which page's form submits
+it changed.
+
+**Footer note dropped from the admin UI entirely — a confirmed scope decision, not
+an oversight.** `Society.receiptFooterNote` stays on the schema and
+`updateSettingsSchema`, `getSocietySettings`/`updateSocietySettings`
+(`settings-service.ts`) and receipt rendering (`receipt.service.ts`'s
+`buildReceiptData`) are all untouched — a receipt still shows a footer note if one
+is already stored. There is simply no admin-facing form to set or change it
+anymore. If a society genuinely needs to configure one going forward, that's a new,
+separate decision, not something this removal silently blocked.
+
+**Removed**: `client/src/pages/admin/settings/ReceiptTemplatePage.tsx` and its test.
+**Changed**: `App.tsx` (route removed), `DashboardLayout.tsx` (nav item + now-unused
+`Receipt` icon import removed), `SocietyDetailsPage.tsx`/`.test.tsx` (field added,
+one existing PATCH-body assertion updated, two new tests for the field itself),
+`settings-api.ts` (comments only — the `SocietySettings` type itself is unchanged,
+since both fields already lived there).

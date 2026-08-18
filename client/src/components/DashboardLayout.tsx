@@ -1,4 +1,4 @@
-import { BookText, Building2, LayoutGrid, Receipt as ReceiptIcon, ReceiptText, Wallet, BookOpen, User } from 'lucide-react';
+import { BookText, Building2, LayoutGrid, ReceiptText, Wallet, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavItem } from './DashboardShell';
@@ -23,7 +23,6 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
   { to: '/settings/society', label: 'Society details', icon: Building2 },
   { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
-  { to: '/settings/receipt-template', label: 'Receipt template', icon: ReceiptIcon },
 ];
 
 const RESIDENT_NAV_ITEMS: NavItem[] = [

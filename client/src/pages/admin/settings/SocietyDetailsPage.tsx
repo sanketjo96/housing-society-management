@@ -34,6 +34,9 @@ const basicInfoSchema = z.object({
   address: z.string().min(1, 'Society address is required'),
   constructionDate: z.string().min(1, 'Construction date is required'),
   formationDate: z.string().min(1, 'Society formation date is required'),
+  receiptNumberPrefix: z
+    .string()
+    .regex(/^[A-Za-z0-9-]{1,20}$/, 'Use 1-20 letters, digits, or hyphens'),
 });
 type BasicInfoValues = z.infer<typeof basicInfoSchema>;
 
@@ -43,6 +46,7 @@ function basicInfoValuesFromSettings(settings: SocietySettings): BasicInfoValues
     address: settings.address,
     constructionDate: settings.constructionDate ?? '',
     formationDate: settings.formationDate ?? '',
+    receiptNumberPrefix: settings.receiptNumberPrefix,
   };
 }
 
@@ -107,6 +111,15 @@ function BasicInfoTab({ settings }: { settings: SocietySettings }) {
           {errors.formationDate && <ErrMsg>{errors.formationDate.message}</ErrMsg>}
         </Field>
       </div>
+
+      <Field label="Receipt number prefix">
+        <input className={inputClass} placeholder="RCPT" {...register('receiptNumberPrefix')} />
+        {errors.receiptNumberPrefix && <ErrMsg>{errors.receiptNumberPrefix.message}</ErrMsg>}
+      </Field>
+      <p className="m-0 -mt-2 mb-3.5 text-xs text-muted">
+        Combined with the flat number and transaction id to form every receipt number, e.g.{' '}
+        <span className="font-mono-brand">RCPT-A101-...</span>.
+      </p>
 
       <SettingsFormActions
         error={mutation.error?.message}

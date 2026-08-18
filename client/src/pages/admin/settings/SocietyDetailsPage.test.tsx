@@ -135,6 +135,47 @@ describe('SocietyDetailsPage', () => {
         address: baseSettings.address,
         constructionDate: baseSettings.constructionDate,
         formationDate: baseSettings.formationDate,
+        receiptNumberPrefix: baseSettings.receiptNumberPrefix,
+      });
+    });
+
+    it('loads the current receipt number prefix and submits an edited value', async () => {
+      let sentBody: string | undefined;
+      mockFetch({
+        onPatch: (body) => {
+          sentBody = body;
+          return { ...baseSettings, receiptNumberPrefix: 'MAINT' };
+        },
+      });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('RCPT')).toBeInTheDocument());
+      await user.clear(screen.getByLabelText(/receipt number prefix/i));
+      await user.type(screen.getByLabelText(/receipt number prefix/i), 'MAINT');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => expect(screen.getByText(/^saved\.$/i)).toBeInTheDocument());
+      expect(JSON.parse(sentBody!).receiptNumberPrefix).toBe('MAINT');
+    });
+
+    it('rejects a receipt number prefix with invalid characters', async () => {
+      mockFetch({
+        onPatch: () => {
+          throw new Error('PATCH should not have been called');
+        },
+      });
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByDisplayValue('RCPT')).toBeInTheDocument());
+      await user.clear(screen.getByLabelText(/receipt number prefix/i));
+      await user.type(screen.getByLabelText(/receipt number prefix/i), 'not valid!');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/use 1-20 letters, digits, or hyphens/i)).toBeInTheDocument();
       });
     });
 
