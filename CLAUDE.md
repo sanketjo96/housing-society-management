@@ -804,6 +804,7 @@ existing schema.
 | Rate limiting | `express-rate-limit`, applied only to `/api/auth/login` and the password-reset endpoints (`src/middleware/auth-rate-limit.ts`); requires `app.set('trust proxy', 1)` since this app always sits behind nginx |
 | Proof storage | Swappable `StorageAdapter` interface (`server/src/lib/storage`) — `local` (disk, default) implemented; `s3`/`gdrive` are named extension points, not yet built. See `docs/payments.md` |
 | Test runner | Vitest (backend and frontend) |
+| API docs | `swagger-jsdoc` + `swagger-ui-express`, spec assembled from `@openapi` JSDoc blocks in each `*.route.ts` file (`server/src/infrastructure/openapi/openapi.ts`). Served at `/api/docs`, no auth — public by design, falls under nginx's existing `/api/` proxy. See `docs/backend-setup.md` |
 | Deployment | Docker Compose, Nginx reverse proxy, Certbot SSL |
 
 ## Delivery approach

@@ -1,6 +1,7 @@
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
 // Express 4 does not catch a rejected promise thrown by an async route handler —
 // confirmed empirically (Phase 9 security audit, 2026-08-12): an uncaught throw
 // inside any async handler crashes the entire Node process instead of reaching
@@ -20,6 +21,7 @@ import { ledgerRouter } from './features/ledger/ledger.route';
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
 import { meRouter } from './features/flats/me.route';
 import { societySettingsRouter } from './features/society-settings/society-settings.route';
+import { openapiSpec } from './infrastructure/openapi/openapi';
 
 export const app = express();
 
@@ -56,6 +58,12 @@ app.use((_req, res, next) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Public API reference — no auth required to view the docs page itself (each endpoint
+// documented here still enforces its own real auth when actually called). Deliberately
+// reachable outside the VPS: nginx's `location /api/` block already proxies this
+// straight through with no extra wiring (nginx/default.conf).
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
 app.use(adminDashboardRouter);
 app.use(adminLedgerRouter);
