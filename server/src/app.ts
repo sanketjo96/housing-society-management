@@ -19,7 +19,6 @@ import { flatsRouter } from './features/flats/flats.route';
 import { ledgerRouter } from './features/ledger/ledger.route';
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
 import { meRouter } from './features/flats/me.route';
-import { passwordResetRouter } from './features/auth/password-reset.route';
 import { societySettingsRouter } from './features/society-settings/society-settings.route';
 
 export const app = express();
@@ -66,7 +65,6 @@ app.use(flatsRouter);
 app.use(ledgerRouter);
 app.use(maintenanceRecordsRouter);
 app.use(meRouter);
-app.use(passwordResetRouter);
 app.use(societySettingsRouter);
 
 // Must be registered last (Express's 4-arg-signature error-middleware convention).

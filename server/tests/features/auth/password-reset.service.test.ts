@@ -2,12 +2,12 @@ import bcrypt from 'bcrypt';
 import { afterAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { createUser } from '../../../src/features/users/admin-users.service';
-import { login } from '../../../src/features/auth/auth.service';
 import {
   InvalidResetTokenError,
+  login,
   requestPasswordReset,
   resetPassword,
-} from '../../../src/features/auth/password-reset.service';
+} from '../../../src/features/auth/auth.service';
 
 describe('password reset service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

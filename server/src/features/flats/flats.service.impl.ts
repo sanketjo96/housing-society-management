@@ -5,7 +5,7 @@ import { DuplicateFieldError } from '../../shared/errors/errors';
 import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
 import { scopedWhere } from '../../shared/security/tenant-scope';
 import { createUser } from '../users/admin-users.service';
-import { requestPasswordReset } from '../auth/password-reset.service';
+import { requestPasswordReset } from '../auth/auth.service';
 
 // Thrown when tenantId doesn't resolve to a TENANT-role user within the caller's own
 // society — covers "id doesn't exist," "id belongs to a different society" (tenant

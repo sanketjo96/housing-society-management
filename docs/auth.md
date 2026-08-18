@@ -234,7 +234,7 @@ model PasswordResetToken {
   *or reused* token is rejected" — reuse can only be detected if the used token is
   still there to check against, so consuming a token marks it, it doesn't remove it.
 - **Expires in 1 hour** (`RESET_TOKEN_TTL_MINUTES = 60`,
-  `src/services/password-reset.service.ts`) — deliberately much shorter than the
+  `src/features/auth/auth.service.ts`) — deliberately much shorter than the
   refresh token's 7 days. A picked default (not a stated requirement), same as the
   refresh token's TTL — reset links are a narrower attack window by convention
   (industry-typical range is 15 minutes–1 hour), so 1 hour errs toward the longer,
@@ -261,7 +261,7 @@ send and log the token instead."* That stub (`sendResetEmailStub()`, a bare
 - **`sendgrid`** — named as the documented alternative (`CLAUDE.md`'s tech-stack
   table) but not implemented; throws a clear error pointing at where to add it.
 
-`password-reset.service.ts`'s `requestPasswordReset(email): Promise<string | null>`
+`auth.service.ts`'s `requestPasswordReset(email): Promise<string | null>`
 signature didn't change — only what happens with the token inside it did. It now
 builds the actual link the resident clicks via `buildResetUrl()`: `APP_BASE_URL` (the
 public URL the frontend is reachable at) + the client's `/reset-password?token=...`

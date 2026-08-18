@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../../../src/app';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { createUser } from '../../../src/features/users/admin-users.service';
-import { requestPasswordReset } from '../../../src/features/auth/password-reset.service';
+import { requestPasswordReset } from '../../../src/features/auth/auth.service';
 
 describe('POST /api/auth/request-reset and POST /api/auth/reset', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

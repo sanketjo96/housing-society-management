@@ -1,13 +1,16 @@
 import type { Request, Response } from 'express';
-import { loginSchema } from './auth.schemas';
+import { loginSchema, requestResetSchema, resetSchema } from './auth.schemas';
 import {
   getCurrentUser,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
+  InvalidResetTokenError,
   login,
   logout,
   refreshAccessToken,
   REFRESH_TOKEN_TTL_DAYS,
+  requestPasswordReset,
+  resetPassword,
 } from './auth.service';
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
@@ -31,6 +34,8 @@ const refreshCookieOptions = {
   path: REFRESH_COOKIE_PATH,
   maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
 };
+
+// --- Session (login / refresh / logout / me) ---
 
 export async function loginHandler(req: Request, res: Response) {
   const parsed = loginSchema.safeParse(req.body);
@@ -91,4 +96,38 @@ export async function meHandler(req: Request, res: Response) {
     return;
   }
   res.status(200).json(user);
+}
+
+// --- Password reset ---
+
+export async function requestResetHandler(req: Request, res: Response) {
+  const parsed = requestResetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
+  // Deliberately identical response whether or not the email exists — same
+  // non-enumeration principle as login (Task 2.2).
+  await requestPasswordReset(parsed.data.email);
+  res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+}
+
+export async function resetHandler(req: Request, res: Response) {
+  const parsed = resetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    await resetPassword(parsed.data.token, parsed.data.newPassword);
+    res.status(200).json({ message: 'Password reset successfully.' });
+  } catch (err) {
+    if (err instanceof InvalidResetTokenError) {
+      res.status(401).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 }
