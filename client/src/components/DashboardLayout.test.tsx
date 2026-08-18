@@ -136,35 +136,30 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the admin nav links (Dashboard, Payment proofs, Billing plan) for an ADMIN', async () => {
+  it('shows only the admin nav links (Dashboard, Receipt Book, Society details, Billing plan) for an ADMIN', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument());
     expect(screen.queryByRole('link', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my details/i })).not.toBeInTheDocument();
-    // Flats and residents, Tenants, and Flat-wise dues are real routes but no longer
-    // sidebar nav items — reached only via dashboard tiles.
+    // Flats and residents, Tenants, Flat-wise dues, and Payment proofs are real
+    // routes but no longer sidebar nav items — reached only via dashboard tiles.
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^payment proofs$/i })).not.toBeInTheDocument();
   });
 
   it('the nav links are real top-level URLs, not sub-paths of /dashboard', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /payment proofs/i })).toHaveAttribute('href', '/payment-proofs');
+    await waitFor(() => expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /billing plan/i })).toHaveAttribute('href', '/settings/billing');
   });
 
-  it('switches to the Payment proofs page on click', async () => {
+  it('deep-links straight into Payment proofs from the URL, even though it has no nav link', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
-    renderApp();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByRole('link', { name: /payment proofs/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('link', { name: /payment proofs/i }));
+    renderApp('/payment-proofs');
 
     await waitFor(() => expect(screen.getByText(/no pending entries/i)).toBeInTheDocument());
   });

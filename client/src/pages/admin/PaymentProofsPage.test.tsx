@@ -41,7 +41,9 @@ const creditEntry = {
   status: 'PENDING' as const,
   amount: '550',
   note: 'Plumber repair for the common water tank',
-  fileUrl: null,
+  // A Credit's proof is mandatory at creation (unlike a Deposit's optional
+  // screenshot) — always has a fileUrl in practice.
+  fileUrl: 'credits/proof.jpg',
   createdAt: '2026-08-01T00:00:00.000Z',
   payer: { id: 'owner-2', name: 'Bob Owner', email: 'bob@example.com' },
   flat: { id: 'f2', wing: 'B', flatNumber: '201' },
@@ -74,15 +76,24 @@ describe('PaymentProofsPage', () => {
     expect(screen.getByText('₹2,000')).toBeInTheDocument();
   });
 
-  it('shows "No file attached" for an entry with no proof, instead of a View button', async () => {
+  it('excludes an entry with no proof attached from the queue entirely', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntryNoFile] });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
-    expect(screen.getByText(/no file attached/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /view proof/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/no pending entries/i)).toBeInTheDocument());
+    expect(screen.queryByText('A-101')).not.toBeInTheDocument();
+  });
+
+  it('lists a fileless entry alongside one with a proof, showing only the latter', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntry, depositEntryNoFile] });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('₹2,000')).toBeInTheDocument());
+    expect(screen.queryByText('₹500')).not.toBeInTheDocument();
   });
 
   it('shows a Type column distinguishing Deposit from Credit rows, and a Credit row\'s required reason note', async () => {
@@ -95,8 +106,6 @@ describe('PaymentProofsPage', () => {
     expect(screen.getByText('Deposit')).toBeInTheDocument();
     expect(screen.getByText('Credit')).toBeInTheDocument();
     expect(screen.getByText('Plumber repair for the common water tank')).toBeInTheDocument();
-    // A Credit row has no file — same "No file attached" treatment as a fileless Deposit.
-    expect(screen.getByText(/no file attached/i)).toBeInTheDocument();
   });
 
   it('shows an empty state when there is nothing pending', async () => {
@@ -257,5 +266,43 @@ describe('PaymentProofsPage', () => {
     await user.click(downloadButton);
 
     await waitFor(() => expect(window.open).toHaveBeenCalledWith('blob:fake-url', '_blank'));
+  });
+
+  it('the Approved tab excludes a fileless entry (e.g. manually marked paid), same as Pending', async () => {
+    const manuallyPaidEntry = { ...approvedEntry, id: 'entry-5', fileUrl: null };
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('status=APPROVED')) {
+        return Promise.resolve({ ok: true, json: async () => [approvedEntry, manuallyPaidEntry] });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('tab', { name: /approved/i }));
+
+    await waitFor(() => expect(screen.getByText('₹2,000')).toBeInTheDocument());
+    expect(screen.queryByText(/no file attached/i)).not.toBeInTheDocument();
+  });
+
+  it('the Rejected tab still shows a fileless entry, unlike Pending and Approved', async () => {
+    const rejectedNoFile = { ...depositEntryNoFile, id: 'entry-6', status: 'REJECTED' as const };
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('status=REJECTED')) {
+        return Promise.resolve({ ok: true, json: async () => [rejectedNoFile] });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('tab', { name: /rejected/i }));
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    expect(screen.getByText(/no file attached/i)).toBeInTheDocument();
   });
 });

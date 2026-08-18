@@ -53,7 +53,10 @@ function mockFetch(overrides: Partial<{ pendingProofsCount: number }> = {}) {
     }
     if (url.includes('/api/admin/ledger-entries')) {
       const count = overrides.pendingProofsCount ?? 3;
-      return Promise.resolve({ ok: true, json: async () => Array.from({ length: count }, (_, i) => ({ id: `p${i}` })) });
+      return Promise.resolve({
+        ok: true,
+        json: async () => Array.from({ length: count }, (_, i) => ({ id: `p${i}`, fileUrl: `proofs/p${i}.jpg` })),
+      });
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
@@ -91,6 +94,32 @@ describe('AdminDashboardPage', () => {
     renderPage();
 
     const link = await screen.findByRole('link', { name: /3 payment proofs pending review/i });
+    expect(link).toHaveAttribute('href', '/payment-proofs');
+  });
+
+  it('excludes fileless entries (e.g. manually marked paid) from the pending proofs count', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/admin/dashboard/summary')) {
+        return Promise.resolve({ ok: true, json: async () => summary });
+      }
+      if (url.includes('/api/admin/dashboard/flat-dues')) {
+        return Promise.resolve({ ok: true, json: async () => flatDues });
+      }
+      if (url.includes('/api/admin/ledger-entries')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            { id: 'p1', fileUrl: 'proofs/p1.jpg' },
+            { id: 'p2', fileUrl: null },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    renderPage();
+
+    const link = await screen.findByRole('link', { name: /1 payment proof pending review/i });
     expect(link).toHaveAttribute('href', '/payment-proofs');
   });
 

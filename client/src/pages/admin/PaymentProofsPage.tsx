@@ -37,7 +37,10 @@ async function fetchLedgerEntries(status: LedgerEntryStatus): Promise<LedgerEntr
 // Owns just the "View proof" button's own error state — split out from the row so
 // each column's cell renderer is a small, independently-stateful component rather
 // than one component owning an entire <tr> (that shape doesn't fit TanStack Table's
-// per-cell rendering model, see DataTable.tsx).
+// per-cell rendering model, see DataTable.tsx). A fileless row is only guaranteed
+// impossible on the Pending tab (filtered in PaymentProofsPage below) — Approved and
+// Rejected are unfiltered historical records, so a manually-marked-paid entry can
+// still reach here with no file.
 function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean }) {
   const [viewError, setViewError] = useState<string | null>(null);
 
@@ -188,10 +191,21 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
 
 export function PaymentProofsPage() {
   const [status, setStatus] = useState<LedgerEntryStatus>('PENDING');
-  const { data, isLoading, isError } = useQuery({
+  const { data: fetched, isLoading, isError } = useQuery({
     queryKey: ['admin-ledger-entries', status],
     queryFn: () => fetchLedgerEntries(status),
   });
+
+  // Pending and Approved both only show entries with an actual proof attached — a
+  // manually-marked-paid entry (no screenshot) or a Deposit submitted through the
+  // lower-level, no-file-required primitive has nothing to review/display here, so
+  // it's excluded rather than shown with a "No file attached" placeholder. Rejected
+  // stays unfiltered — every rejected submission is worth keeping visible regardless
+  // of whether it had a proof, since rejection itself doesn't hinge on that.
+  const data = useMemo(
+    () => (status === 'REJECTED' ? fetched : fetched?.filter((e) => e.fileUrl)),
+    [fetched, status],
+  );
 
   const columns = useMemo<ColumnDef<LedgerEntryListItem, unknown>[]>(
     () => [

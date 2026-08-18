@@ -22,7 +22,7 @@ interface FlatDues {
 }
 
 interface PendingProofsResponse {
-  length: number;
+  fileUrl: string | null;
 }
 
 async function fetchSummary(): Promise<DashboardSummary> {
@@ -37,11 +37,13 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
   return res.json();
 }
 
+// Counts only entries with a proof attached — same criterion PaymentProofsPage
+// itself filters by, so this tile's count and the page it links to never disagree.
 async function fetchPendingProofsCount(): Promise<number> {
   const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
   if (!res.ok) throw new Error('Could not load pending proofs.');
   const body = (await res.json()) as PendingProofsResponse[] | PendingProofsResponse;
-  return Array.isArray(body) ? body.length : 0;
+  return Array.isArray(body) ? body.filter((e) => e.fileUrl).length : 0;
 }
 
 function SummaryCard({

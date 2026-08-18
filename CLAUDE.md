@@ -715,7 +715,54 @@ nav item are removed; `settings-service.ts`, `society-settings.schemas.ts`, and
 `society-settings-shared.ts` (server) are untouched. Full contract:
 `docs/receipts.md`'s "Addendum (2026-08-18, same day)" section.
 
-### Addition (2026-08-12): bank-transfer fallback for societies without a UPI VPA
+### Addition (2026-08-18, same day): Payment Proofs dashboard-only + proof-filtered; Receipt Book stays the complete register
+
+Confirmed, two-part change to `PaymentProofsPage.tsx` — settled after a real
+discrepancy investigation against the live "Pukharaj Soc F Building" data (see
+below), not a guess.
+
+**Dashboard-only access.** `/payment-proofs` is no longer a sidebar nav item
+(`DashboardLayout.tsx`) — same treatment as `/flats`/`/tenants`/`/flat-dues`,
+reached only via the "N payment proofs pending review" tile on
+`AdminDashboardPage.tsx`. Still a real, deep-linkable route.
+
+**Pending and Approved tabs only show entries with an actual proof attached**
+(`fileUrl` non-null) — a manually-marked-paid entry (`manualDeposit`, cash/bank
+transfer, no screenshot by design) or a Deposit submitted through the lower-level
+no-file-required primitive has nothing to review/display, so it's excluded rather
+than shown as "No file attached". **Rejected stays unfiltered** — a rejected
+submission is worth keeping visible regardless of whether it had a proof.
+`AdminDashboardPage.tsx`'s pending-count tile applies the same `fileUrl` filter, so
+the tile's number and the page it links to never disagree.
+
+**Receipt Book is deliberately NOT filtered the same way, and must never be** — it
+is the complete register of every issued `Receipt`, including `manualDeposit`'s
+(which legitimately have no proof; a cash payment still gets a real receipt). This
+was checked directly against production data, which briefly showed a real
+discrepancy: `approvedWithProof` (8) vs. actual `Receipt` rows (6) for one live
+society. Root cause: 2 approved entries (a Deposit and a Credit) had a proof
+attached but were approved on 2026-08-09, *before* the Receipt Generation &
+Approval Workflow shipped (2026-08-11) — no receipt-issuing code existed yet at
+that moment, so no `Receipt` row was ever created for them, and per the existing
+"never backfilled" rule (2026-08-11 section, above), none ever will be. Both were
+deleted at the admin's explicit request (confirmed they understood this raises the
+affected flats' Outstanding by the deleted amounts), logged via a new
+`DELETE_LEGACY_UNRECEIPTED_ENTRY` `AuditLog` action for traceability — 27 further
+legacy entries with no proof and no receipt from the same pre-2026-08-11 window
+were left untouched (out of scope for that cleanup). After the deletion,
+`approvedWithProof` and `Receipt` count matched exactly (6 = 6) for that society —
+confirming the *rule* (proof-having and receipt-having coincide for everything
+approved since 2026-08-11) rather than the two figures being independently
+computed and coincidentally equal.
+
+**The general lesson, not just this one cleanup**: "entries with proof" and
+"entries with a receipt" are two different questions that happen to mostly
+overlap going forward (every approval since 2026-08-11 issues a receipt
+regardless of proof) — they are not the same set by definition, and a future
+`manualDeposit` (proof-less, but receipted) will always appear in Receipt Book
+without appearing in Payment Proofs' Approved tab. That is expected, not a bug to
+chase — Approved answers "what can I review a screenshot for," Receipt Book
+answers "what was ever collected."
 
 Confirmed: not every society can accept UPI (some collection accounts are
 UPI-less bank accounts only), so `Society.upiVpa` — required since the Phase 1

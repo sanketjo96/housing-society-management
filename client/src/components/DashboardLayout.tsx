@@ -1,4 +1,4 @@
-import { BookText, Building2, LayoutGrid, ReceiptText, Wallet, BookOpen, User } from 'lucide-react';
+import { BookText, Building2, LayoutGrid, Wallet, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavItem } from './DashboardShell';
@@ -12,14 +12,14 @@ import { DashboardShell, type NavItem } from './DashboardShell';
 // their own top-level URLs (see App.tsx) needs exactly one place that still knows
 // "which nav items for which role" — this file is that place; it owns no routing
 // of its own beyond rendering the matched child via <Outlet/>.
-// '/flats', '/tenants', and '/flat-dues' are deliberately not here — all three are
-// still real, admin-only routes (App.tsx), but reached only by clicking the
-// corresponding tile on the dashboard (AdminDashboardPage: Total Owners/Total Flats →
-// /flats, Total Tenants → /tenants, Maintenance Outstanding Total → /flat-dues), not
-// via the sidebar.
+// '/flats', '/tenants', '/flat-dues', and '/payment-proofs' are deliberately not
+// here — all four are still real, admin-only routes (App.tsx), but reached only by
+// clicking the corresponding tile on the dashboard (AdminDashboardPage: Total
+// Owners/Total Flats → /flats, Total Tenants → /tenants, Maintenance Outstanding
+// Total → /flat-dues, the "N payment proofs pending review" widget →
+// /payment-proofs), not via the sidebar.
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/payment-proofs', label: 'Payment proofs', icon: ReceiptText },
   { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
   { to: '/settings/society', label: 'Society details', icon: Building2 },
   { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
