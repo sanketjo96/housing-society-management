@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { afterAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
+import { createUser } from '../../../src/features/users/admin/admin-users-service';
 import { InvalidCredentialsError, login } from '../../../src/features/auth/auth.service';
 
 describe('login service', () => {

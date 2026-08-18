@@ -1,9 +1,9 @@
 import bcrypt from 'bcrypt';
-import type { Role } from '../../infrastructure/prisma/generated/client';
-import { prisma } from '../../infrastructure/prisma/client';
-import { DuplicateFieldError } from '../../shared/errors/errors';
-import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
-import { scopedWhere } from '../../shared/security/tenant-scope';
+import type { Role } from '../../../infrastructure/prisma/generated/client';
+import { prisma } from '../../../infrastructure/prisma/client';
+import { DuplicateFieldError } from '../../../shared/errors/errors';
+import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
+import { scopedWhere } from '../../../shared/security/tenant-scope';
 
 // Re-exported for backward compatibility — existing imports (controllers, tests)
 // reference this module directly; the class itself now lives in lib/errors.ts since

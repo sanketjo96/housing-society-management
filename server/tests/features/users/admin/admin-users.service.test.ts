@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import { afterAll, describe, expect, it } from 'vitest';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser, DuplicateFieldError } from '../../../src/features/users/admin-users.service';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser, DuplicateFieldError } from '../../../../src/features/users/admin/admin-users-service';
 
 // Unlike tests/features/admin-users.test.ts, this calls the service directly — no HTTP,
 // no supertest. This is the concrete payoff of the route/controller/service split:

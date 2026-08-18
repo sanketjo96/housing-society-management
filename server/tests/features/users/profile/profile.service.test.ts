@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DuplicateFieldError } from '../../../src/shared/errors/errors';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
-import { updateOwnProfile } from '../../../src/features/users/profile.service';
+import { DuplicateFieldError } from '../../../../src/shared/errors/errors';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin/admin-users-service';
+import { updateOwnProfile } from '../../../../src/features/users/profile/profile-service';
 
 describe('profile service — updateOwnProfile', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

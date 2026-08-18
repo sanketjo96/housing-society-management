@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { createUser, DuplicateFieldError, getUserById } from './admin-users.service';
-import { createUserSchema } from './users.schemas';
+import { createUser, DuplicateFieldError, getUserById } from './admin-users-service';
+import { createUserSchema } from './admin-users-schemas';
 
 // societyId is deliberately NOT accepted from the client (Phase 9 security-audit
 // fix, 2026-08-12) — it was previously read straight from the request body and

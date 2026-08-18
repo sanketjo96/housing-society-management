@@ -2,7 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../../../../src/app';
 import { prisma } from '../../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../../src/features/users/admin-users.service';
+import { createUser } from '../../../../src/features/users/admin/admin-users-service';
 import { login } from '../../../../src/features/auth/auth.service';
 
 describe('POST /api/admin/flats/import', () => {

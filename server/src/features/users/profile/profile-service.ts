@@ -1,6 +1,6 @@
-import { prisma } from '../../infrastructure/prisma/client';
-import { DuplicateFieldError } from '../../shared/errors/errors';
-import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
+import { prisma } from '../../../infrastructure/prisma/client';
+import { DuplicateFieldError } from '../../../shared/errors/errors';
+import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
 
 export interface UpdateOwnProfileInput {
   name?: string;

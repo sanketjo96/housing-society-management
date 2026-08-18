@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DuplicateFieldError } from '../../../../src/shared/errors/errors';
 import { prisma } from '../../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../../src/features/users/admin-users.service';
+import { createUser } from '../../../../src/features/users/admin/admin-users-service';
 import {
   ConflictingRoleError,
   createFlat,

@@ -8,7 +8,7 @@ import { prisma } from '../../../infrastructure/prisma/client';
 import { DuplicateFieldError } from '../../../shared/errors/errors';
 import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
 import { scopedWhere } from '../../../shared/security/tenant-scope';
-import { createUser } from '../../users/admin-users.service';
+import { createUser } from '../../users/admin/admin-users-service';
 import { requestPasswordReset } from '../../auth/auth.service';
 import {
   ConflictingRoleError,

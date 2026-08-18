@@ -1,4 +1,4 @@
-// OpenAPI docs for ./profile.route.ts — see auth/auth.openapi.ts's header comment for
+// OpenAPI docs for ./profile-route.ts — see auth/auth.openapi.ts's header comment for
 // why these live in a sibling file rather than inline above each route.
 export {};
 

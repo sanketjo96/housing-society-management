@@ -61,7 +61,7 @@ export async function bulkImportFlatsHandler(req: Request, res: Response) {
 }
 
 export async function createFlatHandler(req: Request, res: Response) {
-  // See admin-users.controller.ts's getUserHandler for why this guards against a
+  // See admin-users-controller.ts's getUserHandler for why this guards against a
   // future route-wiring mistake even though requireRole always sets req.user today.
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

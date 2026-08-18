@@ -14,13 +14,13 @@ import 'express-async-errors';
 import { errorHandler } from './middleware/error-handler';
 import { adminDashboardRouter } from './features/admin-dashboard/admin-dashboard.route';
 import { adminLedgerRouter } from './features/ledger/admin/admin-ledger-route';
-import { adminUsersRouter } from './features/users/admin-users.route';
+import { adminUsersRouter } from './features/users/admin/admin-users-route';
 import { authRouter } from './features/auth/auth.route';
 import { adminFlatsRouter } from './features/flats/admin/admin-flats-route';
 import { residentFlatsRouter } from './features/flats/resident/resident-flats-route';
 import { residentLedgerRouter } from './features/ledger/resident/resident-ledger-route';
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
-import { profileRouter } from './features/users/profile.route';
+import { profileRouter } from './features/users/profile/profile-route';
 import { societySettingsRouter } from './features/society-settings/society-settings.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 

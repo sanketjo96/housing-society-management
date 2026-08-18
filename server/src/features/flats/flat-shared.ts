@@ -6,7 +6,7 @@ import { randomBytes } from 'crypto';
 import type { Role } from '../../infrastructure/prisma/generated/client';
 import { prisma } from '../../infrastructure/prisma/client';
 import { scopedWhere } from '../../shared/security/tenant-scope';
-import { createUser } from '../users/admin-users.service';
+import { createUser } from '../users/admin/admin-users-service';
 import { requestPasswordReset } from '../auth/auth.service';
 
 // Thrown when an email supplied for an owner/tenant contact field already belongs to a
@@ -44,7 +44,7 @@ export const FLAT_WITH_RESIDENTS_INCLUDE = {
   currentTenant: { select: { id: true, name: true, email: true, phone: true } },
 } as const;
 
-// Scoped to the caller's own society (Task 2.6), same as admin-users.service.ts's
+// Scoped to the caller's own society (Task 2.6), same as admin-users-service.ts's
 // getUserById — a flat id from a different society returns null, indistinguishable
 // from an id that doesn't exist at all.
 export async function getFlatById(id: string, societyId: string) {
