@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../../../src/app';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { createUser } from '../../../src/features/users/admin-users.service';
-import { createFlat } from '../../../src/features/flats/flats.service';
+import { createFlat } from '../../../src/features/flats/admin/onboarding.service';
 import { login } from '../../../src/features/auth/auth.service';
 
 describe('/api/admin/dashboard/*', () => {

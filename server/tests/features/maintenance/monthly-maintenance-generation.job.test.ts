@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createFlat } from '../../../src/features/flats/flats.service';
+import { createFlat } from '../../../src/features/flats/admin/onboarding.service';
 import { runMonthlyMaintenanceGeneration } from '../../../src/jobs/monthly-maintenance-generation.job';
 
 // A distinctive, never-real period ('2099-01') so this test's records can be

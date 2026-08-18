@@ -7,7 +7,7 @@ import {
   createDeposit,
   createCredit,
 } from '../../../src/features/ledger/ledger.service';
-import { createFlat } from '../../../src/features/flats/flats.service';
+import { createFlat } from '../../../src/features/flats/admin/onboarding.service';
 import {
   buildReceiptData,
   buildReceiptNumber,

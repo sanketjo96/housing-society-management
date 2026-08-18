@@ -1,9 +1,9 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app } from '../../../src/app';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
-import { login } from '../../../src/features/auth/auth.service';
+import { app } from '../../../../src/app';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { login } from '../../../../src/features/auth/auth.service';
 
 // Owner is a contact field (name/email), not a pre-existing ownerId — createFlat
 // find-or-creates the account inline (CLAUDE.md's "Addition (2026-08-06)").

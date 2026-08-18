@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app } from '../../../src/app';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
-import { login } from '../../../src/features/auth/auth.service';
+import { app } from '../../../../src/app';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { login } from '../../../../src/features/auth/auth.service';
 
-describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
+describe('POST/DELETE /api/admin/flats/:id/tenant — tenant scoping', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyAId: string;
   let societyBId: string;
@@ -13,6 +13,7 @@ describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
   const createdUserIds: string[] = [];
   const createdFlatIds: string[] = [];
   let flatInSocietyBId: string;
+  let tenantInSocietyBId: string;
 
   beforeAll(async () => {
     const societyA = await prisma.society.create({
@@ -28,7 +29,7 @@ describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
     const adminAPassword = 'admin-a-password-123';
     const adminA = await createUser({
       name: 'Admin of Society A',
-      email: `flats-admin-a-${suffix}@example.com`,
+      email: `tenant-scope-admin-a-${suffix}@example.com`,
       password: adminAPassword,
       role: 'ADMIN',
       societyId: societyAId,
@@ -38,12 +39,22 @@ describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
 
     const ownerB = await createUser({
       name: 'Owner of Society B',
-      email: `flats-owner-b-${suffix}@example.com`,
+      email: `tenant-scope-owner-b-${suffix}@example.com`,
       password: 'password-123',
       role: 'OWNER',
       societyId: societyBId,
     });
     createdUserIds.push(ownerB.id);
+
+    const tenantB = await createUser({
+      name: 'Tenant of Society B',
+      email: `tenant-scope-tenant-b-${suffix}@example.com`,
+      password: 'password-123',
+      role: 'TENANT',
+      societyId: societyBId,
+    });
+    createdUserIds.push(tenantB.id);
+    tenantInSocietyBId = tenantB.id;
 
     const flatB = await prisma.flat.create({
       data: {
@@ -59,6 +70,7 @@ describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
   });
 
   afterAll(async () => {
+    await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -66,14 +78,23 @@ describe('PATCH /api/admin/flats/:id — tenant scoping', () => {
     await prisma.$disconnect();
   });
 
-  it('an admin from Society A gets 404 patching a flat that belongs to Society B (cross-society leak)', async () => {
+  it('an admin from Society A gets 404 assigning a tenant to a flat that belongs to Society B', async () => {
     const res = await request(app)
-      .patch(`/api/admin/flats/${flatInSocietyBId}`)
+      .post(`/api/admin/flats/${flatInSocietyBId}/tenant`)
       .set('Authorization', `Bearer ${adminAToken}`)
-      .send({ baseRate: 9999 });
+      .send({ tenantId: tenantInSocietyBId });
     expect(res.status).toBe(404);
 
-    const stored = await prisma.flat.findUniqueOrThrow({ where: { id: flatInSocietyBId } });
-    expect(Number(stored.baseRate)).toBe(1000);
+    const occupancy = await prisma.occupancyChange.findFirst({
+      where: { flatId: flatInSocietyBId },
+    });
+    expect(occupancy).toBeNull();
+  });
+
+  it('an admin from Society A gets 404 removing the tenant from a flat that belongs to Society B', async () => {
+    const res = await request(app)
+      .delete(`/api/admin/flats/${flatInSocietyBId}/tenant`)
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(res.status).toBe(404);
   });
 });

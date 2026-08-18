@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createFlat } from '../../../src/features/flats/flats.service';
+import { createFlat } from '../../../src/features/flats/admin/onboarding.service';
 import {
   approveLedgerEntry,
   balancesFromRows,

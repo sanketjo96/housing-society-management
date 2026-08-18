@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { createFlat } from '../../../../src/features/flats/admin/onboarding.service';
 import {
-  createFlat,
   getMyFlat,
   NoCurrentTenantError,
   removeOwnTenant,
   upsertOwnTenant,
-} from '../../../src/features/flats/flats.service';
+} from '../../../../src/features/flats/resident/service';
 
 describe('flats service — resident self-service', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

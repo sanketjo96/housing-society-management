@@ -1,23 +1,23 @@
 import path from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
 
-// Each endpoint's `@openapi` JSDoc block lives in a `*.openapi.ts` file sibling to the
-// `*.route.ts` file it documents (e.g. features/auth/auth.openapi.ts next to
-// features/auth/auth.route.ts) — a separate file rather than inline above each route
-// registration, so the route files themselves stay short and readable. swagger-jsdoc
-// only needs to find the comment blocks somewhere in a matched file, not attached to
-// specific code. Matches both `.ts` (dev, via `tsx watch`) and the compiled `.js`
-// (production, `node dist/server.js`) — swagger-jsdoc parses the raw file text, so
-// comments survive the TypeScript → JavaScript compile untouched.
+// Each endpoint's `@openapi` JSDoc block lives in an `openapi.ts` file sibling to the
+// `route.ts` file it documents — either `<feature>.openapi.ts` next to
+// `<feature>.route.ts` for a flat feature folder (e.g. features/auth/auth.openapi.ts),
+// or a bare `openapi.ts` next to `route.ts` inside a concern subfolder (e.g.
+// features/flats/admin/openapi.ts) — a separate file rather than inline above each
+// route registration, so the route files themselves stay short and readable.
+// swagger-jsdoc only needs to find the comment blocks somewhere in a matched file, not
+// attached to specific code, so both naming shapes are matched here. Matches both
+// `.ts` (dev, via `tsx watch`) and the compiled `.js` (production, `node
+// dist/server.js`) — swagger-jsdoc parses the raw file text, so comments survive the
+// TypeScript → JavaScript compile untouched.
 const isCompiled = __filename.endsWith('.js');
-const routeGlob = path.join(
-  __dirname,
-  '..',
-  '..',
-  'features',
-  '**',
-  isCompiled ? '*.openapi.js' : '*.openapi.ts',
-);
+const ext = isCompiled ? 'js' : 'ts';
+const routeGlobs = [
+  path.join(__dirname, '..', '..', 'features', '**', `*.openapi.${ext}`),
+  path.join(__dirname, '..', '..', 'features', '**', `openapi.${ext}`),
+];
 
 const definition: swaggerJsdoc.Options['definition'] = {
   openapi: '3.0.3',
@@ -261,5 +261,5 @@ const definition: swaggerJsdoc.Options['definition'] = {
 
 export const openapiSpec = swaggerJsdoc({
   definition,
-  apis: [routeGlob],
+  apis: routeGlobs,
 });

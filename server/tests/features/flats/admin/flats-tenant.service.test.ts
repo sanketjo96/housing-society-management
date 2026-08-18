@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { createFlat } from '../../../../src/features/flats/admin/onboarding.service';
 import {
   assignTenant,
-  createFlat,
   InvalidTenantError,
   NoCurrentTenantError,
   removeTenant,
   TenantAlreadyAssignedError,
-} from '../../../src/features/flats/flats.service';
+} from '../../../../src/features/flats/admin/tenancy.service';
 
 // Unlike tests/features/flats-tenant.test.ts, this calls the service directly — no
 // HTTP (see tests/features/admin-users.service.test.ts for the same rationale).

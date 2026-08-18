@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
 import { creditSchema, ledgerAmountSchema, ledgerYearQuerySchema } from './ledger.schemas';
-import { getMyFlat } from '../flats/resident-flat.service';
+import { getMyFlat } from '../flats/resident/service';
 import {
   cancelPaymentIntent,
   createCredit,

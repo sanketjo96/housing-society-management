@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DuplicateFieldError } from '../../../src/shared/errors/errors';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
+import { DuplicateFieldError } from '../../../../src/shared/errors/errors';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
 import {
   ConflictingRoleError,
   createFlat,
   updateFlat,
-} from '../../../src/features/flats/flats.service';
+} from '../../../../src/features/flats/admin/onboarding.service';
 
 // Unlike tests/features/flats.test.ts, this calls the service directly — no HTTP, no
 // supertest (see tests/features/admin-users.service.test.ts for the same rationale).

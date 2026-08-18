@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createFlat, listFlats } from '../../../src/features/flats/flats.service';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createFlat, listFlats } from '../../../../src/features/flats/admin/onboarding.service';
 
 describe('flats service — listFlats', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

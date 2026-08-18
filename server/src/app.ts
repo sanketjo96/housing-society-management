@@ -16,10 +16,11 @@ import { adminDashboardRouter } from './features/admin-dashboard/admin-dashboard
 import { adminLedgerRouter } from './features/ledger/admin-ledger.route';
 import { adminUsersRouter } from './features/users/admin-users.route';
 import { authRouter } from './features/auth/auth.route';
-import { flatsRouter } from './features/flats/flats.route';
+import { adminFlatsRouter } from './features/flats/admin/route';
+import { residentFlatsRouter } from './features/flats/resident/route';
 import { ledgerRouter } from './features/ledger/ledger.route';
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
-import { meRouter } from './features/flats/me.route';
+import { profileRouter } from './features/users/profile.route';
 import { societySettingsRouter } from './features/society-settings/society-settings.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 
@@ -69,10 +70,11 @@ app.use(adminDashboardRouter);
 app.use(adminLedgerRouter);
 app.use(adminUsersRouter);
 app.use(authRouter);
-app.use(flatsRouter);
+app.use(adminFlatsRouter);
+app.use(residentFlatsRouter);
 app.use(ledgerRouter);
 app.use(maintenanceRecordsRouter);
-app.use(meRouter);
+app.use(profileRouter);
 app.use(societySettingsRouter);
 
 // Must be registered last (Express's 4-arg-signature error-middleware convention).

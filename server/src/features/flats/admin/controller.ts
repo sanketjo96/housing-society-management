@@ -1,18 +1,18 @@
 import type { Request, Response } from 'express';
-import { DuplicateFieldError } from '../../shared/errors/errors';
+import { DuplicateFieldError } from '../../../shared/errors/errors';
 import {
   assignTenantSchema,
   bulkImportSchema,
   createFlatSchema,
   updateFlatSchema,
-} from './flats.schemas';
+} from './schemas';
 import {
   bulkImportFlats,
   ConflictingRoleError,
   createFlat,
   listFlats,
   updateFlat,
-} from './flat-onboarding.service';
+} from './onboarding.service';
 import {
   assignTenant,
   InvalidTenantError,

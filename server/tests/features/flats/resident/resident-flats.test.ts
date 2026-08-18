@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app } from '../../../src/app';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
-import { login } from '../../../src/features/auth/auth.service';
+import { app } from '../../../../src/app';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { login } from '../../../../src/features/auth/auth.service';
 
-describe('/api/me endpoints', () => {
+describe('/api/me/flat endpoints', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
   let adminToken: string;
@@ -87,30 +87,6 @@ describe('/api/me endpoints', () => {
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.society.delete({ where: { id: societyId } });
     await prisma.$disconnect();
-  });
-
-  describe('PATCH /api/me', () => {
-    it('rejects a request with no access token (401)', async () => {
-      const res = await request(app).patch('/api/me').send({ name: 'X' });
-      expect(res.status).toBe(401);
-    });
-
-    it('updates the caller’s own profile given a valid token, any role', async () => {
-      const res = await request(app)
-        .patch('/api/me')
-        .set('Authorization', `Bearer ${tenantToken}`)
-        .send({ name: 'Tenant Updated', phone: '+919000000099' });
-      expect(res.status).toBe(200);
-      expect(res.body.name).toBe('Tenant Updated');
-    });
-
-    it('rejects invalid input with a 400', async () => {
-      const res = await request(app)
-        .patch('/api/me')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ email: 'not-an-email' });
-      expect(res.status).toBe(400);
-    });
   });
 
   describe('GET /api/me/flat', () => {

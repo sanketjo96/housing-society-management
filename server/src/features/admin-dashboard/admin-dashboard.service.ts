@@ -5,7 +5,7 @@ import {
   isOverdue,
 } from '../../shared/billing/escalation';
 import { balancesFromRows, computeRecordSettlements } from '../ledger/balance.service';
-import { listFlats } from '../flats/flat-onboarding.service';
+import { listFlats } from '../flats/admin/onboarding.service';
 
 type FlatWithResidents = Awaited<ReturnType<typeof listFlats>>[number];
 
