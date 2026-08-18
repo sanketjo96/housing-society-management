@@ -4,7 +4,7 @@ import {
   removeMyTenantHandler,
   updateMyFlatHandler,
   upsertMyTenantHandler,
-} from './controller';
+} from './resident-flats-controller';
 import { requireRole } from '../../../middleware/require-role';
 
 export const residentFlatsRouter = Router();

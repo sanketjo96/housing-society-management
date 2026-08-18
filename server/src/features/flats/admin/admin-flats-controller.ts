@@ -5,21 +5,21 @@ import {
   bulkImportSchema,
   createFlatSchema,
   updateFlatSchema,
-} from './schemas';
+} from './admin-flats-schemas';
 import {
   bulkImportFlats,
   ConflictingRoleError,
   createFlat,
   listFlats,
   updateFlat,
-} from './onboarding.service';
+} from './admin-flats-onboarding-service';
 import {
   assignTenant,
   InvalidTenantError,
   NoCurrentTenantError,
   removeTenant,
   TenantAlreadyAssignedError,
-} from './tenancy.service';
+} from './admin-flats-tenancy-service';
 
 // Owner/tenant are contact fields (name/phone/email), not ids — createFlat/updateFlat
 // find-or-create the underlying User accounts (see CLAUDE.md's "Addition

@@ -15,7 +15,7 @@ import {
   FLAT_WITH_RESIDENTS_INCLUDE,
   NoCurrentTenantError,
 } from '../flat-shared';
-import { updateFlat } from '../admin/onboarding.service';
+import { updateFlat } from '../admin/admin-flats-onboarding-service';
 
 // Re-exported so resident/controller.ts can pull everything it needs (including the
 // shared updateFlat/ConflictingRoleError) from this one module — the same "combined

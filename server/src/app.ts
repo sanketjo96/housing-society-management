@@ -16,8 +16,8 @@ import { adminDashboardRouter } from './features/admin-dashboard/admin-dashboard
 import { adminLedgerRouter } from './features/ledger/admin-ledger.route';
 import { adminUsersRouter } from './features/users/admin-users.route';
 import { authRouter } from './features/auth/auth.route';
-import { adminFlatsRouter } from './features/flats/admin/route';
-import { residentFlatsRouter } from './features/flats/resident/route';
+import { adminFlatsRouter } from './features/flats/admin/admin-flats-route';
+import { residentFlatsRouter } from './features/flats/resident/resident-flats-route';
 import { ledgerRouter } from './features/ledger/ledger.route';
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
 import { profileRouter } from './features/users/profile.route';

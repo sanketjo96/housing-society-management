@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { DuplicateFieldError } from '../../../shared/errors/errors';
-import { updateMyFlatSchema, upsertTenantSchema } from './schemas';
+import { updateMyFlatSchema, upsertTenantSchema } from './resident-flats-schemas';
 import {
   ConflictingRoleError,
   getMyFlat,
@@ -8,7 +8,7 @@ import {
   removeOwnTenant,
   updateFlat,
   upsertOwnTenant,
-} from './service';
+} from './resident-flats-service';
 
 // req.user.role is guaranteed OWNER or TENANT by requireRole on this route (see
 // ./route.ts) — ADMIN never reaches here, so there's no third case to handle.

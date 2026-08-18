@@ -6,7 +6,7 @@ import {
   listFlatsHandler,
   removeTenantHandler,
   updateFlatHandler,
-} from './controller';
+} from './admin-flats-controller';
 import { requireRole } from '../../../middleware/require-role';
 
 export const adminFlatsRouter = Router();

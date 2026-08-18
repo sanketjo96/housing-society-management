@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../../src/infrastructure/prisma/client';
-import { bulkImportFlats } from '../../../../src/features/flats/admin/onboarding.service';
+import { bulkImportFlats } from '../../../../src/features/flats/admin/admin-flats-onboarding-service';
 
 // Owner/tenant accounts are created inline by each row (see CLAUDE.md's "Addition
 // (2026-08-06)") — no pre-existing user needed, matching the admin UI's CSV import.

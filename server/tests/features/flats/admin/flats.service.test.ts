@@ -6,7 +6,7 @@ import {
   ConflictingRoleError,
   createFlat,
   updateFlat,
-} from '../../../../src/features/flats/admin/onboarding.service';
+} from '../../../../src/features/flats/admin/admin-flats-onboarding-service';
 
 // Unlike tests/features/flats.test.ts, this calls the service directly — no HTTP, no
 // supertest (see tests/features/admin-users.service.test.ts for the same rationale).
