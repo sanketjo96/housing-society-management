@@ -21,17 +21,20 @@ Other scripts:
 
 ## API docs (Swagger UI)
 
-Every endpoint is documented via `@openapi` JSDoc blocks directly above its route
-registration in the relevant `*.route.ts` file (`src/infrastructure/openapi/openapi.ts`
-assembles them into one spec with `swagger-jsdoc` at process startup — nothing to
-regenerate by hand). Served at **`/api/docs`**, mounted with no auth of its own
-(each documented endpoint still enforces its own real auth when actually called) —
-deliberately public, since it falls under nginx's existing `location /api/` proxy
-with no extra config, reachable from outside the VPS the same way the API itself is.
+Every endpoint is documented via `@openapi` JSDoc blocks in a `*.openapi.ts` file
+sibling to the `*.route.ts` file it describes (e.g. `features/auth/auth.openapi.ts`
+next to `features/auth/auth.route.ts`) — a separate file rather than inline above each
+route registration, so the route files themselves stay short and readable.
+`src/infrastructure/openapi/openapi.ts` assembles every `*.openapi.ts` file into one
+spec with `swagger-jsdoc` at process startup — nothing to regenerate by hand. Served
+at **`/api/docs`**, mounted with no auth of its own (each documented endpoint still
+enforces its own real auth when actually called) — deliberately public, since it
+falls under nginx's existing `location /api/` proxy with no extra config, reachable
+from outside the VPS the same way the API itself is.
 
-When adding or changing an endpoint, add/update its `@openapi` block in the same
-route file — docs live next to the route they describe, not in a separately
-maintained file that can silently drift out of sync.
+When adding or changing an endpoint, add/update its `@openapi` block in that sibling
+`*.openapi.ts` file — docs live next to the route they describe, not in one
+separately maintained file that can silently drift out of sync.
 
 ## What each config file does
 

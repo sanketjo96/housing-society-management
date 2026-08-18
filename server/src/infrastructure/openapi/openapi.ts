@@ -1,9 +1,12 @@
 import path from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
 
-// Route files carry the actual endpoint docs as `@openapi` JSDoc blocks, right next to
-// the route registrations they describe — see any `*.route.ts` file under
-// src/features/**. Matches both `.ts` (dev, via `tsx watch`) and the compiled `.js`
+// Each endpoint's `@openapi` JSDoc block lives in a `*.openapi.ts` file sibling to the
+// `*.route.ts` file it documents (e.g. features/auth/auth.openapi.ts next to
+// features/auth/auth.route.ts) — a separate file rather than inline above each route
+// registration, so the route files themselves stay short and readable. swagger-jsdoc
+// only needs to find the comment blocks somewhere in a matched file, not attached to
+// specific code. Matches both `.ts` (dev, via `tsx watch`) and the compiled `.js`
 // (production, `node dist/server.js`) — swagger-jsdoc parses the raw file text, so
 // comments survive the TypeScript → JavaScript compile untouched.
 const isCompiled = __filename.endsWith('.js');
@@ -13,7 +16,7 @@ const routeGlob = path.join(
   '..',
   'features',
   '**',
-  isCompiled ? '*.route.js' : '*.route.ts',
+  isCompiled ? '*.openapi.js' : '*.openapi.ts',
 );
 
 const definition: swaggerJsdoc.Options['definition'] = {
