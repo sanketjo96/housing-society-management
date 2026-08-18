@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
-import { ledgerListQuerySchema, manualDepositSchema, rejectLedgerSchema } from './ledger.schemas';
+import {
+  ledgerListQuerySchema,
+  manualDepositSchema,
+  rejectLedgerSchema,
+} from './admin-ledger-schemas';
 import {
   approveLedgerEntry,
   InvalidAmountError,
@@ -7,8 +11,8 @@ import {
   listPendingLedgerEntries,
   manualDeposit,
   rejectLedgerEntry,
-} from './ledger-entry.service';
-import { previewReceiptPdf } from '../receipts/receipt.service';
+} from './admin-ledger-service';
+import { previewReceiptPdf } from '../../receipts/receipt.service';
 
 export async function listLedgerEntriesHandler(req: Request, res: Response) {
   if (!req.user) {

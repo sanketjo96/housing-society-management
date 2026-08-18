@@ -2,11 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { createFlat } from '../../../src/features/flats/admin/admin-flats-onboarding-service';
 import {
-  approveLedgerEntry,
   balancesFromRows,
-  cancelPaymentIntent,
   computeFlatBalances,
   computeRecordSettlements,
+} from '../../../src/features/ledger/ledger-shared';
+import {
+  approveLedgerEntry,
+  LedgerEntryAlreadyReviewedError,
+  listPendingLedgerEntries,
+  manualDeposit,
+  rejectLedgerEntry,
+} from '../../../src/features/ledger/admin/admin-ledger-service';
+import {
+  cancelPaymentIntent,
   createCredit,
   createDeposit,
   createOrReplacePaymentIntent,
@@ -15,14 +23,10 @@ import {
   getOpenPaymentIntent,
   InvalidAmountError,
   InvalidDepositAmountError,
-  LedgerEntryAlreadyReviewedError,
-  listPendingLedgerEntries,
-  manualDeposit,
   NoOpenPaymentIntentError,
   PaymentMethodNotConfiguredError,
-  rejectLedgerEntry,
   submitPaymentIntent,
-} from '../../../src/features/ledger/ledger.service';
+} from '../../../src/features/ledger/resident/resident-ledger-service';
 
 const fakeProofFile = {
   buffer: Buffer.from('fake-image-bytes'),

@@ -1,4 +1,4 @@
-// OpenAPI docs for ledger.route.ts — see auth/auth.openapi.ts's header comment for why
+// OpenAPI docs for ./resident-ledger-route.ts — see auth/auth.openapi.ts's header comment for why
 // these live in a sibling file rather than inline above each route.
 export {};
 

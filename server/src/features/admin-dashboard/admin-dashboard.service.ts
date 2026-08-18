@@ -4,7 +4,7 @@ import {
   DEFAULT_GRACE_PERIOD_DAYS,
   isOverdue,
 } from '../../shared/billing/escalation';
-import { balancesFromRows, computeRecordSettlements } from '../ledger/balance.service';
+import { balancesFromRows, computeRecordSettlements } from '../ledger/ledger-shared';
 import { listFlats } from '../flats/admin/admin-flats-onboarding-service';
 
 type FlatWithResidents = Awaited<ReturnType<typeof listFlats>>[number];

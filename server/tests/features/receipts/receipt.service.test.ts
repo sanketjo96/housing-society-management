@@ -2,11 +2,8 @@ import { PDFParse } from 'pdf-parse';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { getStorageAdapter } from '../../../src/infrastructure/storage';
-import {
-  approveLedgerEntry,
-  createDeposit,
-  createCredit,
-} from '../../../src/features/ledger/ledger.service';
+import { approveLedgerEntry } from '../../../src/features/ledger/admin/admin-ledger-service';
+import { createCredit, createDeposit } from '../../../src/features/ledger/resident/resident-ledger-service';
 import { createFlat } from '../../../src/features/flats/admin/admin-flats-onboarding-service';
 import {
   buildReceiptData,

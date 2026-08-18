@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { creditSchema, ledgerAmountSchema, ledgerYearQuerySchema } from './ledger.schemas';
-import { getMyFlat } from '../flats/resident/resident-flats-service';
+import { creditSchema, ledgerAmountSchema, ledgerYearQuerySchema } from './resident-ledger-schemas';
+import { getMyFlat } from '../../flats/resident/resident-flats-service';
 import {
   cancelPaymentIntent,
   createCredit,
@@ -16,11 +16,11 @@ import {
   NoOpenPaymentIntentError,
   PaymentMethodNotConfiguredError,
   submitPaymentIntent,
-} from './ledger.service';
-import { getIssuedReceiptForViewing } from '../receipts/receipt.service';
+} from './resident-ledger-service';
+import { getIssuedReceiptForViewing } from '../../receipts/receipt.service';
 
 // Every handler here resolves "my flat" the same way — requireRole already guarantees
-// OWNER/TENANT (see ledger.route.ts), so there's no ADMIN case to handle.
+// OWNER/TENANT (see ./resident-ledger-route.ts), so there's no ADMIN case to handle.
 async function resolveMyFlatId(userId: string, societyId: string, role: 'OWNER' | 'TENANT') {
   const flat = await getMyFlat(userId, societyId, role);
   return flat?.id ?? null;

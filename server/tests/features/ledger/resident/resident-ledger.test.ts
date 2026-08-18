@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app } from '../../../src/app';
-import { prisma } from '../../../src/infrastructure/prisma/client';
-import { createUser } from '../../../src/features/users/admin-users.service';
-import { createFlat } from '../../../src/features/flats/admin/admin-flats-onboarding-service';
-import { login } from '../../../src/features/auth/auth.service';
-import { TINY_JPEG_BYTES } from '../../fixtures/tiny-files';
+import { app } from '../../../../src/app';
+import { prisma } from '../../../../src/infrastructure/prisma/client';
+import { createUser } from '../../../../src/features/users/admin-users.service';
+import { createFlat } from '../../../../src/features/flats/admin/admin-flats-onboarding-service';
+import { login } from '../../../../src/features/auth/auth.service';
+import { TINY_JPEG_BYTES } from '../../../fixtures/tiny-files';
 
 describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

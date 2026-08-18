@@ -5,8 +5,8 @@ import {
   manualDepositHandler,
   previewReceiptHandler,
   rejectLedgerEntryHandler,
-} from './admin-ledger.controller';
-import { requireRole } from '../../middleware/require-role';
+} from './admin-ledger-controller';
+import { requireRole } from '../../../middleware/require-role';
 
 export const adminLedgerRouter = Router();
 
@@ -17,7 +17,8 @@ adminLedgerRouter.get(
 );
 // Admin-only — the receipt preview is part of the approval workflow itself, not a
 // resident-facing view (unlike the issued-receipt download, GET
-// /api/ledger-entries/:id/receipt in ledger.route.ts, which is shared).
+// /api/ledger-entries/:id/receipt in ../resident/resident-ledger-route.ts, which is
+// shared).
 adminLedgerRouter.get(
   '/api/admin/ledger-entries/:id/receipt-preview',
   requireRole(['ADMIN']),
