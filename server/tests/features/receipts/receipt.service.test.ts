@@ -194,7 +194,7 @@ describe('receipt service', () => {
     });
 
     it('renders a preview PDF for a PENDING deposit, with no side effects', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 500 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 500 });
       const before = await prisma.receipt.count({
         where: { ledgerEntryId: (entry as { id: string }).id },
       });
@@ -218,7 +218,7 @@ describe('receipt service', () => {
     });
 
     it('throws LedgerEntryAlreadyReviewedError for a non-PENDING entry', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 300 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 300 });
       const approved = await approveLedgerEntry((entry as { id: string }).id, societyId, adminId);
       await expect(previewReceiptPdf(approved!.id, societyId)).rejects.toThrow(
         LedgerEntryAlreadyReviewedError,
@@ -226,7 +226,7 @@ describe('receipt service', () => {
     });
 
     it('preview and the eventually-issued receipt number match exactly (determinism)', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 250 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 250 });
       const entryId = (entry as { id: string }).id;
 
       const previewBuffer = await previewReceiptPdf(entryId, societyId);
@@ -242,7 +242,7 @@ describe('receipt service', () => {
 
   describe('getIssuedReceiptForViewing', () => {
     it('returns null when no Receipt row exists yet (e.g. still PENDING)', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 100 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 100 });
       const result = await getIssuedReceiptForViewing(
         (entry as { id: string }).id,
         ownerId,
@@ -253,7 +253,7 @@ describe('receipt service', () => {
     });
 
     it("lets the entry's own payer download their issued receipt", async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 150 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 150 });
       const entryId = (entry as { id: string }).id;
       await approveLedgerEntry(entryId, societyId, adminId);
 
@@ -265,7 +265,7 @@ describe('receipt service', () => {
     });
 
     it('lets an admin download any receipt in their society', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 175 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 175 });
       const entryId = (entry as { id: string }).id;
       await approveLedgerEntry(entryId, societyId, adminId);
 
@@ -274,7 +274,7 @@ describe('receipt service', () => {
     });
 
     it('throws ForbiddenLedgerEntryAccessError for a different resident', async () => {
-      const entry = await createDeposit(ownerId, flatId, societyId, { amount: 125 });
+      const entry = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 125 });
       const entryId = (entry as { id: string }).id;
       await approveLedgerEntry(entryId, societyId, adminId);
 
@@ -286,7 +286,7 @@ describe('receipt service', () => {
 
   describe('CREDIT receipts', () => {
     it('renders and issues a receipt for an approved Credit, using its note as purpose', async () => {
-      const entry = await createCredit(ownerId, flatId, societyId, {
+      const entry = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 400,
         note: 'Plumbing repair reimbursement',
         file: { buffer: Buffer.from('receipt-photo'), mimeType: 'image/png', extension: '.png' },

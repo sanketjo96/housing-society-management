@@ -49,6 +49,8 @@ async function notifyLedgerPaymentApproved(
 
 // Exported for reuse by ../../receipts/admin/admin-receipts-service.ts's listReceipts,
 // which needs the same payer/flat summary shape for its receipt-book rows.
+// `createdByType` is a plain scalar column (not listed here — `include` only takes
+// relations; every scalar, including createdByType, is returned automatically).
 export const LEDGER_ENTRY_LIST_INCLUDE = {
   payer: { select: { id: true, name: true, email: true } },
   flat: { select: { id: true, wing: true, flatNumber: true } },
@@ -223,6 +225,12 @@ export async function manualDeposit(
         note,
         reviewedById: adminId,
         reviewedAt: issuedAt,
+        // The admin is the creator here, not the resident being paid for — see
+        // CreatedByType's schema comment. This is exactly the distinction that
+        // makes a manualDeposit row identifiable without inferring it from `note`
+        // text or an AuditLog join.
+        createdById: adminId,
+        createdByType: 'ADMIN',
       },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });

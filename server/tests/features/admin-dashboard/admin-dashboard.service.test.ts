@@ -179,6 +179,8 @@ describe('admin-dashboard service', () => {
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
+          createdById: flatCRow.ownerId,
+          createdByType: 'OWNER',
         },
         {
           flatId: flatCId,
@@ -187,6 +189,8 @@ describe('admin-dashboard service', () => {
           status: 'PENDING',
           amount: 1200,
           note: 'Second deposit, still awaiting review',
+          createdById: flatCRow.ownerId,
+          createdByType: 'OWNER',
         },
         {
           flatId: flatDId,
@@ -195,6 +199,8 @@ describe('admin-dashboard service', () => {
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
+          createdById: flatDRow.ownerId,
+          createdByType: 'OWNER',
         },
         {
           flatId: flatEId,
@@ -204,6 +210,8 @@ describe('admin-dashboard service', () => {
           amount: 800,
           note: 'Repair cost settled against Jan',
           reviewedAt: new Date(),
+          createdById: flatERow.ownerId,
+          createdByType: 'OWNER',
         },
       ],
     });

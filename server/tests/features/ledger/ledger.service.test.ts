@@ -368,19 +368,19 @@ describe('ledger service', () => {
 
   describe('createDeposit', () => {
     it('rejects an amount of 0 or less', async () => {
-      await expect(createDeposit(ownerId, flatId, societyId, { amount: 0 })).rejects.toThrow(
+      await expect(createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 0 })).rejects.toThrow(
         InvalidDepositAmountError,
       );
     });
 
     it('rejects an amount greater than the current outstanding', async () => {
-      await expect(createDeposit(ownerId, flatId, societyId, { amount: 5000 })).rejects.toThrow(
+      await expect(createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 5000 })).rejects.toThrow(
         InvalidDepositAmountError,
       );
     });
 
     it('creates a PENDING deposit with no proof file required', async () => {
-      const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 500 });
+      const deposit = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 500 });
       expect(deposit.status).toBe('PENDING');
       expect(Number(deposit.amount)).toBe(500);
       expect(deposit.fileUrl).toBeNull();
@@ -393,7 +393,7 @@ describe('ledger service', () => {
 
   describe('approveLedgerEntry / rejectLedgerEntry', () => {
     it('approving a deposit reduces Outstanding by its amount', async () => {
-      const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 300 });
+      const deposit = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 300 });
       await approveLedgerEntry(deposit.id, societyId, adminId);
 
       const balances = await computeFlatBalances(flatId);
@@ -401,7 +401,7 @@ describe('ledger service', () => {
     });
 
     it('returns 409-worthy error on a second review of the same entry', async () => {
-      const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 100 });
+      const deposit = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 100 });
       await approveLedgerEntry(deposit.id, societyId, adminId);
       await expect(approveLedgerEntry(deposit.id, societyId, adminId)).rejects.toThrow(
         LedgerEntryAlreadyReviewedError,
@@ -410,7 +410,7 @@ describe('ledger service', () => {
 
     it('rejecting a deposit stores the reason and never moves the balance', async () => {
       const before = await computeFlatBalances(flatId);
-      const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 50 });
+      const deposit = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 50 });
       const rejected = await rejectLedgerEntry(deposit.id, societyId, adminId, 'blurry screenshot');
       expect(rejected!.status).toBe('REJECTED');
       expect(rejected!.adminNote).toBe('blurry screenshot');
@@ -429,7 +429,7 @@ describe('ledger service', () => {
     });
 
     it('logs APPROVE_CREDIT/REJECT_CREDIT distinctly from the Deposit action names', async () => {
-      const approved = await createCredit(ownerId, flatId, societyId, {
+      const approved = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 60,
         note: 'Approved-credit audit check',
         file: fakeProofFile,
@@ -441,7 +441,7 @@ describe('ledger service', () => {
       });
       expect(approveLog?.action).toBe('APPROVE_CREDIT');
 
-      const rejected = await createCredit(ownerId, flatId, societyId, {
+      const rejected = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 60,
         note: 'Rejected-credit audit check',
         file: fakeProofFile,
@@ -458,13 +458,13 @@ describe('ledger service', () => {
   describe('createCredit', () => {
     it('rejects an amount of 0 or less', async () => {
       await expect(
-        createCredit(ownerId, flatId, societyId, { amount: 0, note: 'x', file: fakeProofFile }),
+        createCredit(ownerId, flatId, societyId, 'OWNER', { amount: 0, note: 'x', file: fakeProofFile }),
       ).rejects.toThrow(InvalidAmountError);
     });
 
     it('allows an amount that exceeds the current Outstanding — unlike a Deposit, Credit is never capped', async () => {
       const balances = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, {
+      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: balances.outstanding + 10_000,
         note: 'Large repair reimbursement, exceeds Outstanding on purpose',
         file: fakeProofFile,
@@ -475,7 +475,7 @@ describe('ledger service', () => {
     });
 
     it("requires a proof attachment, same as it requires a note — saved via the storage adapter like a Deposit's screenshot", async () => {
-      const credit = await createCredit(ownerId, flatId, societyId, {
+      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 40,
         note: 'Receipt attached',
         file: fakeProofFile,
@@ -486,7 +486,7 @@ describe('ledger service', () => {
 
     it('a PENDING credit has zero effect on Outstanding or Available Credit until approved', async () => {
       const before = await computeFlatBalances(flatId);
-      await createCredit(ownerId, flatId, societyId, {
+      await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 500,
         note: 'Still pending, must not move anything',
         file: fakeProofFile,
@@ -500,7 +500,7 @@ describe('ledger service', () => {
 
     it('approving a credit increases approvedCredits by exactly its amount', async () => {
       const before = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, {
+      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 150,
         note: 'Common-area repair',
         file: fakeProofFile,
@@ -513,7 +513,7 @@ describe('ledger service', () => {
 
     it('rejecting a credit stores the reason and never moves any balance', async () => {
       const before = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, {
+      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
         amount: 75,
         note: 'Disputed reimbursement',
         file: fakeProofFile,
@@ -563,14 +563,14 @@ describe('ledger service', () => {
     });
 
     it('submitPaymentIntent throws when there is nothing open', async () => {
-      await expect(submitPaymentIntent(flatId, ownerId, societyId, fakeProofFile)).rejects.toThrow(
+      await expect(submitPaymentIntent(flatId, ownerId, societyId, 'OWNER', fakeProofFile)).rejects.toThrow(
         NoOpenPaymentIntentError,
       );
     });
 
     it('submitPaymentIntent finalizes into a PENDING deposit and clears the intent', async () => {
       await createOrReplacePaymentIntent(flatId, ownerId, societyId, 15);
-      const entry = await submitPaymentIntent(flatId, ownerId, societyId, fakeProofFile);
+      const entry = await submitPaymentIntent(flatId, ownerId, societyId, 'OWNER', fakeProofFile);
       expect((entry as { status: string }).status).toBe('PENDING');
       expect((entry as { fileUrl: string | null }).fileUrl).not.toBeNull();
       expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
@@ -750,7 +750,7 @@ describe('ledger service', () => {
 
   describe('getLedgerEntryFileForViewing', () => {
     it('returns null when the entry has no file attached', async () => {
-      const deposit = await createDeposit(ownerId, flatId, societyId, { amount: 10 });
+      const deposit = await createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 10 });
       const result = await getLedgerEntryFileForViewing(deposit.id, ownerId, 'OWNER', societyId);
       expect(result).toBeNull();
     });

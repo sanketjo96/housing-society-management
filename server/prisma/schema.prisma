@@ -44,6 +44,20 @@ enum LedgerType {
   CREDIT
 }
 
+// Who actually created a LedgerEntry row — distinct from `payerId` (whose balance
+// it affects). A resident's own self-service Deposit/Credit has creator == payer;
+// an admin's manualDeposit fallback (cash/bank transfer, no UPI screenshot) has
+// creator == the admin, on behalf of a payer who never touched the app for this
+// entry. Never SYSTEM — a LedgerEntry is never system-generated (only
+// MaintenanceRecord's monthly cron is); this exists specifically so "was this a
+// manual entry or a real resident payment" is a real column, not inferred from
+// `note` text or an AuditLog join.
+enum CreatedByType {
+  OWNER
+  TENANT
+  ADMIN
+}
+
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
 // see CLAUDE.md out-of-scope list). Modeled as an enum now so adding a channel later
 // is a one-line change, not a migration to a previously-untyped string column.
@@ -173,6 +187,7 @@ model User {
   occupancyChanges      OccupancyChange[]
   ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
   reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
+  createdLedgerEntries  LedgerEntry[]        @relation("LedgerCreatedBy")
   issuedReceipts        Receipt[]            @relation("ReceiptIssuer")
   auditLogs             AuditLog[]
   billedRecords         MaintenanceRecord[]
@@ -342,6 +357,13 @@ model LedgerEntry {
 
   reviewedById String?
   reviewedBy   User?   @relation("LedgerReviewer", fields: [reviewedById], references: [id])
+
+  // Who actually created this row (see CreatedByType) — for a resident's own
+  // Deposit/Credit this is the same person as `payerId`; for an admin's
+  // manualDeposit fallback this is the admin, not the resident being paid for.
+  createdById   String
+  createdBy     User          @relation("LedgerCreatedBy", fields: [createdById], references: [id])
+  createdByType CreatedByType
 
   receipt Receipt?
 

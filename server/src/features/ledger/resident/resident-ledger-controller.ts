@@ -150,11 +150,17 @@ export async function submitPaymentIntentHandler(req: Request, res: Response) {
   }
 
   try {
-    const entry = await submitPaymentIntent(flatId, req.user.id, req.user.societyId, {
-      buffer: req.file.buffer,
-      mimeType: req.file.mimetype,
-      extension: path.extname(req.file.originalname),
-    });
+    const entry = await submitPaymentIntent(
+      flatId,
+      req.user.id,
+      req.user.societyId,
+      req.user.role as 'OWNER' | 'TENANT',
+      {
+        buffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        extension: path.extname(req.file.originalname),
+      },
+    );
     res.status(201).json(entry);
   } catch (err) {
     if (err instanceof NoOpenPaymentIntentError) {
@@ -208,16 +214,22 @@ export async function createDepositHandler(req: Request, res: Response) {
   }
 
   try {
-    const entry = await createDeposit(req.user.id, flatId, req.user.societyId, {
-      amount: parsed.data.amount,
-      file: req.file
-        ? {
-            buffer: req.file.buffer,
-            mimeType: req.file.mimetype,
-            extension: path.extname(req.file.originalname),
-          }
-        : undefined,
-    });
+    const entry = await createDeposit(
+      req.user.id,
+      flatId,
+      req.user.societyId,
+      req.user.role as 'OWNER' | 'TENANT',
+      {
+        amount: parsed.data.amount,
+        file: req.file
+          ? {
+              buffer: req.file.buffer,
+              mimeType: req.file.mimetype,
+              extension: path.extname(req.file.originalname),
+            }
+          : undefined,
+      },
+    );
     res.status(201).json(entry);
   } catch (err) {
     if (amountErrorResponse(res, err)) return;
@@ -253,15 +265,21 @@ export async function createCreditHandler(req: Request, res: Response) {
   }
 
   try {
-    const entry = await createCredit(req.user.id, flatId, req.user.societyId, {
-      amount: parsed.data.amount,
-      note: parsed.data.note,
-      file: {
-        buffer: req.file.buffer,
-        mimeType: req.file.mimetype,
-        extension: path.extname(req.file.originalname),
+    const entry = await createCredit(
+      req.user.id,
+      flatId,
+      req.user.societyId,
+      req.user.role as 'OWNER' | 'TENANT',
+      {
+        amount: parsed.data.amount,
+        note: parsed.data.note,
+        file: {
+          buffer: req.file.buffer,
+          mimeType: req.file.mimetype,
+          extension: path.extname(req.file.originalname),
+        },
       },
-    });
+    );
     res.status(201).json(entry);
   } catch (err) {
     if (amountErrorResponse(res, err)) return;

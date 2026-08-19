@@ -270,6 +270,7 @@ export async function submitPaymentIntent(
   flatId: string,
   payerId: string,
   societyId: string,
+  role: 'OWNER' | 'TENANT',
   file: ProofFileInput,
 ): Promise<unknown> {
   const intent = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
@@ -292,6 +293,9 @@ export async function submitPaymentIntent(
         note: 'UPI payment - awaiting review',
         fileUrl: saved.key,
         mimeType: file.mimeType,
+        // Self-service — the resident submitting this is also the creator.
+        createdById: payerId,
+        createdByType: role,
       },
     });
     await tx.auditLog.create({
@@ -321,6 +325,7 @@ export async function createDeposit(
   payerId: string,
   flatId: string,
   societyId: string,
+  role: 'OWNER' | 'TENANT',
   input: CreateDepositInput,
 ) {
   const balances = await computeFlatBalances(flatId);
@@ -351,6 +356,8 @@ export async function createDeposit(
         note: 'UPI payment - awaiting review',
         fileUrl,
         mimeType,
+        createdById: payerId,
+        createdByType: role,
       },
     });
     await tx.auditLog.create({
@@ -389,6 +396,7 @@ export async function createCredit(
   payerId: string,
   flatId: string,
   societyId: string,
+  role: 'OWNER' | 'TENANT',
   input: CreateCreditInput,
 ) {
   if (!(input.amount > 0)) throw new InvalidAmountError();
@@ -410,6 +418,8 @@ export async function createCredit(
         note: input.note,
         fileUrl: saved.key,
         mimeType: input.file.mimeType,
+        createdById: payerId,
+        createdByType: role,
       },
     });
     await tx.auditLog.create({

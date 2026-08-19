@@ -1,14 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, Download, Eye, X } from 'lucide-react';
+import { Banknote, Check, Download, Eye, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
+import { ErrMsg, ErrorBanner, Field, inputClass } from '../../components/FormField';
 import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
+import { Modal } from '../../components/Modal';
 import { ReceiptApprovalModal } from '../../components/ReceiptApprovalModal';
 import { authedFetch } from '../../lib/api';
 import { downloadAuthedFile } from '../../lib/download-file';
 
 type LedgerEntryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+type CreatedByType = 'OWNER' | 'TENANT' | 'ADMIN';
 
 interface LedgerEntryListItem {
   id: string;
@@ -18,8 +21,146 @@ interface LedgerEntryListItem {
   note: string | null;
   fileUrl: string | null;
   createdAt: string;
+  createdByType: CreatedByType;
   payer: { id: string; name: string; email: string };
   flat: { id: string; wing: string; flatNumber: string };
+}
+
+// Who actually created the row — distinct from the payer it's for. An ADMIN-created
+// entry with no proof attached is exactly a manualDeposit (cash/bank transfer, no
+// UPI screenshot) — this badge is the direct, structured way to see that, instead of
+// reading `note` text or cross-referencing AuditLog.
+const CREATED_BY_META: Record<CreatedByType, { className: string; label: string }> = {
+  OWNER: { className: 'border border-line text-ink', label: 'Owner' },
+  TENANT: { className: 'border border-line text-ink', label: 'Tenant' },
+  ADMIN: { className: 'border border-teal text-teal', label: 'Admin' },
+};
+
+function CreatedByBadge({ type }: { type: CreatedByType }) {
+  const meta = CREATED_BY_META[type];
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
+}
+
+interface FlatOption {
+  id: string;
+  wing: string;
+  flatNumber: string;
+  owner: { name: string };
+}
+
+async function fetchFlatOptions(): Promise<FlatOption[]> {
+  const res = await authedFetch('/api/admin/flats');
+  if (!res.ok) throw new Error('Could not load flats.');
+  return res.json();
+}
+
+// The admin fallback for a payment that never went through the UPI flow — cash
+// handed to the treasurer, or a bank transfer done outside the app. Creates an
+// already-APPROVED Deposit directly (manualDeposit, admin-ledger-service.ts) —
+// there's no screenshot to review, so no PENDING step. Success deliberately doesn't
+// auto-close into the table: the created entry has no fileUrl, so it won't appear
+// in the Approved tab (this page's own existing filter, below) — closing into a
+// table that doesn't reflect what just happened would be confusing.
+function MarkAsPaidModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [flatId, setFlatId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [succeeded, setSucceeded] = useState(false);
+
+  const { data: flats, isLoading: flatsLoading } = useQuery({
+    queryKey: ['admin-flats-options'],
+    queryFn: fetchFlatOptions,
+  });
+
+  const parsedAmount = Number(amount);
+  const isAmountValid = amount.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0;
+
+  const submitMutation = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      const res = await authedFetch('/api/admin/ledger-entries/manual-deposit', {
+        method: 'POST',
+        body: JSON.stringify({ flatId, amount: parsedAmount }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not mark this payment as paid.');
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] });
+      // manualDeposit also issues a real Receipt (admin-ledger-service.ts) —
+      // without this, the Receipt Book page's cached list (30s staleTime,
+      // App.tsx) can silently miss the one just issued.
+      queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
+      setSucceeded(true);
+    },
+  });
+
+  if (succeeded) {
+    return (
+      <Modal title="Mark as paid" onClose={onClose}>
+        <p className="m-0 mb-3.5 flex items-center gap-1.5 text-sm font-semibold text-teal">
+          <Check size={14} /> Marked as paid.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white"
+        >
+          Done
+        </button>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      title="Mark as paid"
+      subtitle="For a payment received outside the app — cash or a direct bank transfer."
+      onClose={onClose}
+    >
+      <Field label="Flat">
+        <select
+          value={flatId}
+          onChange={(e) => setFlatId(e.target.value)}
+          disabled={flatsLoading}
+          className={inputClass}
+        >
+          <option value="">Select a flat…</option>
+          {flats?.map((flat) => (
+            <option key={flat.id} value={flat.id}>
+              {flat.wing}-{flat.flatNumber} — {flat.owner.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Amount">
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          min={0.01}
+          step="0.01"
+          className={inputClass}
+        />
+        {!isAmountValid && amount.length > 0 && <ErrMsg>Enter an amount greater than 0.</ErrMsg>}
+      </Field>
+
+      {submitMutation.error && <ErrorBanner>{submitMutation.error.message}</ErrorBanner>}
+
+      <button
+        type="button"
+        onClick={() => submitMutation.mutate()}
+        disabled={submitMutation.isPending || !flatId || !isAmountValid}
+        className="w-full rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+      >
+        {submitMutation.isPending ? 'Marking as paid…' : 'Mark as paid'}
+      </button>
+    </Modal>
+  );
 }
 
 const STATUS_TABS: { value: LedgerEntryStatus; label: string }[] = [
@@ -109,6 +250,10 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
     onSuccess: () => {
       setShowApprovalModal(false);
       queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] });
+      // Approval also issues a real Receipt (approveLedgerEntry, admin-ledger-
+      // service.ts) — without this, the Receipt Book page's cached list (30s
+      // staleTime, App.tsx) can silently miss the one just issued.
+      queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
     },
   });
 
@@ -191,6 +336,7 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
 
 export function PaymentProofsPage() {
   const [status, setStatus] = useState<LedgerEntryStatus>('PENDING');
+  const [showMarkAsPaidModal, setShowMarkAsPaidModal] = useState(false);
   const { data: fetched, isLoading, isError } = useQuery({
     queryKey: ['admin-ledger-entries', status],
     queryFn: () => fetchLedgerEntries(status),
@@ -229,6 +375,11 @@ export function PaymentProofsPage() {
         cell: ({ row }) => <LedgerTypeBadge type={row.original.type} />,
       },
       {
+        id: 'createdBy',
+        header: 'Created by',
+        cell: ({ row }) => <CreatedByBadge type={row.original.createdByType} />,
+      },
+      {
         id: 'amount',
         header: 'Amount',
         meta: { align: 'right' },
@@ -256,9 +407,18 @@ export function PaymentProofsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-6">
-        <h1 className="m-0 font-display text-xl text-ink">Payment proofs</h1>
-        <p className="m-0 mt-0.5 text-xs text-muted">{data?.length ?? 0} entries</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="m-0 font-display text-xl text-ink">Payment proofs</h1>
+          <p className="m-0 mt-0.5 text-xs text-muted">{data?.length ?? 0} entries</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMarkAsPaidModal(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-xs font-semibold text-ink"
+        >
+          <Banknote size={14} /> Mark as paid
+        </button>
       </div>
 
       <div className="mb-4 flex gap-2" role="tablist">
@@ -293,6 +453,8 @@ export function PaymentProofsPage() {
           emptyMessage={`No ${status.toLowerCase()} entries.`}
         />
       )}
+
+      {showMarkAsPaidModal && <MarkAsPaidModal onClose={() => setShowMarkAsPaidModal(false)} />}
     </div>
   );
 }
