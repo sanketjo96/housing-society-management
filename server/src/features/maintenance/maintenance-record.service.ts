@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../infrastructure/prisma/client';
+import { logger } from '../../infrastructure/observability';
 import { calculateMonthlyRate } from '../../shared/billing/rate-calculation';
 import { notify } from '../notifications/notification.service';
 
@@ -170,7 +171,9 @@ async function notifyBillsGenerated(
         },
       });
     } catch (err) {
-      console.error(`[notifications] failed to enqueue MAINTENANCE_BILL_GENERATED for ${record.id}:`, err);
+      logger
+        .child({ feature: 'maintenance' })
+        .error({ err, recordId: record.id }, 'failed to enqueue MAINTENANCE_BILL_GENERATED');
     }
   }
 }

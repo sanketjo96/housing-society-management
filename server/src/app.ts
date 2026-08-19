@@ -12,6 +12,7 @@ import swaggerUi from 'swagger-ui-express';
 // Express itself uses), and before any `app.use(...Router)` call below.
 import 'express-async-errors';
 import { errorHandler } from './middleware/error-handler';
+import { requestLogger } from './middleware/requestLogger';
 import { adminDashboardRouter } from './features/admin-dashboard/admin-dashboard.route';
 import { adminLedgerRouter } from './features/ledger/admin/admin-ledger-route';
 import { adminUsersRouter } from './features/users/admin/admin-users-route';
@@ -32,6 +33,11 @@ export const app = express();
 // itself. Without this, req.ip (and anything keyed off it, e.g. auth-rate-limit.ts)
 // sees nginx's own container IP for every request instead of the real client IP.
 app.set('trust proxy', 1);
+
+// First in the chain (docs/observablity/), so its measured response time covers the
+// full request lifecycle — position relative to routing doesn't affect correctness
+// (pino-http hooks res.on('finish'/'close')), only what's included in the timing.
+app.use(requestLogger);
 
 // Only matters for local dev, where the Vite dev server (5173) and the backend
 // (3000) run as genuinely different origins. In Docker/production, nginx serves both

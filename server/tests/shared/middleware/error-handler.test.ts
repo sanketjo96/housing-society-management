@@ -4,6 +4,24 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../../../src/middleware/error-handler';
 
+async function buildAppWithFreshProductionLogger() {
+  // Force production mode so the underlying logger writes plain JSON synchronously
+  // in this thread, rather than via pino-pretty's worker thread (unobservable
+  // through process.stdout.write here) — same technique as request-logger.test.ts.
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  vi.resetModules();
+  const { errorHandler: freshErrorHandler } = await import('../../../src/middleware/error-handler');
+  process.env.NODE_ENV = originalNodeEnv;
+
+  const app = express();
+  app.get('/boom', async () => {
+    throw new Error('unexpected failure with sensitive internals');
+  });
+  app.use(freshErrorHandler);
+  return app;
+}
+
 // Regression test for a Phase 9 security-audit finding: Express 4 does not catch a
 // promise rejected by an async route handler — confirmed empirically that without
 // `express-async-errors` patching the router (imported at the very top of app.ts,
@@ -32,13 +50,22 @@ describe('errorHandler + express-async-errors', () => {
   });
 
   it('still logs the real error server-side, for observability', async () => {
-    const app = buildTestApp();
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
+      const app = await buildAppWithFreshProductionLogger();
       await request(app).get('/boom');
-      expect(spy).toHaveBeenCalled();
+
+      const lines = writeSpy.mock.calls
+        .map((call) => String(call[0]).trim())
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      const errorLine = lines.find((line) => line.level === 'error');
+
+      expect(errorLine).toMatchObject({ feature: 'error-handler', msg: 'unhandled error' });
+      expect(errorLine.err?.message).toContain('unexpected failure with sensitive internals');
     } finally {
-      spy.mockRestore();
+      writeSpy.mockRestore();
+      vi.resetModules();
     }
   });
 });

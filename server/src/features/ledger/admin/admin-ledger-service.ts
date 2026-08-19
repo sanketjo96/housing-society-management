@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LedgerType, ProofStatus } from '../../../infrastructure/prisma/generated/client';
 import { prisma } from '../../../infrastructure/prisma/client';
+import { logger } from '../../../infrastructure/observability';
 import { LedgerEntryAlreadyReviewedError } from '../../../shared/errors/errors';
 import { prepareReceiptForEntry } from '../../receipts/receipt.service';
 import { notify } from '../../notifications/notification.service';
@@ -40,10 +41,9 @@ async function notifyLedgerPaymentApproved(
       },
     });
   } catch (err) {
-    console.error(
-      `[notifications] failed to enqueue payment-approved notification for LedgerEntry ${entry.id}:`,
-      err,
-    );
+    logger
+      .child({ feature: 'ledger' })
+      .error({ err, entryId: entry.id }, 'failed to enqueue payment-approved notification');
   }
 }
 

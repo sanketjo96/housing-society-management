@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
+import { logger } from '../infrastructure/observability';
 
 // First error-handling middleware in the app (added alongside Task 6.2's file upload).
 // multer's fileFilter/limits violations reach here via Express's standard synchronous
@@ -22,6 +23,6 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(400).json({ error: err.message });
     return;
   }
-  console.error(err);
+  logger.child({ feature: 'error-handler' }).error({ err }, 'unhandled error');
   res.status(500).json({ error: 'Internal server error' });
 }

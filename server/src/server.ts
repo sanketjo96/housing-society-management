@@ -2,13 +2,31 @@ import 'dotenv/config';
 import cron from 'node-cron';
 import { app } from './app';
 import { env } from './config/env';
+import { logger } from './infrastructure/observability';
 import { runMonthlyMaintenanceGeneration } from './jobs/monthly-maintenance-generation.job';
 import { deliverPendingNotifications } from './jobs/notification-delivery.job';
 
 const port = Number(env('PORT', '3000'));
+const serverLogger = logger.child({ feature: 'server' });
+
+// R4 — must be registered before app.listen, so a crash during startup is captured
+// too, not just once the process is fully up. In dev, pino-pretty formats on a
+// worker thread; calling process.exit() immediately after logger.fatal() can race
+// that thread and truncate the last line before it flushes. In production there's
+// no worker thread (JSON goes straight to stdout synchronously), so the case R4
+// actually cares about — a real deployed crash — is unaffected; this is a known,
+// accepted limitation of local dev crash logging, not something Stage 1 solves.
+process.on('uncaughtException', (err) => {
+  serverLogger.fatal({ err }, 'uncaught exception');
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  serverLogger.fatal({ err: reason }, 'unhandled promise rejection');
+  process.exit(1);
+});
 
 app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+  serverLogger.info({ port }, 'server listening');
 });
 
 // Task 4.4 — 00:05 on the 1st of every month (a few minutes past midnight, not exactly

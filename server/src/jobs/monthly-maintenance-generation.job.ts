@@ -1,5 +1,8 @@
 import { prisma } from '../infrastructure/prisma/client';
+import { logger } from '../infrastructure/observability';
 import { generateMaintenanceRecords } from '../features/maintenance/maintenance-record.service';
+
+const jobLogger = logger.child({ feature: 'maintenance-generation' });
 
 // Runs generation for every society (this MVP only ever has one — CLAUDE.md's scope
 // note — but the loop costs nothing and is what "onboard a second society without a
@@ -17,11 +20,15 @@ export async function runMonthlyMaintenanceGeneration(period?: string): Promise<
   for (const society of societies) {
     try {
       const result = await generateMaintenanceRecords(society.id, period);
-      console.log(
-        `[maintenance-generation] ${society.name}: created=${result.created} skipped=${result.skipped}`,
+      jobLogger.info(
+        { societyId: society.id, societyName: society.name, created: result.created, skipped: result.skipped },
+        'maintenance records generated',
       );
     } catch (err) {
-      console.error(`[maintenance-generation] ${society.name} failed:`, err);
+      jobLogger.error(
+        { err, societyId: society.id, societyName: society.name },
+        'maintenance record generation failed',
+      );
     }
   }
 }

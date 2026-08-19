@@ -7,6 +7,7 @@ import {
 } from '../../shared/errors/errors';
 import { renderReceiptPdf, type ReceiptData } from './receipt-pdf';
 import { getStorageAdapter } from '../../infrastructure/storage';
+import { logger } from '../../infrastructure/observability';
 
 // Minimal shapes this file actually reads — not the full generated Prisma model
 // types, matching this codebase's existing convention (services only import
@@ -124,9 +125,9 @@ export async function getSignatureBufferOrUndefined(
     const stream = await getStorageAdapter().read(fileKey);
     return await streamToBuffer(stream);
   } catch (err) {
-    console.warn(
-      `[receipt] could not read signature file, rendering without one: ${(err as Error).message}`,
-    );
+    logger
+      .child({ feature: 'receipts' })
+      .warn({ err, fileKey }, 'could not read signature file, rendering without one');
     return undefined;
   }
 }
