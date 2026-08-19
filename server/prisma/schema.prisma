@@ -49,9 +49,12 @@ enum LedgerType {
 // is a one-line change, not a migration to a previously-untyped string column.
 enum NotificationChannel {
   EMAIL
+  WHATSAPP
 }
 
 enum NotificationStatus {
+  PENDING
+  PROCESSING
   SENT
   FAILED
 }
@@ -399,16 +402,32 @@ model PaymentIntent {
 // polymorphic FK) — a notification can be about a MaintenanceRecord (generated),
 // a LedgerEntry (submitted/approved/rejected), etc. No FK constraint on purpose:
 // the entity type varies per notification.
+// Notification feature (docs/notification/) — Phase 1, WhatsApp only, delivered via
+// node-cron rather than a queue/worker (see docs/notification/architecture.md's
+// 2026-08-18 revision note for why: no Redis/BullMQ in this repo, event volume too
+// low to justify one). This row IS the queue — notify() inserts PENDING,
+// deliverPending() claims/processes it directly, no separate queue payload to keep
+// in sync. idempotencyKey's unique constraint is the sole duplicate-send guard.
 model NotificationLog {
   id                String              @id @default(cuid())
+  idempotencyKey    String              @unique
+  eventType         String
   channel           NotificationChannel
-  recipient         String
+  recipientUserId   String
+  payload           Json
   status            NotificationStatus
+  attemptCount      Int                 @default(0)
+  providerMessageId String?
+  error             String?
   relatedEntityType String
   relatedEntityId   String
   createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  sentAt            DateTime?
+  nextAttemptAt     DateTime?
 
   @@index([relatedEntityType, relatedEntityId])
+  @@index([status, nextAttemptAt])
 }
 
 // actorId is nullable — some audited actions are system-initiated (e.g. the monthly

@@ -116,6 +116,19 @@ deposit_payment_approved
 credit_payment_approved
 ```
 
+**Two external, non-code dependencies — start these before Task 8, not during it:**
+
+- All three templates must be submitted to and approved by Meta before any real
+  message can send. Template review is external to this codebase and has its own
+  lead time (commonly days); the Meta Cloud API sandbox/test number can be used
+  for development in the meantime, but production sending is blocked until
+  approval lands.
+- Recipient phone numbers must be in **E.164** format (`+91XXXXXXXXXX`) for the
+  Cloud API to accept them. `User.phone` in this schema is free text today,
+  most likely stored as a local 10-digit number without a country code —
+  normalize/validate this before Task 7, not discover the 400 from Meta when
+  the first real send goes out.
+
 ## 6. Out of Scope
 
 Do not implement in Phase 1:
@@ -128,3 +141,10 @@ Do not implement in Phase 1:
 - Separate notification microservice
 - Quarterly maintenance reminders
 - Complex notification scheduling
+- **Redis, BullMQ, or a dedicated worker process.** Phase 1 delivers
+  notifications via the existing `NotificationLog` table plus the existing
+  `node-cron` scheduler (see `architecture.md`) — no new infrastructure, no new
+  container in `docker-compose.yml`. This is a deliberate scale-fit decision,
+  not an oversight: the queue-based design is documented and ready to build in
+  [`future-scope.md`](./future-scope.md) for whenever this app's actual volume
+  or latency needs outgrow the simple version.

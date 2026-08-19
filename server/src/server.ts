@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { app } from './app';
 import { env } from './config/env';
 import { runMonthlyMaintenanceGeneration } from './jobs/monthly-maintenance-generation.job';
+import { deliverPendingNotifications } from './jobs/notification-delivery.job';
 
 const port = Number(env('PORT', '3000'));
 
@@ -28,3 +29,11 @@ cron.schedule(
   },
   { timezone: 'Asia/Kolkata' },
 );
+
+// Notification delivery sweep (docs/notification/) — every minute is a reasonable
+// starting interval at this app's ~25-40 notifications/month volume (architecture.md
+// §2); adjust once real latency expectations are known. Thin job, no provider logic —
+// see notification-delivery.job.ts.
+cron.schedule('* * * * *', () => {
+  void deliverPendingNotifications();
+});

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../../infrastructure/prisma/client';
 import { calculateMonthlyRate } from '../../shared/billing/rate-calculation';
+import { notify } from '../notifications/notification.service';
 
 // Confirmed decision (CLAUDE.md): MaintenanceRecord.dueDate = generation date + 15 days.
 const DUE_DATE_DAYS = 15;
@@ -127,7 +129,50 @@ export async function generateMaintenanceRecords(
     },
   });
 
+  await notifyBillsGenerated(societyId, flats.map((f) => f.id), period);
+
   return { created: result.count, skipped: records.length - result.count };
+}
+
+// MAINTENANCE_BILL_GENERATED (docs/notification/) — createMany doesn't return the
+// created rows, so this re-reads every record for this period+flat set (idempotent
+// generation means that's every record that now exists for the period, whether just
+// created or already there from an earlier run) and calls notify() for each.
+// notify()'s own idempotency (unique key on billId) makes re-notifying an
+// already-existing record a harmless no-op, so this doesn't need to know which rows
+// createMany actually inserted vs. skipped. Never lets a notification failure fail
+// generation itself (requirements.md §4: WhatsApp failures must not roll back a
+// successful business operation) — notify() only ever writes a PENDING row, but a
+// stray DB error here still shouldn't take billing down with it.
+async function notifyBillsGenerated(
+  societyId: string,
+  flatIds: string[],
+  period: string,
+): Promise<void> {
+  const periodRecords = await prisma.maintenanceRecord.findMany({
+    where: { flatId: { in: flatIds }, period },
+  });
+
+  for (const record of periodRecords) {
+    try {
+      await notify({
+        eventId: randomUUID(),
+        eventType: 'MAINTENANCE_BILL_GENERATED',
+        occurredAt: new Date().toISOString(),
+        recipient: { userId: record.payerId },
+        data: {
+          billId: record.id,
+          flatId: record.flatId,
+          societyId,
+          billingMonth: record.period,
+          amount: Number(record.amount),
+          dueDate: record.dueDate.toISOString(),
+        },
+      });
+    } catch (err) {
+      console.error(`[notifications] failed to enqueue MAINTENANCE_BILL_GENERATED for ${record.id}:`, err);
+    }
+  }
 }
 
 const FLAT_SUMMARY_INCLUDE = {

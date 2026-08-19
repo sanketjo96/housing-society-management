@@ -42,6 +42,20 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      # Notification feature (docs/notification/), Phase 1: WhatsApp only, via the
+      # Meta Cloud API. Left unset by default — the delivery sweep (every minute,
+      # src/jobs/notification-delivery.job.ts) just marks queued notifications FAILED
+      # with a clear "must be set" error until these are filled in and the three
+      # WhatsApp templates are Meta-approved (docs/notification/requirements.md §5);
+      # it does not block server startup or any billing/payment flow.
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v21.0}
+      # TEMPORARY, for manual end-to-end testing only: 'true' sends Meta's pre-approved
+      # hello_world sample template instead of the real per-event templates, so the
+      # pipeline can be proven with a real delivery before those are approved. Leave
+      # unset/false otherwise (see whatsapp.service.ts).
+      WHATSAPP_TEST_MODE: ${WHATSAPP_TEST_MODE:-false}
     volumes:
       - uploads_data:/app/uploads
     ports:

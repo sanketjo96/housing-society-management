@@ -7,9 +7,45 @@ import type { LedgerType, ProofStatus } from '../../../infrastructure/prisma/gen
 import { prisma } from '../../../infrastructure/prisma/client';
 import { LedgerEntryAlreadyReviewedError } from '../../../shared/errors/errors';
 import { prepareReceiptForEntry } from '../../receipts/receipt.service';
+import { notify } from '../../notifications/notification.service';
 import { InvalidAmountError } from '../ledger-shared';
 
 export { InvalidAmountError, LedgerEntryAlreadyReviewedError };
+
+// DEPOSIT_PAYMENT_APPROVED / CREDIT_PAYMENT_APPROVED (docs/notification/) — fired
+// once the approval (or manual mark-paid) transaction has actually committed, so a
+// notification is never sent for a payment that ends up rolled back. Never lets a
+// notification failure fail the payment approval itself (requirements.md §4) —
+// notify() only ever writes a PENDING row, but a stray DB error here still shouldn't
+// take a financial approval down with it.
+async function notifyLedgerPaymentApproved(
+  entry: { id: string; type: LedgerType; flatId: string; payerId: string; amount: unknown },
+  receiptId: string,
+  societyId: string,
+  paymentDate: Date,
+): Promise<void> {
+  try {
+    await notify({
+      eventId: randomUUID(),
+      eventType: entry.type === 'DEPOSIT' ? 'DEPOSIT_PAYMENT_APPROVED' : 'CREDIT_PAYMENT_APPROVED',
+      occurredAt: new Date().toISOString(),
+      recipient: { userId: entry.payerId },
+      data: {
+        paymentId: entry.id,
+        receiptId,
+        flatId: entry.flatId,
+        societyId,
+        amount: Number(entry.amount),
+        paymentDate: paymentDate.toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[notifications] failed to enqueue payment-approved notification for LedgerEntry ${entry.id}:`,
+      err,
+    );
+  }
+}
 
 // Exported for reuse by ../../receipts/admin/admin-receipts-service.ts's listReceipts,
 // which needs the same payer/flat summary shape for its receipt-book rows.
@@ -71,13 +107,13 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     issuedAt,
   );
 
-  return prisma.$transaction(async (tx) => {
+  const { updated, receiptId } = await prisma.$transaction(async (tx) => {
     const updated = await tx.ledgerEntry.update({
       where: { id },
       data: { status: 'APPROVED', reviewedById: adminId, reviewedAt: issuedAt },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });
-    await tx.receipt.create({
+    const receipt = await tx.receipt.create({
       data: { receiptNumber, fileKey, ledgerEntryId: id, issuedById: adminId, societyId, issuedAt },
     });
     await tx.auditLog.create({
@@ -89,8 +125,12 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
         note: `Amount ${entry.amount}; Receipt ${receiptNumber}`,
       },
     });
-    return updated;
+    return { updated, receiptId: receipt.id };
   });
+
+  await notifyLedgerPaymentApproved(updated, receiptId, societyId, issuedAt);
+
+  return updated;
 }
 
 export async function rejectLedgerEntry(
@@ -171,7 +211,7 @@ export async function manualDeposit(
     issuedAt,
   );
 
-  return prisma.$transaction(async (tx) => {
+  const { entry, receiptId } = await prisma.$transaction(async (tx) => {
     const entry = await tx.ledgerEntry.create({
       data: {
         id: entryId,
@@ -186,7 +226,7 @@ export async function manualDeposit(
       },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });
-    await tx.receipt.create({
+    const receipt = await tx.receipt.create({
       data: {
         receiptNumber,
         fileKey,
@@ -205,6 +245,10 @@ export async function manualDeposit(
         note: `Amount ${amount}; Receipt ${receiptNumber}`,
       },
     });
-    return entry;
+    return { entry, receiptId: receipt.id };
   });
+
+  await notifyLedgerPaymentApproved(entry, receiptId, societyId, issuedAt);
+
+  return entry;
 }
