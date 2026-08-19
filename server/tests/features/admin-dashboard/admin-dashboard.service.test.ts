@@ -6,6 +6,8 @@ import {
   getFlaggedFlats,
   getFlatWiseDues,
 } from '../../../src/features/admin-dashboard/admin-dashboard.service';
+import { createFeeType } from '../../../src/features/fee-types/fee-types.service';
+import { billOtherCharge } from '../../../src/features/other-charges/other-charges.service';
 
 function daysAgo(n: number): Date {
   const d = new Date();
@@ -220,6 +222,8 @@ describe('admin-dashboard service', () => {
   afterAll(async () => {
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.otherCharge.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.feeType.deleteMany({ where: { societyId } });
     await prisma.occupancyChange.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     const userIds = await prisma.user
@@ -249,6 +253,33 @@ describe('admin-dashboard service', () => {
       // collectionRatePercent (2026-08-09 pivot) is deposits-only, unlike totalPaid —
       // C's deposit 800 + D's deposit 800 = 1600 (E's 800 is a Credit, excluded).
       expect(summary.collectionRatePercent).toBe(29); // round(1600/5500*100)
+    });
+
+    // docs/other-charges/ — a fully separate pool: billing an Other Charge must
+    // never move outstandingTotal (maintenance-only), and totalOutstandingTotal
+    // must be exactly the sum of the two independently-computed pools.
+    it('otherChargesOutstandingTotal/totalOutstandingTotal stay independent of the maintenance pool', async () => {
+      const before = await getDashboardSummary(societyId);
+
+      const admin = await prisma.user.create({
+        data: {
+          name: 'Dashboard Admin',
+          email: `dash-admin-${suffix}@example.com`,
+          passwordHash: 'x',
+          role: 'ADMIN',
+          societyId,
+        },
+      });
+      const feeType = await createFeeType(societyId, admin.id, {
+        name: `Dashboard Fee ${suffix}`,
+      });
+      // flatA has zero maintenance charges/entries — a clean pool to bill against.
+      await billOtherCharge(societyId, admin.id, { flatId: flatAId, feeTypeId: feeType.id, amount: 4000 });
+
+      const after = await getDashboardSummary(societyId);
+      expect(after.outstandingTotal).toBe(before.outstandingTotal); // untouched
+      expect(after.otherChargesOutstandingTotal).toBe(before.otherChargesOutstandingTotal + 4000);
+      expect(after.totalOutstandingTotal).toBe(after.outstandingTotal + after.otherChargesOutstandingTotal);
     });
   });
 

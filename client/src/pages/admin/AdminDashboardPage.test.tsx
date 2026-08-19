@@ -21,7 +21,15 @@ function renderPage() {
 // Deliberately distinct from flatDues' amounts below, so assertions can use
 // exact-text queries without colliding with a per-flat figure that happens to
 // share the same number.
-const summary = { totalBilled: 4700, totalPaid: 2000, outstandingTotal: 2700, pendingReviewTotal: 2000, collectionRatePercent: 23 };
+const summary = {
+  totalBilled: 4700,
+  totalPaid: 2000,
+  outstandingTotal: 2700,
+  pendingReviewTotal: 2000,
+  collectionRatePercent: 23,
+  otherChargesOutstandingTotal: 900,
+  totalOutstandingTotal: 3600,
+};
 
 const flatDues = [
   {
@@ -145,6 +153,21 @@ describe('AdminDashboardPage', () => {
 
     const link = await screen.findByRole('link', { name: /maintenance outstanding total/i });
     expect(link).toHaveAttribute('href', '/flat-dues');
+  });
+
+  // docs/other-charges/ — a fully separate pool: its own card, plus a Total that
+  // combines both, never displayed as the same figure as maintenance alone.
+  it('shows the Other Charges Outstanding and Total Outstanding cards, independent of the maintenance figure', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('₹900')).toBeInTheDocument());
+    expect(screen.getByText('₹3,600')).toBeInTheDocument();
+    // The maintenance-only figure is still shown separately, unmerged.
+    expect(screen.getByText('₹2,700')).toBeInTheDocument();
+
+    const link = await screen.findByRole('link', { name: /other charges outstanding total/i });
+    expect(link).toHaveAttribute('href', '/other-charges');
   });
 
   it('links the Total Owners tile to the flats and residents page', async () => {

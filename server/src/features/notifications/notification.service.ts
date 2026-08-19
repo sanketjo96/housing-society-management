@@ -17,16 +17,32 @@ export const MAX_ATTEMPTS = 5;
 export const CLAIM_BATCH_SIZE = 50;
 export const BACKOFF_CAP_MINUTES = 60;
 
+function businessIdFor(event: NotificationEvent): string {
+  switch (event.eventType) {
+    case 'MAINTENANCE_BILL_GENERATED':
+      return event.data.billId;
+    case 'OTHER_CHARGE_BILLED':
+      return event.data.chargeId;
+    case 'DEPOSIT_PAYMENT_APPROVED':
+    case 'CREDIT_PAYMENT_APPROVED':
+      return event.data.paymentId;
+  }
+}
+
 function idempotencyKeyFor(event: NotificationEvent): string {
-  const businessId =
-    event.eventType === 'MAINTENANCE_BILL_GENERATED' ? event.data.billId : event.data.paymentId;
-  return `${event.eventType}:${businessId}:${CHANNEL}`;
+  return `${event.eventType}:${businessIdFor(event)}:${CHANNEL}`;
 }
 
 function relatedEntityFor(event: NotificationEvent): { type: string; id: string } {
-  return event.eventType === 'MAINTENANCE_BILL_GENERATED'
-    ? { type: 'MaintenanceRecord', id: event.data.billId }
-    : { type: 'LedgerEntry', id: event.data.paymentId };
+  switch (event.eventType) {
+    case 'MAINTENANCE_BILL_GENERATED':
+      return { type: 'MaintenanceRecord', id: event.data.billId };
+    case 'OTHER_CHARGE_BILLED':
+      return { type: 'OtherCharge', id: event.data.chargeId };
+    case 'DEPOSIT_PAYMENT_APPROVED':
+    case 'CREDIT_PAYMENT_APPROVED':
+      return { type: 'LedgerEntry', id: event.data.paymentId };
+  }
 }
 
 // generate idempotency key → INSERT NotificationLog (idempotencyKey UNIQUE) → P2002

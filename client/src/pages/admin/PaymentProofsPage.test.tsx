@@ -26,6 +26,7 @@ const depositEntry = {
   fileUrl: 'some/key.jpg',
   createdAt: '2026-08-01T00:00:00.000Z',
   createdByType: 'OWNER' as const,
+  category: 'MAINTENANCE' as const,
   payer: { id: 'owner-1', name: 'Alice Owner', email: 'alice@example.com' },
   flat: { id: 'f1', wing: 'A', flatNumber: '101' },
 };
@@ -48,6 +49,7 @@ const creditEntry = {
   fileUrl: 'credits/proof.jpg',
   createdAt: '2026-08-01T00:00:00.000Z',
   createdByType: 'OWNER' as const,
+  category: 'MAINTENANCE' as const,
   payer: { id: 'owner-2', name: 'Bob Owner', email: 'bob@example.com' },
   flat: { id: 'f2', wing: 'B', flatNumber: '201' },
 };
@@ -358,10 +360,12 @@ describe('PaymentProofsPage', () => {
     });
 
     const { queryClient } = renderPage();
-    // Simulates the Receipt Book page's own query already sitting in the cache
-    // (e.g. the admin visited it earlier) — this is what would go stale/miss the
-    // new receipt if this mutation didn't invalidate it too.
+    // Simulates these pages' own queries already sitting in the cache (e.g. the
+    // admin visited them earlier) — this is what would go stale/miss the update
+    // if this mutation didn't invalidate them too.
     queryClient.setQueryData(['admin-receipts'], []);
+    queryClient.setQueryData(['admin-dashboard-summary'], {});
+    queryClient.setQueryData(['admin-other-charges'], []);
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: /mark as paid/i }));
@@ -373,12 +377,47 @@ describe('PaymentProofsPage', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^mark as paid$/i }));
 
     await waitFor(() => expect(screen.getByText(/marked as paid/i)).toBeInTheDocument());
-    expect(JSON.parse(manualDepositBody!)).toEqual({ flatId: 'f1', amount: 500 });
+    expect(JSON.parse(manualDepositBody!)).toEqual({ flatId: 'f1', amount: 500, category: 'MAINTENANCE' });
 
     // manualDeposit also issues a real Receipt — Receipt Book's cached list must
     // be invalidated too, or a 30s-fresh cache would silently miss it (this is the
     // exact bug report this test guards against).
     expect(queryClient.getQueryState(['admin-receipts'])?.isInvalidated).toBe(true);
+
+    // Affects one of the two pools (docs/other-charges/) — the admin dashboard's
+    // cards and (if applicable) the Other Charges list must refresh too.
+    expect(queryClient.getQueryState(['admin-dashboard-summary'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['admin-other-charges'])?.isInvalidated).toBe(true);
+  });
+
+  it('Mark as paid: selecting Other Charge sends category=OTHER_CHARGE', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    let manualDepositBody: string | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/flats')) {
+        return Promise.resolve({ ok: true, json: async () => flatOptions });
+      }
+      if (url.includes('/manual-deposit')) {
+        manualDepositBody = init?.body as string;
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'entry-10', status: 'APPROVED' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: /mark as paid/i }));
+    await screen.findByRole('dialog', { name: /mark as paid/i });
+
+    await waitFor(() => expect(screen.getByText(/A-101 — Alice Owner/)).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText(/flat/i), 'f1');
+    await user.type(screen.getByLabelText(/amount/i), '750');
+    await user.selectOptions(screen.getByLabelText(/category/i), 'OTHER_CHARGE');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^mark as paid$/i }));
+
+    await waitFor(() => expect(screen.getByText(/marked as paid/i)).toBeInTheDocument());
+    expect(JSON.parse(manualDepositBody!)).toEqual({ flatId: 'f1', amount: 750, category: 'OTHER_CHARGE' });
 
     // Still open, showing the confirmation — doesn't auto-close into the table
     // (the created entry has no fileUrl, so it wouldn't appear there anyway).

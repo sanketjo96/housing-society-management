@@ -1,4 +1,4 @@
-import { BookText, Building2, LayoutGrid, Wallet, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, BookText, Building2, LayoutGrid, Tag, Wallet, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavItem } from './DashboardShell';
@@ -17,14 +17,21 @@ import { DashboardShell, type NavItem } from './DashboardShell';
 // clicking the corresponding tile on the dashboard (AdminDashboardPage: Total
 // Owners/Total Flats → /flats, Total Tenants → /tenants, Maintenance Outstanding
 // Total → /flat-dues, the "N payment proofs pending review" widget →
-// /payment-proofs), not via the sidebar.
+// /payment-proofs), not via the sidebar. '/other-charges' IS a sidebar item
+// (docs/other-charges/), unlike those four — it's a primary, repeated admin
+// action (billing a charge), not a drill-down of an existing dashboard figure.
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
+  { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
   { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
   { to: '/settings/society', label: 'Society details', icon: Building2 },
   { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
+  { to: '/settings/fee-types', label: 'Fee types', icon: Tag },
 ];
 
+// '/other-charges-book' is deliberately not here — reached only via the
+// Dashboard's "Other Outstanding" card, same drill-down convention as the admin
+// side's non-sidebar routes above (docs/other-charges/).
 const RESIDENT_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },

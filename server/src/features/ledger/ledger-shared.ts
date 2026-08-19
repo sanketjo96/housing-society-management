@@ -4,7 +4,7 @@
 // admin-dashboard.service.ts, which needs the exact same balance formula the
 // resident's own Passbook uses, never duplicated.
 import { prisma } from '../../infrastructure/prisma/client';
-import type { LedgerType, ProofStatus } from '../../infrastructure/prisma/generated/client';
+import type { LedgerCategory, LedgerType, ProofStatus } from '../../infrastructure/prisma/generated/client';
 
 export class InvalidAmountError extends Error {
   constructor() {
@@ -108,19 +108,39 @@ function ledgerEntryYearFilter(year?: number) {
   return year ? { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {};
 }
 
+function otherChargeYearFilter(year?: number) {
+  return year ? { dueDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {};
+}
+
 // `year` scopes both sides of the formula to a calendar year (MaintenanceRecord by
 // its `period`'s year, LedgerEntry by `createdAt`'s year) — used wherever a
 // resident is acting against the balance shown for a specific year on their
 // Dashboard (creating a payment intent, etc). Omitted = the original all-time
 // behavior, still used by admin-dashboard.service.ts's bulk per-flat calc.
-export async function computeFlatBalances(flatId: string, year?: number): Promise<FlatBalances> {
+//
+// `category` (docs/other-charges/) — default MAINTENANCE, fully backward compatible
+// with every existing call site. When OTHER_CHARGE, the charge-row source switches
+// from MaintenanceRecord to OtherCharge and the LedgerEntry query is filtered to
+// matching-category rows — two fully independent pools, never combined into one
+// query or one formula call. balancesFromRows itself needs no changes either way;
+// it was already generic over `{ amount }[]` before this feature existed.
+export async function computeFlatBalances(
+  flatId: string,
+  year?: number,
+  category: LedgerCategory = 'MAINTENANCE',
+): Promise<FlatBalances> {
   const [records, entries] = await Promise.all([
-    prisma.maintenanceRecord.findMany({
-      where: { flatId, ...maintenanceRecordYearFilter(year) },
-      select: { amount: true },
-    }),
+    category === 'MAINTENANCE'
+      ? prisma.maintenanceRecord.findMany({
+          where: { flatId, ...maintenanceRecordYearFilter(year) },
+          select: { amount: true },
+        })
+      : prisma.otherCharge.findMany({
+          where: { flatId, ...otherChargeYearFilter(year) },
+          select: { amount: true },
+        }),
     prisma.ledgerEntry.findMany({
-      where: { flatId, ...ledgerEntryYearFilter(year) },
+      where: { flatId, category, ...ledgerEntryYearFilter(year) },
       select: { type: true, status: true, amount: true },
     }),
   ]);

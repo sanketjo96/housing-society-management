@@ -5,16 +5,19 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
+import { OtherChargesPage } from './pages/admin/OtherChargesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
 import { ReceiptBookPage } from './pages/admin/ReceiptBookPage'
 import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
+import { FeeTypesPage } from './pages/admin/settings/FeeTypesPage'
 import { SocietyDetailsPage } from './pages/admin/settings/SocietyDetailsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { MaintenanceBookPage } from './pages/MaintenanceBookPage'
 import { MyDetailsPage } from './pages/MyDetailsPage'
+import { OtherChargesBookPage } from './pages/OtherChargesBookPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 
 // staleTime > 0 so switching pages (which mount/unmount their content) doesn't
@@ -78,10 +81,25 @@ function App() {
                 path="/settings/billing"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><BillingPlanPage /></ProtectedRoute>}
               />
+              <Route
+                path="/settings/fee-types"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><FeeTypesPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/other-charges"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesPage /></ProtectedRoute>}
+              />
 
               <Route
                 path="/maintenance-book"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><MaintenanceBookPage /></ProtectedRoute>}
+              />
+              {/* Not a sidebar nav item — reached only via the resident Dashboard's
+                  "Other Outstanding" card, same drill-down convention as admin's
+                  /flat-dues (docs/other-charges/). */}
+              <Route
+                path="/other-charges-book"
+                element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><OtherChargesBookPage /></ProtectedRoute>}
               />
               <Route
                 path="/my-details"

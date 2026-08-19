@@ -1,4 +1,5 @@
 import { prisma } from '../../infrastructure/prisma/client';
+import type { LedgerCategory } from '../../infrastructure/prisma/generated/client';
 import {
   buildEscalationMessage,
   DEFAULT_GRACE_PERIOD_DAYS,
@@ -15,21 +16,35 @@ export interface DashboardSummary {
   outstandingTotal: number;
   pendingReviewTotal: number;
   collectionRatePercent: number;
+  // docs/other-charges/ — a fully separate pool from the maintenance figures above.
+  otherChargesOutstandingTotal: number;
+  totalOutstandingTotal: number;
 }
 
 // Society-wide bulk fetch (two queries total, not N+1 across flats), grouped by
 // flatId so each flat's balances can be computed with ledger.service.ts's shared
 // balancesFromRows — the exact same formula the resident's own Passbook uses, never
 // duplicated here.
-async function getBalancesByFlat(societyId: string) {
+//
+// `category` (docs/other-charges/) — default MAINTENANCE, backward compatible with
+// every existing call site. When OTHER_CHARGE, queries OtherCharge instead of
+// MaintenanceRecord and filters LedgerEntry to matching-category rows — the same
+// parameterization pattern as ledger-shared.ts's computeFlatBalances, one function
+// reused twice rather than a duplicated sibling.
+async function getBalancesByFlat(societyId: string, category: LedgerCategory = 'MAINTENANCE') {
   const flats = await listFlats(societyId);
   const [records, entries] = await Promise.all([
-    prisma.maintenanceRecord.findMany({
-      where: { flat: { societyId } },
-      select: { flatId: true, amount: true },
-    }),
+    category === 'MAINTENANCE'
+      ? prisma.maintenanceRecord.findMany({
+          where: { flat: { societyId } },
+          select: { flatId: true, amount: true },
+        })
+      : prisma.otherCharge.findMany({
+          where: { flat: { societyId } },
+          select: { flatId: true, amount: true },
+        }),
     prisma.ledgerEntry.findMany({
-      where: { flat: { societyId } },
+      where: { flat: { societyId }, category },
       select: { flatId: true, type: true, status: true, amount: true },
     }),
   ]);
@@ -66,7 +81,10 @@ async function getBalancesByFlat(societyId: string) {
 // chasing — a Credit is a committee-approved adjustment, not money that came in the
 // door. This only affects the rate; totalPaid itself is unchanged.
 export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
-  const byFlat = await getBalancesByFlat(societyId);
+  const [byFlat, byFlatOtherCharges] = await Promise.all([
+    getBalancesByFlat(societyId),
+    getBalancesByFlat(societyId, 'OTHER_CHARGE'),
+  ]);
 
   let totalBilled = 0;
   let totalPaid = 0;
@@ -83,7 +101,24 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
   const collectionRatePercent =
     totalBilled > 0 ? Math.round((totalApprovedDeposits / totalBilled) * 100) : 0;
 
-  return { totalBilled, totalPaid, outstandingTotal, pendingReviewTotal, collectionRatePercent };
+  // Fully separate pool (docs/other-charges/) — summed per-flat, same Math.max(0,...)-
+  // per-flat convention as outstandingTotal above, never netted against a flat that's
+  // overpaid on the other pool. totalOutstandingTotal is a plain sum of two already-
+  // floored figures.
+  const otherChargesOutstandingTotal = byFlatOtherCharges.reduce(
+    (sum, { balances }) => sum + balances.outstanding,
+    0,
+  );
+
+  return {
+    totalBilled,
+    totalPaid,
+    outstandingTotal,
+    pendingReviewTotal,
+    collectionRatePercent,
+    otherChargesOutstandingTotal,
+    totalOutstandingTotal: outstandingTotal + otherChargesOutstandingTotal,
+  };
 }
 
 export interface FlatDues {

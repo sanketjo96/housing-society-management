@@ -36,6 +36,16 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/me/ledger/deposits/intent')) {
       return Promise.resolve({ ok: true, json: async () => ({ intent: null }) });
     }
+    if (url.includes('/api/me/balances')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          maintenance: { outstanding: 0 },
+          otherCharges: { outstanding: 0 },
+          totalOutstanding: 0,
+        }),
+      });
+    }
     if (url.includes('/api/me/ledger')) {
       return Promise.resolve({
         ok: true,
@@ -50,7 +60,15 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/admin/dashboard/summary')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ totalBilled: 0, totalPaid: 0, outstandingTotal: 0, pendingReviewTotal: 0, collectionRatePercent: 0 }),
+        json: async () => ({
+          totalBilled: 0,
+          totalPaid: 0,
+          outstandingTotal: 0,
+          pendingReviewTotal: 0,
+          collectionRatePercent: 0,
+          otherChargesOutstandingTotal: 0,
+          totalOutstandingTotal: 0,
+        }),
       });
     }
     if (url.includes('/api/admin/dashboard/flat-dues')) {
@@ -86,7 +104,7 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     await waitFor(() => {
-      expect(screen.getByText(/outstanding total/i)).toBeInTheDocument();
+      expect(screen.getByText(/maintenance outstanding total/i)).toBeInTheDocument();
     });
   });
 });

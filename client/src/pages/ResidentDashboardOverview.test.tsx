@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../lib/auth-token';
 import { ResidentDashboardOverview } from './ResidentDashboardOverview';
@@ -13,7 +14,9 @@ function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ResidentDashboardOverview />
+      <MemoryRouter>
+        <ResidentDashboardOverview />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -54,7 +57,24 @@ function mockFetch(ledger: unknown = baseLedger, openIntent: unknown = null, rec
       return Promise.resolve({
         ok: true,
         json: async () => ({
-          intent: { id: 'intent-1', amount: 500, paymentMethod: 'UPI', upiLink: 'upi://pay?x', qrDataUrl: 'data:image/png;base64,abc' },
+          intent: {
+            id: 'intent-1',
+            amount: 500,
+            paymentMethod: 'UPI',
+            upiLink: 'upi://pay?x',
+            qrDataUrl: 'data:image/png;base64,abc',
+            category: 'MAINTENANCE',
+          },
+        }),
+      });
+    }
+    if (url.includes('/api/me/balances')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          maintenance: { outstanding: baseLedger.totals.outstanding },
+          otherCharges: { outstanding: 0 },
+          totalOutstanding: baseLedger.totals.outstanding,
         }),
       });
     }
@@ -83,7 +103,7 @@ describe('ResidentDashboardOverview', () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/^outstanding$/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/^maintenance outstanding$/i)).toBeInTheDocument());
     // Appears in both the card and the "You owe ..." line below it.
     expect(screen.getAllByText('₹2,200').length).toBeGreaterThan(0);
     // No Payable/Amount Paid cards exist anymore (those were removed in the
@@ -155,7 +175,7 @@ describe('ResidentDashboardOverview', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
         expect.stringMatching(/\/api\/me\/ledger\/deposits\/intent$/),
-        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 2200 }) }),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 2200, category: 'MAINTENANCE' }) }),
       );
     });
 
@@ -194,7 +214,7 @@ describe('ResidentDashboardOverview', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
         expect.stringMatching(/\/api\/me\/ledger\/deposits\/intent$/),
-        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 500 }) }),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 500, category: 'MAINTENANCE' }) }),
       );
     });
   });
@@ -238,6 +258,7 @@ describe('ResidentDashboardOverview', () => {
       paymentMethod: 'UPI',
       upiLink: 'upi://pay?x',
       qrDataUrl: 'data:image/png;base64,abc',
+      category: 'MAINTENANCE',
     });
     renderPage();
 
@@ -253,6 +274,7 @@ describe('ResidentDashboardOverview', () => {
       paymentMethod: 'BANK_TRANSFER',
       bankAccountNumber: '123456789012',
       bankIfsc: 'HDFC0001234',
+      category: 'MAINTENANCE',
     });
     renderPage();
 

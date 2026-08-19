@@ -132,6 +132,7 @@ export async function manualDepositHandler(req: Request, res: Response) {
       req.user.id,
       parsed.data.flatId,
       parsed.data.amount,
+      parsed.data.category,
     );
     if (!entry) {
       res.status(404).json({ error: 'Flat not found' });

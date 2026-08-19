@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream';
-import type { LedgerType, Role } from '../../infrastructure/prisma/generated/client';
+import type { LedgerCategory, LedgerType, Role } from '../../infrastructure/prisma/generated/client';
 import { prisma } from '../../infrastructure/prisma/client';
 import {
   ForbiddenLedgerEntryAccessError,
@@ -44,6 +44,7 @@ interface ReceiptEntry {
   amount: unknown; // Prisma Decimal — always passed through Number() before use
   note: string | null;
   payerId: string;
+  category: LedgerCategory;
 }
 
 // Computable purely from the flat + the LedgerEntry's own (already-existing) id —
@@ -71,7 +72,9 @@ export function buildReceiptNumber(
 // under the ledger pivot, and Credit already carries its own required reason in
 // `note`.
 function buildPurposeLabel(entry: ReceiptEntry): string {
-  if (entry.type === 'DEPOSIT') return 'Maintenance dues payment';
+  if (entry.type === 'DEPOSIT') {
+    return entry.category === 'OTHER_CHARGE' ? 'Other charges payment' : 'Maintenance dues payment';
+  }
   return entry.note ?? 'Committee-approved credit adjustment';
 }
 

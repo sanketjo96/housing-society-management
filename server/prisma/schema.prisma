@@ -44,6 +44,15 @@ enum LedgerType {
   CREDIT
 }
 
+// Which balance pool a LedgerEntry/PaymentIntent belongs to (docs/other-charges/) —
+// two fully independent Outstanding tracks, never combined into one settlement fill.
+// Default MAINTENANCE is a safe backfill: every row that existed before this feature
+// genuinely was a maintenance transaction (Other Charges didn't exist yet).
+enum LedgerCategory {
+  MAINTENANCE
+  OTHER_CHARGE
+}
+
 // Who actually created a LedgerEntry row — distinct from `payerId` (whose balance
 // it affects). A resident's own self-service Deposit/Credit has creator == payer;
 // an admin's manualDeposit fallback (cash/bank transfer, no UPI screenshot) has
@@ -164,6 +173,7 @@ model Society {
   users    User[]
   flats    Flat[]
   receipts Receipt[]
+  feeTypes FeeType[]
 }
 
 model User {
@@ -188,6 +198,8 @@ model User {
   ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
   reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
   createdLedgerEntries  LedgerEntry[]        @relation("LedgerCreatedBy")
+  otherChargesOwed      OtherCharge[]        @relation("OtherChargePayer")
+  otherChargesBilled    OtherCharge[]        @relation("OtherChargeBilledBy")
   issuedReceipts        Receipt[]            @relation("ReceiptIssuer")
   auditLogs             AuditLog[]
   billedRecords         MaintenanceRecord[]
@@ -258,6 +270,7 @@ model Flat {
   maintenanceRecords MaintenanceRecord[]
   ledgerEntries      LedgerEntry[]
   paymentIntent      PaymentIntent?
+  otherCharges       OtherCharge[]
 
   @@unique([societyId, wing, flatNumber])
   @@index([societyId])
@@ -365,6 +378,10 @@ model LedgerEntry {
   createdBy     User          @relation("LedgerCreatedBy", fields: [createdById], references: [id])
   createdByType CreatedByType
 
+  // Which balance pool this entry settles against (docs/other-charges/) — default
+  // MAINTENANCE, the only pool that existed before this feature.
+  category LedgerCategory @default(MAINTENANCE)
+
   receipt Receipt?
 
   @@index([flatId])
@@ -406,7 +423,10 @@ model Receipt {
 // amount + who + when, not a full LedgerEntry: no `status` needed since existence of
 // the row IS the "open" state, and submitting a screenshot deletes it in the same
 // transaction that creates the resulting LedgerEntry(DEPOSIT). One row per flat at
-// most (`flatId` unique) — creating a new intent while one is open replaces it.
+// most (`flatId` unique) — creating a new intent while one is open for the SAME
+// category replaces it; a different category is BLOCKED, not replaced (see
+// docs/other-charges/ — a resident has at most one open intent at a time, across
+// both pools, deliberately not one-per-category).
 model PaymentIntent {
   id        String   @id @default(cuid())
   amount    Decimal  @db.Decimal(10, 2)
@@ -417,6 +437,62 @@ model PaymentIntent {
 
   payerId String
   payer   User   @relation(fields: [payerId], references: [id])
+
+  category LedgerCategory @default(MAINTENANCE)
+}
+
+// Admin-configurable catalog of ad-hoc fee types (joining fee, transfer fee, fine,
+// etc.) — a real table, not an enum, so an admin can add "Parking Fee" without a
+// deploy. isActive is this schema's first boolean soft-delete flag — a billed
+// OtherCharge must keep a valid, named reference forever, so a fee type is
+// deactivated, never deleted. See docs/other-charges/.
+model FeeType {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  otherCharges OtherCharge[]
+
+  @@unique([societyId, name])
+  @@index([societyId])
+}
+
+// A one-off, admin-billed charge against a flat's OWNER (never the tenant — payer is
+// always ownerId, resolved server-side, never client-suppliable). Immutable once
+// created, same convention as MaintenanceRecord. Contributes to its own, fully
+// separate Outstanding pool (docs/other-charges/) — never merged with
+// MaintenanceRecord's settlement math. No Receipt is ever generated for billing one
+// (Receipts are money-received-only); it's paid down via the existing
+// Deposit/manualDeposit flow, tagged category=OTHER_CHARGE.
+model OtherCharge {
+  id        String   @id @default(cuid())
+  amount    Decimal  @db.Decimal(10, 2)
+  note      String?
+  dueDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  flatId String
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  payerId String
+  payer   User   @relation("OtherChargePayer", fields: [payerId], references: [id])
+
+  feeTypeId String
+  feeType   FeeType @relation(fields: [feeTypeId], references: [id])
+
+  billedById String
+  billedBy   User   @relation("OtherChargeBilledBy", fields: [billedById], references: [id])
+
+  @@index([flatId])
+  @@index([payerId])
+  @@index([feeTypeId])
 }
 
 // channel/recipient/status describe the send attempt itself. relatedEntityType +

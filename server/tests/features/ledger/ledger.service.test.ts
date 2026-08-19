@@ -21,12 +21,15 @@ import {
   getLedgerEntryFileForViewing,
   getLedgerForResident,
   getOpenPaymentIntent,
+  IntentAlreadyOpenForOtherCategoryError,
   InvalidAmountError,
   InvalidDepositAmountError,
   NoOpenPaymentIntentError,
   PaymentMethodNotConfiguredError,
   submitPaymentIntent,
 } from '../../../src/features/ledger/resident/resident-ledger-service';
+import { createFeeType } from '../../../src/features/fee-types/fee-types.service';
+import { billOtherCharge } from '../../../src/features/other-charges/other-charges.service';
 
 const fakeProofFile = {
   buffer: Buffer.from('fake-image-bytes'),
@@ -103,6 +106,8 @@ describe('ledger service', () => {
     await prisma.receipt.deleteMany({ where: { societyId } });
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.otherCharge.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.feeType.deleteMany({ where: { societyId } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     const userIds = await prisma.user
       .findMany({ where: { societyId }, select: { id: true } })
@@ -577,6 +582,46 @@ describe('ledger service', () => {
     });
   });
 
+  // docs/other-charges/ — a resident has at most one open intent at a time, across
+  // BOTH pools. Same-category replace still works (already covered above); a
+  // DIFFERENT category is blocked, not silently replaced.
+  describe('payment intents — one at a time across pools (docs/other-charges/)', () => {
+    it('replacing an intent for the SAME category still works unchanged', async () => {
+      await createOrReplacePaymentIntent(flatId, ownerId, societyId, 10, 'MAINTENANCE');
+      const replaced = await createOrReplacePaymentIntent(flatId, ownerId, societyId, 25, 'MAINTENANCE');
+      expect(replaced.amount).toBe(25);
+      expect(replaced.category).toBe('MAINTENANCE');
+      await cancelPaymentIntent(flatId, societyId);
+    });
+
+    it('locking a MAINTENANCE intent while an OTHER_CHARGE one is open is blocked, not replaced', async () => {
+      const feeType = await createFeeType(societyId, adminId, {
+        name: `Intent Block Fee ${Date.now()}`,
+      });
+      await billOtherCharge(societyId, adminId, { flatId, feeTypeId: feeType.id, amount: 500 });
+
+      const otherChargeIntent = await createOrReplacePaymentIntent(
+        flatId,
+        ownerId,
+        societyId,
+        100,
+        'OTHER_CHARGE',
+      );
+      expect(otherChargeIntent.category).toBe('OTHER_CHARGE');
+
+      await expect(
+        createOrReplacePaymentIntent(flatId, ownerId, societyId, 10, 'MAINTENANCE'),
+      ).rejects.toThrow(IntentAlreadyOpenForOtherCategoryError);
+
+      // The original OTHER_CHARGE intent is untouched — never silently replaced.
+      const stillOpen = await getOpenPaymentIntent(flatId, societyId);
+      expect(stillOpen?.category).toBe('OTHER_CHARGE');
+      expect(stillOpen?.amount).toBe(100);
+
+      await cancelPaymentIntent(flatId, societyId);
+    });
+  });
+
   describe('payment method selection (UPI vs bank transfer)', () => {
     const methodSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let methodSocietyId: string;
@@ -689,7 +734,7 @@ describe('ledger service', () => {
 
     it('scopes entries and yearTotals to the given year; totals/availableYears stay lifetime regardless', async () => {
       const allTime = await getLedgerForResident(flatId);
-      const scoped = await getLedgerForResident(flatId, 2026);
+      const scoped = await getLedgerForResident(flatId, 'MAINTENANCE', 2026);
       expect(scoped.yearTotals.totalCharges).toBe(2000);
       expect(scoped.entries.every((e) => e.type !== 'SYSTEM' || e.period?.startsWith('2026'))).toBe(
         true,
@@ -699,7 +744,7 @@ describe('ledger service', () => {
       // identical (lifetime) no matter which year is asked for.
       expect(scoped.totals).toEqual(allTime.totals);
 
-      const otherYear = await getLedgerForResident(flatId, 1999);
+      const otherYear = await getLedgerForResident(flatId, 'MAINTENANCE', 1999);
       expect(otherYear.yearTotals.totalCharges).toBe(0);
       expect(otherYear.totals).toEqual(allTime.totals);
       expect(otherYear.entries).toHaveLength(0);

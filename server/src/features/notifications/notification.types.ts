@@ -49,9 +49,28 @@ export interface CreditPaymentApprovedEvent extends NotificationEventBase {
   };
 }
 
+// docs/other-charges/ — fired when an admin bills an ad-hoc fee (joining fee,
+// transfer fee, fine, ...) to a flat's owner. A separate event from
+// MAINTENANCE_BILL_GENERATED even though both represent "a new charge exists" —
+// Other Charges is a deliberately separate pool throughout this feature, including
+// at the notification layer.
+export interface OtherChargeBilledEvent extends NotificationEventBase {
+  eventType: 'OTHER_CHARGE_BILLED';
+  data: {
+    chargeId: string;
+    flatId: string;
+    societyId: string;
+    feeTypeName: string;
+    amount: number;
+    dueDate: string;
+    note?: string;
+  };
+}
+
 export type NotificationEvent =
   | MaintenanceBillGeneratedEvent
   | DepositPaymentApprovedEvent
-  | CreditPaymentApprovedEvent;
+  | CreditPaymentApprovedEvent
+  | OtherChargeBilledEvent;
 
 export type NotificationEventType = NotificationEvent['eventType'];

@@ -3,7 +3,11 @@
 // live in ../resident/resident-ledger-service.ts; balance/settlement formulas shared
 // by both live in ../ledger-shared.ts.
 import { randomUUID } from 'node:crypto';
-import type { LedgerType, ProofStatus } from '../../../infrastructure/prisma/generated/client';
+import type {
+  LedgerCategory,
+  LedgerType,
+  ProofStatus,
+} from '../../../infrastructure/prisma/generated/client';
 import { prisma } from '../../../infrastructure/prisma/client';
 import { logger } from '../../../infrastructure/observability';
 import { LedgerEntryAlreadyReviewedError } from '../../../shared/errors/errors';
@@ -61,13 +65,14 @@ export const LEDGER_ENTRY_LIST_INCLUDE = {
 // now that there's something to distinguish again post-Credit-reintroduction).
 export async function listPendingLedgerEntries(
   societyId: string,
-  filters: { status?: ProofStatus; type?: LedgerType } = {},
+  filters: { status?: ProofStatus; type?: LedgerType; category?: LedgerCategory } = {},
 ) {
   return prisma.ledgerEntry.findMany({
     where: {
       flat: { societyId },
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.category ? { category: filters.category } : {}),
     },
     include: LEDGER_ENTRY_LIST_INCLUDE,
     orderBy: { createdAt: 'desc' },
@@ -182,18 +187,23 @@ export async function rejectLedgerEntry(
 // used by local-storage-adapter.ts) and passed explicitly into both the receipt
 // build and the eventual `create`, preserving the same "file saved before the row
 // is committed" ordering used everywhere else.
+// `category` (docs/other-charges/) — default MAINTENANCE, fully backward
+// compatible. When OTHER_CHARGE, payerId is always flat.ownerId (matching
+// OtherCharge's own payer rule — Other Charges are always owner-billed, unlike
+// maintenance's tenant-if-occupied resolution below).
 export async function manualDeposit(
   societyId: string,
   adminId: string,
   flatId: string,
   amount: number,
+  category: LedgerCategory = 'MAINTENANCE',
 ) {
   if (!(amount > 0)) throw new InvalidAmountError();
 
   const flat = await prisma.flat.findFirst({ where: { id: flatId, societyId } });
   if (!flat) return null;
 
-  const payerId = flat.currentTenantId ?? flat.ownerId;
+  const payerId = category === 'OTHER_CHARGE' ? flat.ownerId : (flat.currentTenantId ?? flat.ownerId);
   const [payer, society] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: payerId }, select: { name: true } }),
     prisma.society.findUniqueOrThrow({
@@ -206,7 +216,7 @@ export async function manualDeposit(
   const issuedAt = new Date();
   const note = 'Manual deposit (cash/bank transfer)';
   const { receiptNumber, fileKey } = await prepareReceiptForEntry(
-    { id: entryId, type: 'DEPOSIT', amount, note, payerId },
+    { id: entryId, type: 'DEPOSIT', amount, note, payerId, category },
     { wing: flat.wing, flatNumber: flat.flatNumber },
     payer,
     society,
@@ -231,6 +241,7 @@ export async function manualDeposit(
         // text or an AuditLog join.
         createdById: adminId,
         createdByType: 'ADMIN',
+        category,
       },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });

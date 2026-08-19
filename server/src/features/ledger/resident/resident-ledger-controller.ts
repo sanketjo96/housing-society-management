@@ -11,6 +11,8 @@ import {
   getLedgerEntryFileForViewing,
   getLedgerForResident,
   getOpenPaymentIntent,
+  getResidentBalancesSummary,
+  IntentAlreadyOpenForOtherCategoryError,
   InvalidAmountError,
   InvalidDepositAmountError,
   NoOpenPaymentIntentError,
@@ -56,8 +58,29 @@ export async function getMyLedgerHandler(req: Request, res: Response) {
     return;
   }
 
-  const ledger = await getLedgerForResident(flatId, parsedQuery.data.year);
+  const ledger = await getLedgerForResident(flatId, parsedQuery.data.category, parsedQuery.data.year);
   res.status(200).json(ledger);
+}
+
+// docs/other-charges/ — powers the Dashboard's 4 summary cards in one call.
+export async function getMyBalancesHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const flatId = await resolveMyFlatId(
+    req.user.id,
+    req.user.societyId,
+    req.user.role as 'OWNER' | 'TENANT',
+  );
+  if (!flatId) {
+    res.status(404).json({ error: 'No flat associated with your account' });
+    return;
+  }
+
+  const balances = await getResidentBalancesSummary(flatId);
+  res.status(200).json(balances);
 }
 
 export async function getPaymentIntentHandler(req: Request, res: Response) {
@@ -116,10 +139,15 @@ export async function createPaymentIntentHandler(req: Request, res: Response) {
       req.user.id,
       req.user.societyId,
       parsed.data.amount,
+      parsed.data.category,
     );
     res.status(201).json({ intent });
   } catch (err) {
     if (amountErrorResponse(res, err)) return;
+    if (err instanceof IntentAlreadyOpenForOtherCategoryError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     if (err instanceof PaymentMethodNotConfiguredError) {
       res.status(409).json({ error: err.message });
       return;
@@ -229,6 +257,7 @@ export async function createDepositHandler(req: Request, res: Response) {
             }
           : undefined,
       },
+      parsed.data.category,
     );
     res.status(201).json(entry);
   } catch (err) {

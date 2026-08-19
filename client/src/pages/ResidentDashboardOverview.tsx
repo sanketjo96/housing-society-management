@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, CheckCircle2, Download, PlusCircle, QrCode, X } from 'lucide-react';
+import { Check, CheckCircle2, Download, PlusCircle, QrCode } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DataTable } from '../components/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass } from '../components/FormField';
 import { FileUploadField } from '../components/FileUploadField';
 import { Modal } from '../components/Modal';
+import { fetchOpenIntent, PayIntentPanel, type PaymentIntent } from '../components/PayIntentPanel';
 import { authedFetch } from '../lib/api';
 import { useIsMobile } from '../lib/use-is-mobile';
 
@@ -46,19 +48,13 @@ interface LedgerResponse {
   availableYears: number[];
 }
 
-interface PaymentIntent {
-  id: string;
-  amount: number;
-  paymentMethod: 'UPI' | 'BANK_TRANSFER';
-  // Set only when paymentMethod is 'UPI'.
-  upiLink?: string;
-  qrDataUrl?: string;
-  // Set only when paymentMethod is 'BANK_TRANSFER' — shown instead of the QR when
-  // the society has no UPI VPA configured (UPI always takes precedence when both
-  // are set — see ledger.service.ts's buildPaymentIntentResult).
-  bankAccountNumber?: string;
-  bankIfsc?: string;
-  createdAt: string;
+// docs/other-charges/ — powers the "Other Outstanding"/"Total Outstanding" cards in
+// one cheap call, independent of (and never merged with) the maintenance ledger
+// fetch above.
+interface BalancesSummary {
+  maintenance: { outstanding: number };
+  otherCharges: { outstanding: number };
+  totalOutstanding: number;
 }
 
 async function fetchMyLedger(year: number): Promise<LedgerResponse> {
@@ -67,11 +63,10 @@ async function fetchMyLedger(year: number): Promise<LedgerResponse> {
   return res.json();
 }
 
-async function fetchOpenIntent(): Promise<PaymentIntent | null> {
-  const res = await authedFetch('/api/me/ledger/deposits/intent');
-  if (!res.ok) throw new Error('Could not check your pending payment.');
-  const body = await res.json();
-  return body.intent;
+async function fetchMyBalances(): Promise<BalancesSummary> {
+  const res = await authedFetch('/api/me/balances');
+  if (!res.ok) throw new Error('Could not load your balances.');
+  return res.json();
 }
 
 function dateLabel(iso: string): string {
@@ -151,116 +146,6 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-ink bg-ink p-5">
       <p className="m-0 text-xs uppercase tracking-wide text-[#B7BCB2]">{label}</p>
       <p className="m-0 mt-1 font-mono-brand text-2xl font-semibold text-white">₹{value.toLocaleString('en-IN')}</p>
-    </div>
-  );
-}
-
-// Pay — tapping the header's Pay button locks the amount immediately, at exactly
-// the current Outstanding (see ResidentDashboardOverview's lockMutation) — there is
-// no amount-entry step and the amount can't be edited once locked. This panel only
-// ever renders once an intent already exists — forking by device from that point
-// on: mobile deep-links straight into a UPI app and then prompts for the screenshot
-// on return; desktop shows a QR to scan with a phone and lets the resident attach
-// the screenshot whenever they're back, even in a later session (the intent is a
-// real DB row, not just component state — see ledger.service.ts's PaymentIntent
-// functions).
-function PayIntentPanel({ intent, isMobile }: { intent: PaymentIntent; isMobile: boolean }) {
-  const queryClient = useQueryClient();
-  const [file, setFile] = useState<File | null>(null);
-
-  // Re-check the open intent when the resident comes back to the tab (e.g. after
-  // the UPI app redirect on mobile) — the intent is server-persisted, so this just
-  // keeps the UI in sync rather than relying on the 30s query staleTime.
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === 'visible') {
-        queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [queryClient]);
-
-  const submitMutation = useMutation<unknown, Error, void>({
-    mutationFn: async () => {
-      const formData = new FormData();
-      if (file) formData.append('file', file);
-      const res = await authedFetch('/api/me/ledger/deposits/intent/submit', { method: 'POST', body: formData });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not submit your payment.');
-      return body;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-ledger'] });
-      queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
-      setFile(null);
-    },
-  });
-
-  const cancelMutation = useMutation<unknown, Error, void>({
-    mutationFn: async () => {
-      await authedFetch('/api/me/ledger/deposits/intent', { method: 'DELETE' });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
-    },
-  });
-
-  const isBankTransfer = intent.paymentMethod === 'BANK_TRANSFER';
-
-  return (
-    <div className="mb-4 flex flex-wrap items-start gap-4 rounded-xl border border-line bg-paper p-4">
-      {!isBankTransfer && !isMobile && (
-        <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-md border border-line bg-white p-1">
-          <img src={intent.qrDataUrl} alt="UPI payment QR code" className="h-full w-full" />
-        </div>
-      )}
-      {isBankTransfer && (
-        <div className="shrink-0 rounded-md border border-line bg-white p-3">
-          <p className="m-0 text-[10px] uppercase tracking-wide text-muted">Account number</p>
-          <p className="m-0 mb-2 font-mono-brand text-sm font-semibold text-ink">{intent.bankAccountNumber}</p>
-          <p className="m-0 text-[10px] uppercase tracking-wide text-muted">IFSC</p>
-          <p className="m-0 font-mono-brand text-sm font-semibold text-ink">{intent.bankIfsc}</p>
-        </div>
-      )}
-      <div className="min-w-52 flex-1">
-        <p className="m-0 mb-1.5 text-sm font-semibold text-ink">
-          ₹{intent.amount.toLocaleString('en-IN')} locked{' '}
-          <span className="font-normal text-muted">— awaiting your screenshot</span>
-        </p>
-        <p className="m-0 mb-2.5 text-xs text-muted">
-          {isBankTransfer
-            ? 'Transfer the amount via NEFT/IMPS/RTGS to the account details above, then attach a screenshot or the transaction reference below.'
-            : isMobile
-              ? 'Complete the payment in your UPI app, then attach the screenshot below.'
-              : 'Scan the QR with a UPI app on your phone. Once you have a screenshot, attach it below — you can come back later if needed.'}
-        </p>
-
-        <div className="mb-2.5">
-          <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach payment screenshot" />
-        </div>
-
-        {submitMutation.error && <ErrorBanner>{submitMutation.error.message}</ErrorBanner>}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending || !file}
-            className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
-          >
-            {submitMutation.isPending ? 'Submitting…' : 'Submit payment'}
-          </button>
-          <button
-            type="button"
-            onClick={() => cancelMutation.mutate()}
-            disabled={cancelMutation.isPending}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-transparent px-3.5 py-2 text-xs font-semibold text-ink"
-          >
-            <X size={13} /> Cancel
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -356,11 +241,21 @@ export function ResidentDashboardOverview() {
   const [showCreditModal, setShowCreditModal] = useState(false);
 
   const { data, isLoading, isError } = useQuery({ queryKey: ['my-ledger', year], queryFn: () => fetchMyLedger(year) });
+  // docs/other-charges/ — a fully separate pool, its own cheap summary call, never
+  // merged into `data.totals` above.
+  const { data: balances } = useQuery({ queryKey: ['my-balances'], queryFn: fetchMyBalances });
   // The Pay button's own visibility/state, and PayIntentPanel's rendering, both key
   // off this — an open intent means the panel is already showing, no separate
   // "tap Pay again" step needed on a return visit (spec: "the pending intent
-  // persists and is shown again next time they open the app").
+  // persists and is shown again next time they open the app"). Shared with
+  // OtherChargesBookPage.tsx — there's only ever one intent, across both pools
+  // (docs/other-charges/), so both pages observe the same query/cache entry.
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
+  // An intent open for the OTHER pool blocks starting one here (server-enforced —
+  // see IntentAlreadyOpenForOtherCategoryError) — this page must render a notice
+  // instead of the Pay button/form in that case, not attempt to lock anyway.
+  const intentOpenForThisPool = intentQuery.data?.category === 'MAINTENANCE';
+  const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'MAINTENANCE';
 
   // Re-defaults the field to the current Outstanding whenever it changes (e.g. after
   // a prior payment is approved and the resident opens Pay again) — but not on every
@@ -383,7 +278,7 @@ export function ResidentDashboardOverview() {
     mutationFn: async (amount: number) => {
       const res = await authedFetch('/api/me/ledger/deposits/intent', {
         method: 'POST',
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, category: 'MAINTENANCE' }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not lock this payment.');
@@ -473,8 +368,12 @@ export function ResidentDashboardOverview() {
       {data && (
         <>
           <div className="mb-5 grid grid-cols-2 gap-4">
-            <SummaryCard label="Outstanding" value={data.totals.outstanding} />
+            <SummaryCard label="Maintenance Outstanding" value={data.totals.outstanding} />
             <SummaryCard label="Available Credit" value={data.totals.availableCredit} />
+            <Link to="/other-charges-book" className="block">
+              <SummaryCard label="Other Outstanding" value={balances?.otherCharges.outstanding ?? 0} />
+            </Link>
+            <SummaryCard label="Total Outstanding" value={balances?.totalOutstanding ?? 0} />
           </div>
 
           <div className="mb-5 rounded-2xl border border-line bg-white p-5">
@@ -537,7 +436,26 @@ export function ResidentDashboardOverview() {
             {/* Shown either right after locking, or because a payment locked
                 earlier (this session or a past one) is still open and awaiting a
                 screenshot. */}
-            {intentQuery.data && <PayIntentPanel intent={intentQuery.data} isMobile={isMobile} />}
+            {intentOpenForThisPool && intentQuery.data && (
+              <PayIntentPanel
+                intent={intentQuery.data}
+                isMobile={isMobile}
+                onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-ledger'] })}
+              />
+            )}
+            {/* docs/other-charges/ — a resident has at most one open intent at a
+                time, across both pools. If it's for Other Charges, this page can't
+                start a new one (server-blocked) — point them at where to finish it
+                instead of just hiding the Pay button with no explanation. */}
+            {intentOpenForOtherPool && (
+              <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                You have a pending payment for Other Charges — finish or cancel it on the{' '}
+                <Link to="/other-charges-book" className="font-semibold text-teal">
+                  Other Charges
+                </Link>{' '}
+                page before paying here.
+              </div>
+            )}
 
             {ledgerRows.length === 0 && (
               <p className="m-0 flex items-center gap-1.5 text-sm text-teal">

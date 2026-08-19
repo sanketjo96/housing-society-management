@@ -12,6 +12,7 @@ import { downloadAuthedFile } from '../../lib/download-file';
 
 type LedgerEntryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type CreatedByType = 'OWNER' | 'TENANT' | 'ADMIN';
+type LedgerCategory = 'MAINTENANCE' | 'OTHER_CHARGE';
 
 interface LedgerEntryListItem {
   id: string;
@@ -22,8 +23,26 @@ interface LedgerEntryListItem {
   fileUrl: string | null;
   createdAt: string;
   createdByType: CreatedByType;
+  category: LedgerCategory;
   payer: { id: string; name: string; email: string };
   flat: { id: string; wing: string; flatNumber: string };
+}
+
+// docs/other-charges/ — which pool this entry affects. Deliberately a separate
+// badge from Type (Deposit/Credit) and Created by (Owner/Tenant/Admin) — a single
+// row is independently described by all three axes.
+const CATEGORY_META: Record<LedgerCategory, { className: string; label: string }> = {
+  MAINTENANCE: { className: 'border border-line text-ink', label: 'Maintenance' },
+  OTHER_CHARGE: { className: 'border border-brass text-brass', label: 'Other Charge' },
+};
+
+function CategoryBadge({ category }: { category: LedgerCategory }) {
+  const meta = CATEGORY_META[category];
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
 }
 
 // Who actually created the row — distinct from the payer it's for. An ADMIN-created
@@ -69,6 +88,7 @@ function MarkAsPaidModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const [flatId, setFlatId] = useState('');
   const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState<LedgerCategory>('MAINTENANCE');
   const [succeeded, setSucceeded] = useState(false);
 
   const { data: flats, isLoading: flatsLoading } = useQuery({
@@ -83,7 +103,7 @@ function MarkAsPaidModal({ onClose }: { onClose: () => void }) {
     mutationFn: async () => {
       const res = await authedFetch('/api/admin/ledger-entries/manual-deposit', {
         method: 'POST',
-        body: JSON.stringify({ flatId, amount: parsedAmount }),
+        body: JSON.stringify({ flatId, amount: parsedAmount, category }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not mark this payment as paid.');
@@ -95,6 +115,11 @@ function MarkAsPaidModal({ onClose }: { onClose: () => void }) {
       // without this, the Receipt Book page's cached list (30s staleTime,
       // App.tsx) can silently miss the one just issued.
       queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
+      // Affects either pool's Outstanding depending on category — refresh the
+      // dashboard cards (and, if this was an Other Charge, its own book/list) so
+      // neither goes stale for the rest of the 30s window.
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-other-charges'] });
       setSucceeded(true);
     },
   });
@@ -147,6 +172,16 @@ function MarkAsPaidModal({ onClose }: { onClose: () => void }) {
           className={inputClass}
         />
         {!isAmountValid && amount.length > 0 && <ErrMsg>Enter an amount greater than 0.</ErrMsg>}
+      </Field>
+      <Field label="Category">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value as LedgerCategory)}
+          className={inputClass}
+        >
+          <option value="MAINTENANCE">Maintenance</option>
+          <option value="OTHER_CHARGE">Other Charge</option>
+        </select>
       </Field>
 
       {submitMutation.error && <ErrorBanner>{submitMutation.error.message}</ErrorBanner>}
@@ -373,6 +408,11 @@ export function PaymentProofsPage() {
         id: 'type',
         header: 'Type',
         cell: ({ row }) => <LedgerTypeBadge type={row.original.type} />,
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        cell: ({ row }) => <CategoryBadge category={row.original.category} />,
       },
       {
         id: 'createdBy',

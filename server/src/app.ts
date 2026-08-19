@@ -24,6 +24,8 @@ import { adminReceiptsRouter } from './features/receipts/admin/admin-receipts-ro
 import { maintenanceRecordsRouter } from './features/maintenance/maintenance-records.route';
 import { profileRouter } from './features/users/profile/profile-route';
 import { societySettingsRouter } from './features/society-settings/society-settings.route';
+import { feeTypesRouter } from './features/fee-types/fee-types.route';
+import { otherChargesRouter } from './features/other-charges/other-charges.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 
 export const app = express();
@@ -84,6 +86,8 @@ app.use(adminReceiptsRouter);
 app.use(maintenanceRecordsRouter);
 app.use(profileRouter);
 app.use(societySettingsRouter);
+app.use(feeTypesRouter);
+app.use(otherChargesRouter);
 
 // Must be registered last (Express's 4-arg-signature error-middleware convention).
 app.use(errorHandler);

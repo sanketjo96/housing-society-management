@@ -10,6 +10,9 @@ interface DashboardSummary {
   outstandingTotal: number;
   pendingReviewTotal: number;
   collectionRatePercent: number;
+  // docs/other-charges/ — a fully separate pool from the maintenance figures above.
+  otherChargesOutstandingTotal: number;
+  totalOutstandingTotal: number;
 }
 
 interface FlatDues {
@@ -125,6 +128,18 @@ export function AdminDashboardPage() {
             accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
             note="View flat-wise dues →"
             to="/flat-dues"
+          />
+          <SummaryCard
+            label="Other Charges Outstanding Total"
+            value={`₹${summaryQuery.data.otherChargesOutstandingTotal.toLocaleString('en-IN')}`}
+            accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
+            note="View other charges →"
+            to="/other-charges"
+          />
+          <SummaryCard
+            label="Total Outstanding"
+            value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
+            accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
           />
           <SummaryCard
             label="Maintenance Collection Rate"
