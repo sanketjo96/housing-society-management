@@ -1,7 +1,7 @@
-import { BadgeIndianRupee, BookText, Building2, LayoutGrid, Tag, Wallet, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, Settings, Tag, Users, Wallet, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { DashboardShell, type NavItem } from './DashboardShell';
+import { DashboardShell, type NavEntry } from './DashboardShell';
 
 // One shared shell for every authenticated page (mounted once, in App.tsx, as a
 // layout route wrapping /dashboard, /flats, /payment-proofs, /settings/*,
@@ -12,27 +12,52 @@ import { DashboardShell, type NavItem } from './DashboardShell';
 // their own top-level URLs (see App.tsx) needs exactly one place that still knows
 // "which nav items for which role" — this file is that place; it owns no routing
 // of its own beyond rendering the matched child via <Outlet/>.
-// '/flats', '/tenants', '/flat-dues', and '/payment-proofs' are deliberately not
-// here — all four are still real, admin-only routes (App.tsx), but reached only by
-// clicking the corresponding tile on the dashboard (AdminDashboardPage: Total
+// '/flats', '/tenants', '/flat-dues', and '/other-charges-dues' are deliberately
+// not here — all four are still real, admin-only routes (App.tsx), but reached only
+// by clicking the corresponding tile on the dashboard (AdminDashboardPage: Total
 // Owners/Total Flats → /flats, Total Tenants → /tenants, Maintenance Outstanding
-// Total → /flat-dues, the "N payment proofs pending review" widget →
-// /payment-proofs), not via the sidebar. '/other-charges' IS a sidebar item
-// (docs/other-charges/), unlike those four — it's a primary, repeated admin
-// action (billing a charge), not a drill-down of an existing dashboard figure.
-const ADMIN_NAV_ITEMS: NavItem[] = [
+// Total → /flat-dues, Other Charges Outstanding Total → /other-charges-dues), not
+// via the sidebar. '/payment-proofs' IS a sidebar item now, labeled "Mark as Paid"
+// below — it carries the manual cash/bank-transfer fallback (recorded outside the
+// app), which needs to be reachable without first going through the dashboard's
+// pending-review tile; it's still also linked from that tile, same page either way
+// (that page shows the full Pending/Approved/Rejected proof queue too, not just the
+// Mark-as-Paid action — the nav label just names its most-used entry point).
+// '/other-charges' IS a sidebar item (labeled "Custom Bills" below) — it's the
+// primary billing action, not a drill-down of an existing dashboard figure, so it's
+// deliberately unlinked from the Dashboard card (which instead links to the
+// read-only /other-charges-dues table). '/resident-ledger' IS also a sidebar item
+// ("Resident Charges") — a comprehensive, browsable per-flat overview (every flat,
+// both pools combined), distinct from /flat-dues and /other-charges-dues, which are
+// exception lists filtered to only what's still owed. Receipt Book already covers
+// receipts for both Maintenance and Other Charges (its backend query has no
+// category filter), so there's no separate "receipts" entry per pool. Society
+// details lives inside the Settings submenu, alongside Billing plan and Fee types —
+// all three are admin-configuration screens, not primary/repeated actions.
+const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
+  { to: '/other-charges', label: 'Custom Bills', icon: BadgeIndianRupee },
+  { to: '/resident-ledger', label: 'Resident Charges', icon: Users },
+  { to: '/payment-proofs', label: 'Mark as Paid', icon: Banknote },
   { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
-  { to: '/settings/society', label: 'Society details', icon: Building2 },
-  { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
-  { to: '/settings/fee-types', label: 'Fee types', icon: Tag },
+  {
+    label: 'Settings',
+    icon: Settings,
+    children: [
+      { to: '/settings/society', label: 'Society details', icon: Building2 },
+      { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
+      { to: '/settings/fee-types', label: 'Fee types', icon: Tag },
+    ],
+  },
 ];
 
-// '/other-charges-book' is deliberately not here — reached only via the
-// Dashboard's "Other Outstanding" card, same drill-down convention as the admin
-// side's non-sidebar routes above (docs/other-charges/).
-const RESIDENT_NAV_ITEMS: NavItem[] = [
+// '/other-charges-book' and '/credit-book' are deliberately not here — reached only
+// via the Dashboard's "Other Outstanding"/"Available Maintenance Credit" cards, same
+// drill-down convention as the admin side's non-sidebar routes above
+// (docs/other-charges/, resident-dashboard restructure). '/maintenance-book' stays a
+// sidebar item — it predates that drill-down convention and gained its own Pay
+// control without moving off the sidebar.
+const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },
   { to: '/my-details', label: 'My details', icon: User },

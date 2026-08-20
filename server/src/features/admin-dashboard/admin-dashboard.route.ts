@@ -3,6 +3,7 @@ import {
   getDashboardSummaryHandler,
   getFlaggedFlatsHandler,
   getFlatWiseDuesHandler,
+  getResidentLedgerOverviewHandler,
 } from './admin-dashboard.controller';
 import { requireRole } from '../../middleware/require-role';
 
@@ -17,6 +18,11 @@ adminDashboardRouter.get(
   '/api/admin/dashboard/flat-dues',
   requireRole(['ADMIN']),
   getFlatWiseDuesHandler,
+);
+adminDashboardRouter.get(
+  '/api/admin/dashboard/resident-ledger',
+  requireRole(['ADMIN']),
+  getResidentLedgerOverviewHandler,
 );
 adminDashboardRouter.get(
   '/api/admin/dashboard/flagged-flats',

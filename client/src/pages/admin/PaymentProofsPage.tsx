@@ -4,6 +4,7 @@ import { Banknote, Check, Download, Eye, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass } from '../../components/FormField';
+import { LedgerCategoryBadge, type LedgerCategory } from '../../components/LedgerCategoryBadge';
 import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
 import { Modal } from '../../components/Modal';
 import { ReceiptApprovalModal } from '../../components/ReceiptApprovalModal';
@@ -12,7 +13,6 @@ import { downloadAuthedFile } from '../../lib/download-file';
 
 type LedgerEntryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type CreatedByType = 'OWNER' | 'TENANT' | 'ADMIN';
-type LedgerCategory = 'MAINTENANCE' | 'OTHER_CHARGE';
 
 interface LedgerEntryListItem {
   id: string;
@@ -26,23 +26,6 @@ interface LedgerEntryListItem {
   category: LedgerCategory;
   payer: { id: string; name: string; email: string };
   flat: { id: string; wing: string; flatNumber: string };
-}
-
-// docs/other-charges/ — which pool this entry affects. Deliberately a separate
-// badge from Type (Deposit/Credit) and Created by (Owner/Tenant/Admin) — a single
-// row is independently described by all three axes.
-const CATEGORY_META: Record<LedgerCategory, { className: string; label: string }> = {
-  MAINTENANCE: { className: 'border border-line text-ink', label: 'Maintenance' },
-  OTHER_CHARGE: { className: 'border border-brass text-brass', label: 'Other Charge' },
-};
-
-function CategoryBadge({ category }: { category: LedgerCategory }) {
-  const meta = CATEGORY_META[category];
-  return (
-    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
-      {meta.label}
-    </span>
-  );
 }
 
 // Who actually created the row — distinct from the payer it's for. An ADMIN-created
@@ -412,7 +395,7 @@ export function PaymentProofsPage() {
       {
         id: 'category',
         header: 'Category',
-        cell: ({ row }) => <CategoryBadge category={row.original.category} />,
+        cell: ({ row }) => <LedgerCategoryBadge category={row.original.category} />,
       },
       {
         id: 'createdBy',

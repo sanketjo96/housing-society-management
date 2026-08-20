@@ -123,6 +123,28 @@ describe('/api/admin/dashboard/*', () => {
     });
   });
 
+  describe('GET /api/admin/dashboard/resident-ledger', () => {
+    it('rejects a non-admin token (403)', async () => {
+      const res = await request(app)
+        .get('/api/admin/dashboard/resident-ledger')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it("returns every flat's Maintenance and Other Charges figures in one row", async () => {
+      const res = await request(app)
+        .get('/api/admin/dashboard/resident-ledger')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      const row = res.body.find((r: { flat: { id: string } }) => r.flat.id === flatId);
+      expect(row.outstandingMaintenance).toBe(1000);
+      expect(row.paidMaintenance).toBe(0);
+      expect(row.creditMaintenance).toBe(0);
+      expect(row.outstandingOtherCharges).toBe(0);
+      expect(row.owner.id).toBe(ownerId);
+    });
+  });
+
   describe('GET /api/admin/dashboard/flagged-flats', () => {
     it('flags the overdue flat by default', async () => {
       const res = await request(app)

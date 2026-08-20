@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -73,6 +73,16 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/me/ledger/deposits/intent')) {
       return Promise.resolve({ ok: true, json: async () => ({ intent: null }) });
     }
+    if (url.includes('/api/me/balances')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          maintenance: { outstanding: 0, availableCredit: 0 },
+          otherCharges: { outstanding: 0 },
+          totalOutstanding: 0,
+        }),
+      });
+    }
     if (url.includes('/api/me/ledger')) {
       return Promise.resolve({
         ok: true,
@@ -104,7 +114,15 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
     if (url.includes('/api/admin/dashboard/summary')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ totalBilled: 0, totalPaid: 0, outstandingTotal: 0, pendingReviewTotal: 0, collectionRatePercent: 0 }),
+        json: async () => ({
+          totalBilled: 0,
+          totalPaid: 0,
+          outstandingTotal: 0,
+          pendingReviewTotal: 0,
+          collectionRatePercent: 0,
+          otherChargesOutstandingTotal: 0,
+          totalOutstandingTotal: 0,
+        }),
       });
     }
     if (url.includes('/api/admin/dashboard/flat-dues')) {
@@ -136,28 +154,78 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows only the admin nav links (Dashboard, Receipt Book, Society details, Billing plan) for an ADMIN', async () => {
+  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Charges, Mark as Paid, Receipt Book, Settings) for an ADMIN, with Settings collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^settings$/i })).toBeInTheDocument());
+    const nav = screen.getByRole('navigation', { name: /dashboard sections/i });
+    const labels = within(nav)
+      .getAllByRole('link')
+      .map((el) => el.textContent)
+      .concat(within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '');
+    // Dashboard, Custom Bills, Resident Charges, Mark as Paid, Receipt Book are
+    // direct links; Settings is the collapsed group toggle — its children
+    // (including Society details, moved inside Settings) aren't links yet.
+    expect(labels[0]).toMatch(/dashboard/i);
+    expect(labels[1]).toMatch(/custom bills/i);
+    expect(labels[2]).toMatch(/resident charges/i);
+    expect(labels[3]).toMatch(/mark as paid/i);
+    expect(labels[4]).toMatch(/receipt book/i);
+    expect(labels[5]).toMatch(/settings/i);
+
+    expect(screen.queryByRole('link', { name: /society details/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /billing plan/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /fee types/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my details/i })).not.toBeInTheDocument();
-    // Flats and residents, Tenants, Flat-wise dues, and Payment proofs are real
-    // routes but no longer sidebar nav items — reached only via dashboard tiles.
+    // Flats and residents, Tenants, and Flat-wise/Other charges dues are all real
+    // routes but not sidebar nav items — reached only via dashboard tiles.
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /^payment proofs$/i })).not.toBeInTheDocument();
   });
 
-  it('the nav links are real top-level URLs, not sub-paths of /dashboard', async () => {
+  it('links "Mark as Paid" to /payment-proofs', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /billing plan/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /billing plan/i })).toHaveAttribute('href', '/settings/billing');
+    await waitFor(() => expect(screen.getByRole('link', { name: /mark as paid/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /mark as paid/i })).toHaveAttribute('href', '/payment-proofs');
   });
 
-  it('deep-links straight into Payment proofs from the URL, even though it has no nav link', async () => {
+  it('links "Custom Bills" to /other-charges', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /custom bills/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /custom bills/i })).toHaveAttribute('href', '/other-charges');
+  });
+
+  it('links "Resident Charges" to /resident-ledger', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /resident charges/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /resident charges/i })).toHaveAttribute('href', '/resident-ledger');
+  });
+
+  it('expands the Settings submenu on click, revealing Society details, Billing plan, and Fee types as real top-level URLs', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: /^settings$/i }));
+
+    expect(screen.getByRole('link', { name: /society details/i })).toHaveAttribute('href', '/settings/society');
+    expect(screen.getByRole('link', { name: /billing plan/i })).toHaveAttribute('href', '/settings/billing');
+    expect(screen.getByRole('link', { name: /fee types/i })).toHaveAttribute('href', '/settings/fee-types');
+
+    // Toggling again collapses it.
+    await user.click(screen.getByRole('button', { name: /^settings$/i }));
+    expect(screen.queryByRole('link', { name: /society details/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /billing plan/i })).not.toBeInTheDocument();
+  });
+
+  it('deep-links straight into Payment proofs from the URL', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp('/payment-proofs');
 
@@ -172,8 +240,9 @@ describe('DashboardLayout', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: /maintenance book/i })).toBeInTheDocument());
     await user.click(screen.getByRole('link', { name: /maintenance book/i }));
 
+    // Maintenance Book defaults to the Payment History tab now.
     await waitFor(() => {
-      expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/no payments yet/i)).toBeInTheDocument();
     });
   });
 

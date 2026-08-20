@@ -140,6 +140,11 @@ export interface FlatDues {
 // is ever nonzero, per ledger.service.ts's balancesFromRows) — a distinct figure from
 // paidTotal: paidTotal is the cumulative funds ever applied, creditTotal is whatever
 // of that is still unused after covering totalCharges.
+//
+// Maintenance only — the admin Dashboard's "Other Charges Outstanding Total" tile
+// drills into a per-charge list instead (GET /api/admin/other-charges, already
+// carries settlement status and fee type; docs/other-charges/), not a flat-wise
+// aggregate, since a fee-type breakdown only makes sense per charge.
 export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
   const byFlat = await getBalancesByFlat(societyId);
 
@@ -153,6 +158,48 @@ export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
       creditTotal: balances.availableCredit,
     }))
     .sort((a, b) => b.outstandingTotal - a.outstandingTotal);
+}
+
+export interface ResidentLedgerRow {
+  flat: { id: string; wing: string; flatNumber: string };
+  owner: FlatWithResidents['owner'];
+  currentTenant: FlatWithResidents['currentTenant'];
+  outstandingMaintenance: number;
+  paidMaintenance: number;
+  creditMaintenance: number;
+  outstandingOtherCharges: number;
+}
+
+// "Manage Resident Ledger" — a comprehensive per-flat overview combining both pools
+// (Maintenance + Other Charges, docs/other-charges/) in one row, reached via its own
+// sidebar nav item rather than a dashboard drill-down like /flat-dues or
+// /other-charges-dues (both of which are filtered to only what's currently owed).
+// Lists every flat, not just ones with a balance — a "manage" page is meant for
+// browsing the whole society, not flagging exceptions — sorted by wing then flat
+// number (a stable directory order) rather than by any balance figure. Two
+// independent getBalancesByFlat calls, same pattern as getDashboardSummary above —
+// never a single merged query, since the two pools' charge sources
+// (MaintenanceRecord vs OtherCharge) are genuinely different tables.
+export async function getResidentLedgerOverview(societyId: string): Promise<ResidentLedgerRow[]> {
+  const [byFlat, byFlatOtherCharges] = await Promise.all([
+    getBalancesByFlat(societyId),
+    getBalancesByFlat(societyId, 'OTHER_CHARGE'),
+  ]);
+  const otherChargesOutstandingByFlatId = new Map(
+    byFlatOtherCharges.map(({ flat, balances }) => [flat.id, balances.outstanding]),
+  );
+
+  return byFlat
+    .map(({ flat, balances }) => ({
+      flat: { id: flat.id, wing: flat.wing, flatNumber: flat.flatNumber },
+      owner: flat.owner,
+      currentTenant: flat.currentTenant,
+      outstandingMaintenance: balances.outstanding,
+      paidMaintenance: balances.approvedDeposits + balances.approvedCredits,
+      creditMaintenance: balances.availableCredit,
+      outstandingOtherCharges: otherChargesOutstandingByFlatId.get(flat.id) ?? 0,
+    }))
+    .sort((a, b) => `${a.flat.wing}${a.flat.flatNumber}`.localeCompare(`${b.flat.wing}${b.flat.flatNumber}`));
 }
 
 export interface FlaggedFlat {

@@ -5,6 +5,7 @@ import {
   getDashboardSummary,
   getFlaggedFlats,
   getFlatWiseDues,
+  getResidentLedgerOverview,
 } from '../../../src/features/admin-dashboard/admin-dashboard.service';
 import { createFeeType } from '../../../src/features/fee-types/fee-types.service';
 import { billOtherCharge } from '../../../src/features/other-charges/other-charges.service';
@@ -323,6 +324,40 @@ describe('admin-dashboard service', () => {
         expect(d.creditTotal).toBe(0);
         expect(d.creditTotal === 0 || d.outstandingTotal === 0).toBe(true);
       }
+    });
+  });
+
+  describe('getResidentLedgerOverview', () => {
+    it('includes every flat, even ones with zero balances in both pools', async () => {
+      const rows = await getResidentLedgerOverview(societyId);
+      expect(rows.length).toBeGreaterThanOrEqual(5); // flats A-E
+    });
+
+    it("combines a flat's Maintenance figures with its Other Charges outstanding in one row", async () => {
+      const rows = await getResidentLedgerOverview(societyId);
+      const flatB = rows.find((r) => r.flat.id === flatBId)!;
+      const flatC = rows.find((r) => r.flat.id === flatCId)!;
+      // Same figures getFlatWiseDues already verified for these flats, just under
+      // this function's renamed fields.
+      expect(flatB.outstandingMaintenance).toBe(1500);
+      expect(flatB.paidMaintenance).toBe(0);
+      expect(flatC.outstandingMaintenance).toBe(0);
+      expect(flatC.paidMaintenance).toBe(800);
+
+      // flatA was billed 4000 in Other Charges (getDashboardSummary describe block,
+      // above) and has zero maintenance charges — confirms the two pools are
+      // genuinely independent per row, not accidentally merged into one figure.
+      const flatA = rows.find((r) => r.flat.id === flatAId)!;
+      expect(flatA.outstandingOtherCharges).toBe(4000);
+      expect(flatA.outstandingMaintenance).toBe(0);
+      expect(flatB.outstandingOtherCharges).toBe(0); // flat B has no Other Charges billed
+    });
+
+    it('sorts by wing then flat number, not by any balance figure', async () => {
+      const rows = await getResidentLedgerOverview(societyId);
+      const wingDFlats = rows.filter((r) => r.flat.wing === 'D').map((r) => r.flat.flatNumber);
+      const sorted = [...wingDFlats].sort();
+      expect(wingDFlats).toEqual(sorted);
     });
   });
 

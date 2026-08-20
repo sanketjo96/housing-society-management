@@ -1,5 +1,10 @@
 import type { Request, Response } from 'express';
-import { getDashboardSummary, getFlaggedFlats, getFlatWiseDues } from './admin-dashboard.service';
+import {
+  getDashboardSummary,
+  getFlaggedFlats,
+  getFlatWiseDues,
+  getResidentLedgerOverview,
+} from './admin-dashboard.service';
 import { flaggedFlatsQuerySchema } from './admin-dashboard.schemas';
 
 export async function getDashboardSummaryHandler(req: Request, res: Response) {
@@ -18,6 +23,15 @@ export async function getFlatWiseDuesHandler(req: Request, res: Response) {
   }
   const dues = await getFlatWiseDues(req.user.societyId);
   res.status(200).json(dues);
+}
+
+export async function getResidentLedgerOverviewHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  const rows = await getResidentLedgerOverview(req.user.societyId);
+  res.status(200).json(rows);
 }
 
 export async function getFlaggedFlatsHandler(req: Request, res: Response) {

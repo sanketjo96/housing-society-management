@@ -1,8 +1,8 @@
-import { Building2, LogOut, Menu, X } from 'lucide-react';
+import { ChevronDown, Building2, LogOut, Menu, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import type { AuthUser } from '../context/AuthContext';
 
 export interface NavItem {
@@ -17,8 +17,23 @@ export interface NavItem {
   end?: boolean;
 }
 
+// A grouped sidebar entry (e.g. admin's "Settings" -> Billing plan/Fee types) —
+// distinguished from a NavItem by having `children` instead of `to`. Only one level
+// deep; a group's children are always leaf NavItems, never nested groups further.
+export interface NavGroup {
+  label: string;
+  icon: LucideIcon;
+  children: NavItem[];
+}
+
+export type NavEntry = NavItem | NavGroup;
+
+function isNavGroup(entry: NavEntry): entry is NavGroup {
+  return 'children' in entry;
+}
+
 interface DashboardShellProps {
-  navItems: NavItem[];
+  navItems: NavEntry[];
   user: AuthUser | null;
   onLogout: () => void;
   children: ReactNode;
@@ -37,6 +52,25 @@ interface DashboardShellProps {
 // choice; behavior is unchanged).
 export function DashboardShell({ navItems, user, onLogout, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Which groups the user has manually toggled open — a group whose child route is
+  // currently active is also treated as open regardless of this set (see
+  // isGroupOpen below), so deep-linking straight into e.g. /settings/billing shows
+  // the Settings submenu already expanded without needing this state pre-seeded.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const location = useLocation();
+
+  function isGroupOpen(group: NavGroup): boolean {
+    return openGroups.has(group.label) || group.children.some((child) => location.pathname.startsWith(child.to));
+  }
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
 
   return (
     <div className="min-h-dvh bg-paper md:flex">
@@ -70,6 +104,45 @@ export function DashboardShell({ navItems, user, onLogout, children }: Dashboard
 
         <nav aria-label="Dashboard sections" className="flex flex-1 flex-col gap-1">
           {navItems.map((item) => {
+            if (isNavGroup(item)) {
+              const Icon = item.icon;
+              const open = isGroupOpen(item);
+              return (
+                <div key={item.label}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => toggleGroup(item.label)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-[#B7BCB2]"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon size={16} /> {item.label}
+                    </span>
+                    <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                  </button>
+                  {open && (
+                    <div className="ml-4 flex flex-col gap-1 border-l border-[#334038] pl-3">
+                      {item.children.map((child) => (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          end={child.end}
+                          onClick={() => setMobileOpen(false)}
+                          className={({ isActive }) =>
+                            `rounded-lg px-3 py-2 text-left text-sm ${
+                              isActive ? 'bg-teal-light font-semibold text-teal' : 'text-[#B7BCB2]'
+                            }`
+                          }
+                        >
+                          {child.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             const Icon = item.icon;
             return (
               <NavLink

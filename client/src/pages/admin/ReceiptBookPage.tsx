@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
+import { LedgerCategoryBadge, type LedgerCategory } from '../../components/LedgerCategoryBadge';
 import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
 import { authedFetch } from '../../lib/api';
 import { downloadAuthedFile } from '../../lib/download-file';
@@ -14,6 +15,7 @@ interface ReceiptListItem {
   ledgerEntry: {
     id: string;
     type: LedgerEntryType;
+    category: LedgerCategory;
     amount: string;
     note: string | null;
     payer: { id: string; name: string; email: string };
@@ -116,6 +118,11 @@ export function ReceiptBookPage() {
         id: 'type',
         header: 'Type',
         cell: ({ row }) => <LedgerTypeBadge type={row.original.ledgerEntry.type} />,
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        cell: ({ row }) => <LedgerCategoryBadge category={row.original.ledgerEntry.category} />,
       },
       {
         id: 'amount',

@@ -10,7 +10,9 @@ export async function listReceipts(societyId: string) {
   return prisma.receipt.findMany({
     where: { societyId },
     include: {
-      ledgerEntry: { select: { id: true, type: true, amount: true, note: true, ...LEDGER_ENTRY_LIST_INCLUDE } },
+      ledgerEntry: {
+        select: { id: true, type: true, category: true, amount: true, note: true, ...LEDGER_ENTRY_LIST_INCLUDE },
+      },
     },
     orderBy: { issuedAt: 'desc' },
   });

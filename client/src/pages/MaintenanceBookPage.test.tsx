@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../lib/auth-token';
 import { MaintenanceBookPage } from './MaintenanceBookPage';
@@ -11,7 +12,9 @@ function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MaintenanceBookPage />
+      <MemoryRouter>
+        <MaintenanceBookPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -20,7 +23,8 @@ function renderPage() {
 // amount-sorted output can't accidentally pass just because it matches date order.
 // totals.totalCharges (6500) intentionally excludes the DEPOSIT row (4000) — only
 // SYSTEM charges count toward it. settlementStatus/settledAmount mix all three states
-// so the badge/amount rendering can be asserted per-row.
+// so the badge/amount rendering can be asserted per-row. A CREDIT row is included to
+// confirm it's excluded from both tables (it belongs to Credit Book now).
 const ledger = {
   entries: [
     {
@@ -50,23 +54,61 @@ const ledger = {
       settledAmount: 900,
       settlementStatus: 'PARTIALLY_SETTLED',
     },
-    { id: 'dep-1', type: 'DEPOSIT', date: '2026-06-18T00:00:00.000Z', amount: 4000 },
+    {
+      id: 'dep-1',
+      type: 'DEPOSIT',
+      date: '2026-06-18T00:00:00.000Z',
+      amount: 4000,
+      status: 'APPROVED',
+      hasReceipt: true,
+    },
+    { id: 'cred-1', type: 'CREDIT', date: '2026-06-20T00:00:00.000Z', amount: 300, status: 'APPROVED' },
   ],
-  totals: { totalCharges: 6500 },
+  totals: { totalCharges: 6500, outstanding: 1100 },
 };
 
-function mockFetch() {
+function mockFetch(ledgerBody: unknown = ledger, openIntent: unknown = null) {
   const fetchMock = fetch as unknown as FetchMock;
-  fetchMock.mockImplementation((url: string) => {
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url.includes('/api/me/ledger/deposits/intent/submit')) {
+      return Promise.resolve({ ok: true, json: async () => ({ id: 'dep-new', status: 'PENDING' }) });
+    }
+    if (url.includes('/api/me/ledger/deposits/intent') && init?.method === 'DELETE') {
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    }
+    if (url.includes('/api/me/ledger/deposits/intent') && init?.method === 'POST') {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          intent: {
+            id: 'intent-1',
+            amount: 1100,
+            paymentMethod: 'UPI',
+            upiLink: 'upi://pay?x',
+            qrDataUrl: 'data:image/png;base64,abc',
+            category: 'MAINTENANCE',
+          },
+        }),
+      });
+    }
+    if (url.includes('/api/me/ledger/deposits/intent')) {
+      return Promise.resolve({ ok: true, json: async () => ({ intent: openIntent }) });
+    }
     if (url.includes('/api/me/ledger')) {
-      return Promise.resolve({ ok: true, json: async () => ledger });
+      return Promise.resolve({ ok: true, json: async () => ledgerBody });
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
 }
 
+async function goToBillsTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('tab', { name: 'Bills' }));
+}
+
 function rowTexts() {
-  const rows = screen.getAllByRole('row').slice(1); // skip header row
+  // Only the active tab's table is mounted at a time, so there's exactly one table.
+  const table = screen.getByRole('table');
+  const rows = within(table).getAllByRole('row').slice(1); // skip header row
   return rows.map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
 }
 
@@ -81,14 +123,45 @@ describe('MaintenanceBookPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
+  it('shows Payment History and Bills tabs, defaulting to Payment History', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Payment History' })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: 'Payment History' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByText('+₹4,000')).toBeInTheDocument();
+    expect(screen.queryByText('Mar 2026')).not.toBeInTheDocument(); // Bills table is hidden
+  });
+
+  it('the Payment History tab shows only DEPOSIT rows (no CREDIT), with a receipt button where hasReceipt is set', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('+₹4,000')).toBeInTheDocument());
+    expect(screen.queryByText('+₹300')).not.toBeInTheDocument(); // the CREDIT row
+    expect(screen.getByRole('button', { name: /^receipt$/i })).toBeInTheDocument();
+  });
+
+  it('shows an empty state on the Payment History tab when there are no deposits', async () => {
+    mockFetch({ ...ledger, entries: ledger.entries.filter((e) => e.type !== 'DEPOSIT') });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/no payments yet/i)).toBeInTheDocument());
+  });
+
+  it('switches to the Bills tab: shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await goToBillsTab(user);
+
+    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Mar 2026')).toBeInTheDocument();
     expect(screen.getByText('Jan 2026')).toBeInTheDocument();
     expect(screen.getByText('Feb 2026')).toBeInTheDocument();
-    expect(screen.queryByText('₹4,000')).not.toBeInTheDocument(); // the DEPOSIT row's amount
+    expect(screen.queryByText('+₹4,000')).not.toBeInTheDocument(); // Payment History table is hidden
 
     expect(screen.getByText('Paid')).toBeInTheDocument(); // Jan, fully settled
     expect(screen.getByText('Unpaid')).toBeInTheDocument(); // Mar, untouched
@@ -99,7 +172,9 @@ describe('MaintenanceBookPage', () => {
   it('sorts by date descending by default, newest first', async () => {
     mockFetch();
     renderPage();
+    const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     expect(rowTexts().map((r) => r[0])).toEqual(['Mar 2026', 'Feb 2026', 'Jan 2026']);
   });
@@ -109,6 +184,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /^date/i }));
 
@@ -120,6 +196,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /^amount/i }));
 
@@ -133,6 +210,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     await user.type(screen.getByLabelText('From'), '2026-02-01');
 
@@ -143,35 +221,85 @@ describe('MaintenanceBookPage', () => {
     });
   });
 
-  it('shows an empty state when there are no SYSTEM records', async () => {
-    const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockImplementation((url: string) => {
-      if (url.includes('/api/me/ledger')) {
-        return Promise.resolve({ ok: true, json: async () => ({ entries: [], totals: { totalCharges: 0 } }) });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
+  it('shows an empty state on the Bills tab when there are no SYSTEM records', async () => {
+    mockFetch({ entries: [], totals: { totalCharges: 0, outstanding: 0 } });
     renderPage();
+    const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument());
   });
 
-  it('shows a "Total maintenance amount" card at the top, from the lifetime totals (excludes the DEPOSIT row)', async () => {
+  it('shows "Total maintenance amount" and "Maintenance Outstanding" cards from the lifetime totals, regardless of active tab', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/total maintenance amount/i)).toBeInTheDocument());
     expect(screen.getByText('₹6,500')).toBeInTheDocument();
+    expect(screen.getByText(/^maintenance outstanding$/i)).toBeInTheDocument();
+    expect(screen.getAllByText('₹1,100').length).toBeGreaterThan(0);
   });
 
-  it('has no year selector and no bottom total row', async () => {
+  it('has no year selector', async () => {
     mockFetch();
     renderPage();
+    const user = userEvent.setup();
 
+    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     expect(screen.queryByLabelText('Year')).not.toBeInTheDocument();
-    // "Total maintenance amount" appears once (the top card) — no second "Total"
-    // row at the bottom.
-    expect(screen.getAllByText('₹6,500').length).toBe(1);
+  });
+
+  it('shows the Pay control on the Bills tab: pre-fills Outstanding, locks the amount, and requires a screenshot before submitting', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await goToBillsTab(user);
+    const amountInput = await screen.findByLabelText('Amount to pay');
+    await waitFor(() => expect(amountInput).toHaveValue(1100));
+
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/me\/ledger\/deposits\/intent$/),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 1100, category: 'MAINTENANCE' }) }),
+      );
+    });
+
+    const submitButton = await screen.findByRole('button', { name: /submit payment/i });
+    expect(submitButton).toBeDisabled();
+
+    const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
+    expect(submitButton).toBeEnabled();
+  });
+
+  it('shows a notice instead of the Pay button on the Bills tab when the open intent is for Other Charges', async () => {
+    mockFetch(ledger, {
+      id: 'intent-2',
+      amount: 300,
+      paymentMethod: 'UPI',
+      upiLink: 'upi://pay?y',
+      qrDataUrl: 'data:image/png;base64,def',
+      category: 'OTHER_CHARGE',
+    });
+    renderPage();
+    const user = userEvent.setup();
+
+    await goToBillsTab(user);
+    await waitFor(() => expect(screen.getByText(/pending payment for other charges/i)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
+  });
+
+  it('hides the Pay controls and shows "Nothing outstanding right now" on the Bills tab when outstanding is 0', async () => {
+    mockFetch({ ...ledger, totals: { ...ledger.totals, outstanding: 0 } });
+    renderPage();
+    const user = userEvent.setup();
+
+    await goToBillsTab(user);
+    await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });
 });

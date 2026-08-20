@@ -18,6 +18,8 @@ function renderPage() {
   );
 }
 
+// flat-2 has nothing outstanding (fully settled) — it must be excluded entirely,
+// not shown as a ₹0 row, per the "only residents with outstanding maintenance" rule.
 const flatDues = [
   {
     flat: { id: 'flat-1', wing: 'A', flatNumber: '101' },
@@ -35,13 +37,21 @@ const flatDues = [
     outstandingTotal: 0,
     creditTotal: 300,
   },
+  {
+    flat: { id: 'flat-3', wing: 'B', flatNumber: '301' },
+    owner: { id: 'owner-3', name: 'Dave Owner', email: 'dave@example.com', phone: null },
+    currentTenant: null,
+    paidTotal: 0,
+    outstandingTotal: 2500,
+    creditTotal: 0,
+  },
 ];
 
-function mockFetch() {
+function mockFetch(body: unknown = flatDues) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/api/admin/dashboard/flat-dues')) {
-      return Promise.resolve({ ok: true, json: async () => flatDues });
+      return Promise.resolve({ ok: true, json: async () => body });
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
@@ -58,33 +68,38 @@ describe('FlatWiseDuesPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the flat-wise dues table, including settled flats', async () => {
+  it('shows only flats with outstanding maintenance, excluding a fully settled flat', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
-    expect(screen.getByText('A-102')).toBeInTheDocument(); // the ₹0 flat is still listed
+    expect(screen.getByText('B-301')).toBeInTheDocument();
+    expect(screen.queryByText('A-102')).not.toBeInTheDocument(); // fully settled, excluded
   });
 
-  it("indicates a tenant's presence under the owner's name, without a separate Tenant column", async () => {
+  it('shows exactly Flat, Owner, and Outstanding Maintenance columns', async () => {
     mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    expect(screen.getByRole('columnheader', { name: 'Flat' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Outstanding Maintenance' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Credit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Paid' })).not.toBeInTheDocument();
+  });
+
+  it("indicates a tenant's presence under the owner's name — but only for a listed (still-outstanding) flat", async () => {
+    // Swap flat-2's balance so it's outstanding (and thus listed) while keeping its
+    // tenant, so the "Tenant: ..." subtext can actually be asserted here.
+    mockFetch([{ ...flatDues[1], outstandingTotal: 400 }]);
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Tenant: Carol Tenant')).toBeInTheDocument());
     expect(screen.queryByRole('columnheader', { name: 'Tenant' })).not.toBeInTheDocument();
   });
 
-  it('shows each flat\'s available credit and does not show a Paid column', async () => {
-    mockFetch();
-    renderPage();
-
-    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
-    expect(screen.getByText('₹300')).toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'Paid' })).not.toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Credit' })).toBeInTheDocument();
-  });
-
-  it('sorts the table when a sortable column header is clicked', async () => {
+  it('sorts the table when the Outstanding Maintenance header is clicked', async () => {
     mockFetch();
     renderPage();
 
@@ -93,13 +108,13 @@ describe('FlatWiseDuesPage', () => {
 
     const rowsBefore = within(table).getAllByRole('row').slice(1); // drop header row
     expect(rowsBefore[0]).toHaveTextContent('A-101');
-    expect(rowsBefore[1]).toHaveTextContent('A-102');
+    expect(rowsBefore[1]).toHaveTextContent('B-301');
 
     const userEvent = (await import('@testing-library/user-event')).default;
-    await userEvent.click(within(table).getByRole('button', { name: 'Outstanding' }));
+    await userEvent.click(within(table).getByRole('button', { name: 'Outstanding Maintenance' }));
     const rowsDescending = within(table).getAllByRole('row').slice(1);
-    expect(rowsDescending[0]).toHaveTextContent('A-101');
-    expect(rowsDescending[1]).toHaveTextContent('A-102');
+    expect(rowsDescending[0]).toHaveTextContent('B-301'); // 2500 > 1500
+    expect(rowsDescending[1]).toHaveTextContent('A-101');
   });
 
   it('links back to the dashboard', async () => {
@@ -108,6 +123,17 @@ describe('FlatWiseDuesPage', () => {
 
     const link = await screen.findByRole('link', { name: /back to dashboard/i });
     expect(link).toHaveAttribute('href', '/dashboard');
+  });
+
+  it('shows a relevant empty-state message when nothing is outstanding', async () => {
+    mockFetch(flatDues.filter((d) => d.outstandingTotal === 0));
+    renderPage();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/nothing outstanding — every flat's maintenance is fully settled/i),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('shows an error state when the request fails', async () => {

@@ -25,8 +25,18 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
 // Admin-only page (App.tsx: /flat-dues, allowedRoles ADMIN) — reached only via the
 // "Maintenance Outstanding Total" tile on AdminDashboardPage, not a sidebar nav item,
 // since it's a drill-down of that one figure rather than a destination of its own.
+// Filtered to only flats with an outstanding maintenance balance — a flat that's
+// fully settled isn't a "due" worth listing here (unlike the comprehensive
+// per-flat overview at /resident-ledger, which lists every flat regardless of
+// balance). Owner/Credit weren't dropped from FlatDues itself, just this page's
+// column set — Owner stays, Credit doesn't apply to this "what's still owed" view.
 export function FlatWiseDuesPage() {
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
+
+  const outstandingRows = useMemo(
+    () => duesQuery.data?.filter((d) => d.outstandingTotal > 0) ?? [],
+    [duesQuery.data],
+  );
 
   const duesColumns = useMemo<ColumnDef<FlatDues, unknown>[]>(
     () => [
@@ -55,27 +65,12 @@ export function FlatWiseDuesPage() {
       },
       {
         id: 'outstanding',
-        header: 'Outstanding',
+        header: 'Outstanding Maintenance',
         accessorFn: (row) => row.outstandingTotal,
         meta: { align: 'right' },
         cell: ({ row }) => (
-          <span
-            className={`font-mono-brand ${row.original.outstandingTotal > 0 ? 'text-coral' : 'text-ink'}`}
-          >
+          <span className="font-mono-brand text-coral">
             ₹{row.original.outstandingTotal.toLocaleString('en-IN')}
-          </span>
-        ),
-      },
-      // 'Paid' column (row.paidTotal) hidden for now — FlatDues still returns
-      // paidTotal, only this column definition was removed.
-      {
-        id: 'credit',
-        header: 'Credit',
-        accessorFn: (row) => row.creditTotal,
-        meta: { align: 'right' },
-        cell: ({ row }) => (
-          <span className={`font-mono-brand ${row.original.creditTotal > 0 ? 'text-teal' : 'text-muted'}`}>
-            ₹{row.original.creditTotal.toLocaleString('en-IN')}
           </span>
         ),
       },
@@ -91,7 +86,7 @@ export function FlatWiseDuesPage() {
 
       <div className="mb-6">
         <h1 className="m-0 font-display text-xl text-ink">Flat-wise dues</h1>
-        <p className="m-0 mt-0.5 text-xs text-muted">{duesQuery.data?.length ?? 0} flats</p>
+        <p className="m-0 mt-0.5 text-xs text-muted">{outstandingRows.length} flats with outstanding maintenance</p>
       </div>
 
       {duesQuery.isLoading && <p className="text-sm text-muted">Loading…</p>}
@@ -103,10 +98,10 @@ export function FlatWiseDuesPage() {
 
       {duesQuery.data && (
         <DataTable
-          data={duesQuery.data}
+          data={outstandingRows}
           columns={duesColumns}
           getRowId={(d) => d.flat.id}
-          emptyMessage="No flats yet."
+          emptyMessage="Nothing outstanding — every flat's maintenance is fully settled."
         />
       )}
     </div>

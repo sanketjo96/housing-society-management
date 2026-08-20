@@ -30,7 +30,7 @@ export {};
  * /api/admin/dashboard/flat-dues:
  *   get:
  *     tags: [Dashboard (Admin)]
- *     summary: Per-flat dues table, every flat, sorted by highest Outstanding first
+ *     summary: Per-flat maintenance dues table, every flat, sorted by highest Outstanding first
  *     responses:
  *       200:
  *         description: OK.
@@ -54,6 +54,45 @@ export {};
  *                   paidTotal: { type: number, description: This flat's approved Deposits + approved Credits, cumulative. }
  *                   outstandingTotal: { type: number }
  *                   creditTotal: { type: number, description: This flat's Available Credit. }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+
+/**
+ * @openapi
+ * /api/admin/dashboard/resident-ledger:
+ *   get:
+ *     tags: [Dashboard (Admin)]
+ *     summary: >
+ *       Comprehensive per-flat ledger overview (Manage Resident Ledger) — every
+ *       flat, both pools (Maintenance + Other Charges) in one row, sorted by wing
+ *       then flat number. Unlike /flat-dues and /other-charges-dues (both filtered
+ *       to only what's currently owed), this lists every flat regardless of
+ *       balance — a directory to browse, not a "what needs attention" list.
+ *     responses:
+ *       200:
+ *         description: OK.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   flat:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       wing: { type: string }
+ *                       flatNumber: { type: string }
+ *                   owner: { $ref: '#/components/schemas/ContactSummary' }
+ *                   currentTenant:
+ *                     allOf: [{ $ref: '#/components/schemas/ContactSummary' }]
+ *                     nullable: true
+ *                   outstandingMaintenance: { type: number }
+ *                   paidMaintenance: { type: number, description: This flat's approved Deposits + approved Credits, cumulative, Maintenance pool only. }
+ *                   creditMaintenance: { type: number, description: This flat's Available Credit, Maintenance pool only. }
+ *                   outstandingOtherCharges: { type: number }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */

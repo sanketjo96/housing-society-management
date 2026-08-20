@@ -1,10 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, CheckCircle2, QrCode } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, QrCode } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable } from '../components/DataTable';
 import { ErrorBanner } from '../components/FormField';
+import {
+  ApprovalBadge,
+  type ApprovalStatus,
+  dateLabel,
+  ReceiptDownloadButton,
+  SummaryCard,
+} from '../components/LedgerEntryDisplay';
 import { fetchOpenIntent, PayIntentPanel } from '../components/PayIntentPanel';
 import { authedFetch } from '../lib/api';
 import { useIsMobile } from '../lib/use-is-mobile';
@@ -20,6 +27,14 @@ interface OtherChargeRow {
   settlementStatus: SettlementStatus;
 }
 
+interface DepositRow {
+  id: string;
+  date: string;
+  amount: number;
+  status: ApprovalStatus;
+  hasReceipt: boolean;
+}
+
 interface LedgerResponse {
   entries: {
     id: string;
@@ -27,21 +42,33 @@ interface LedgerResponse {
     feeTypeName?: string;
     date: string;
     amount: number;
+    status?: string;
     settledAmount?: number;
     settlementStatus?: SettlementStatus;
+    hasReceipt?: boolean;
   }[];
-  totals: { outstanding: number };
+  totals: { totalCharges: number; outstanding: number };
 }
 
-// Mirrors MaintenanceBookPage.tsx's shape for the Other Charges pool — its own
-// Outstanding, its own record list, its own Pay flow (docs/other-charges/). Reuses
-// GET /api/me/ledger with category=OTHER_CHARGE (no separate backend endpoint,
-// same "the data is already there" reasoning as Maintenance Book).
-async function fetchOtherChargesBook(): Promise<{ rows: OtherChargeRow[]; outstanding: number }> {
+interface OtherChargesBookData {
+  chargeRows: OtherChargeRow[];
+  depositRows: DepositRow[];
+  totalOtherChargesAmount: number;
+  outstanding: number;
+}
+
+// Mirrors MaintenanceBookPage.tsx's shape exactly — its own Outstanding, its own
+// charges list, its own Pay flow, and its own Payment History (docs/other-charges/).
+// Reuses GET /api/me/ledger with category=OTHER_CHARGE (no separate backend
+// endpoint, same "the data is already there" reasoning as Maintenance Book) and
+// filters client-side into the two tables this page shows (OTHER_CHARGE charges and
+// DEPOSIT history). `totals` is always lifetime regardless of any `year` param (see
+// ledger.service.ts), so it's exactly right for both cards without extra computation.
+async function fetchOtherChargesBook(): Promise<OtherChargesBookData> {
   const res = await authedFetch('/api/me/ledger?category=OTHER_CHARGE');
   if (!res.ok) throw new Error('Could not load your other charges.');
   const body: LedgerResponse = await res.json();
-  const rows = body.entries
+  const chargeRows = body.entries
     .filter((e) => e.type === 'OTHER_CHARGE')
     .map((e) => ({
       id: e.id,
@@ -51,17 +78,31 @@ async function fetchOtherChargesBook(): Promise<{ rows: OtherChargeRow[]; outsta
       settledAmount: e.settledAmount ?? 0,
       settlementStatus: e.settlementStatus ?? 'UNPAID',
     }));
-  return { rows, outstanding: body.totals.outstanding };
+  const depositRows = body.entries
+    .filter((e) => e.type === 'DEPOSIT')
+    .map((e) => ({
+      id: e.id,
+      date: e.date,
+      amount: e.amount,
+      status: (e.status ?? 'PENDING') as ApprovalStatus,
+      hasReceipt: e.hasReceipt ?? false,
+    }));
+  return {
+    chargeRows,
+    depositRows,
+    totalOtherChargesAmount: body.totals.totalCharges,
+    outstanding: body.totals.outstanding,
+  };
 }
 
-const STATUS_META: Record<SettlementStatus, { className: string; label: string }> = {
+const SETTLEMENT_META: Record<SettlementStatus, { className: string; label: string }> = {
   PAID: { className: 'bg-teal-light text-teal', label: 'Paid' },
   PARTIALLY_SETTLED: { className: 'bg-amber-light text-brass', label: 'Partially settled' },
   UNPAID: { className: 'bg-coral-light text-coral', label: 'Unpaid' },
 };
 
 function SettlementBadge({ row }: { row: OtherChargeRow }) {
-  const meta = STATUS_META[row.settlementStatus];
+  const meta = SETTLEMENT_META[row.settlementStatus];
   return (
     <div className="inline-flex flex-col items-end gap-0.5">
       <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
@@ -76,19 +117,39 @@ function SettlementBadge({ row }: { row: OtherChargeRow }) {
   );
 }
 
-function dateLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+type SortKey = 'date' | 'amount';
+type SortDir = 'asc' | 'desc';
+
+function SortableHeader({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sortKey === activeKey;
+  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`flex items-center gap-1 bg-transparent p-0 font-semibold ${active ? 'text-ink' : 'text-muted'}`}
+    >
+      {label} <Icon size={12} />
+    </button>
+  );
 }
 
-const columns: ColumnDef<OtherChargeRow, unknown>[] = [
-  {
-    id: 'feeType',
-    header: 'Fee type',
-    cell: ({ row }) => <span className="text-ink">{row.original.feeTypeName ?? '—'}</span>,
-  },
+const depositColumns: ColumnDef<DepositRow, unknown>[] = [
   {
     id: 'date',
-    header: 'Billed on',
+    header: 'Date',
     cell: ({ row }) => <span className="font-mono-brand text-ink">{dateLabel(row.original.date)}</span>,
   },
   {
@@ -96,31 +157,59 @@ const columns: ColumnDef<OtherChargeRow, unknown>[] = [
     header: 'Amount',
     meta: { align: 'right' },
     cell: ({ row }) => (
-      <span className="font-mono-brand text-ink">₹{row.original.amount.toLocaleString('en-IN')}</span>
+      <span className="font-mono-brand text-teal">+₹{row.original.amount.toLocaleString('en-IN')}</span>
     ),
   },
   {
     id: 'status',
     header: 'Status',
     meta: { align: 'right' },
-    cell: ({ row }) => <SettlementBadge row={row.original} />,
+    cell: ({ row }) => <ApprovalBadge status={row.original.status} />,
+  },
+  {
+    id: 'receipt',
+    header: '',
+    cell: ({ row }) =>
+      row.original.status === 'APPROVED' && row.original.hasReceipt ? (
+        <ReceiptDownloadButton entryId={row.original.id} />
+      ) : null,
   },
 ];
 
+type BookTab = 'BILLS' | 'PAYMENTS';
+
+const BOOK_TABS: { value: BookTab; label: string }[] = [
+  { value: 'PAYMENTS', label: 'Payment History' },
+  { value: 'BILLS', label: 'Bills' },
+];
+
+// OTHER_CHARGE-and-Deposit-history view — the exact structural mirror of
+// MaintenanceBookPage.tsx for the Other Charges pool (docs/other-charges/): the same
+// two summary cards, the same "Payment History" (default)/"Bills" tabs, the same Pay
+// control, the same sortable/date-filterable charges table with a derived
+// settlement-status badge, and the same Payment History table with receipt
+// downloads. Reached only via the Dashboard's "Other Outstanding" card, not a
+// sidebar item.
 export function OtherChargesBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [amountInput, setAmountInput] = useState('');
+  const [activeTab, setActiveTab] = useState<BookTab>('PAYMENTS');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-other-charges'],
     queryFn: fetchOtherChargesBook,
   });
-  // Shared with ResidentDashboardOverview.tsx — there's only ever one intent,
-  // across both pools (docs/other-charges/).
+  // Shared with MaintenanceBookPage.tsx — there's only ever one intent, across both
+  // pools (docs/other-charges/).
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
   const intentOpenForThisPool = intentQuery.data?.category === 'OTHER_CHARGE';
   const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'OTHER_CHARGE';
+
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   useEffect(() => {
     if (data) setAmountInput(String(data.outstanding));
@@ -148,6 +237,62 @@ export function OtherChargesBookPage() {
     },
   });
 
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  }
+
+  const rows = useMemo(() => {
+    if (!data) return [];
+    const filtered = data.chargeRows.filter((r) => {
+      const d = r.date.slice(0, 10);
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+      return true;
+    });
+    return [...filtered].sort((a, b) => {
+      const cmp = sortKey === 'date' ? a.date.localeCompare(b.date) : a.amount - b.amount;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, sortKey, sortDir, fromDate, toDate]);
+
+  const columns = useMemo<ColumnDef<OtherChargeRow, unknown>[]>(
+    () => [
+      {
+        id: 'feeType',
+        header: 'Fee type',
+        cell: ({ row }) => <span className="text-ink">{row.original.feeTypeName ?? '—'}</span>,
+      },
+      {
+        id: 'date',
+        header: () => <SortableHeader label="Billed on" sortKey="date" activeKey={sortKey} dir={sortDir} onSort={handleSort} />,
+        cell: ({ row }) => <span className="font-mono-brand text-ink">{dateLabel(row.original.date)}</span>,
+      },
+      {
+        id: 'amount',
+        header: () => (
+          <SortableHeader label="Amount" sortKey="amount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+        ),
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono-brand text-ink">₹{row.original.amount.toLocaleString('en-IN')}</span>
+        ),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        meta: { align: 'right' },
+        cell: ({ row }) => <SettlementBadge row={row.original} />,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortKey, sortDir],
+  );
+
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="m-0 mb-6 font-display text-xl text-ink">Other charges</h1>
@@ -161,94 +306,153 @@ export function OtherChargesBookPage() {
 
       {data && (
         <>
-          <div className="mb-5 rounded-2xl border border-ink bg-ink p-5">
-            <p className="m-0 text-xs uppercase tracking-wide text-[#B7BCB2]">Other Outstanding</p>
-            <p className="m-0 mt-1 font-mono-brand text-2xl font-semibold text-white">
-              ₹{outstanding.toLocaleString('en-IN')}
-            </p>
+          <div className="mb-5 grid grid-cols-2 gap-4">
+            <SummaryCard label="Total other charges amount" value={data.totalOtherChargesAmount} />
+            <SummaryCard
+              label="Other Outstanding"
+              value={outstanding}
+              accent={outstanding > 0 ? 'coral' : undefined}
+            />
           </div>
 
-          <div className="mb-5 rounded-2xl border border-line bg-white p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
-              <div>
-                {outstanding > 0 ? (
-                  <span className="text-sm text-ink">
-                    You owe <strong className="font-mono-brand">₹{outstanding.toLocaleString('en-IN')}</strong>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-teal">
-                    <CheckCircle2 size={16} /> Nothing outstanding right now
-                  </span>
+          <div className="mb-4 flex gap-2" role="tablist">
+            {BOOK_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+                  activeTab === tab.value ? 'bg-teal text-white' : 'border border-line text-ink'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'BILLS' && (
+            <>
+              <div className="mb-5 rounded-2xl border border-line bg-white p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+                  <div>
+                    {outstanding > 0 ? (
+                      <span className="text-sm text-ink">
+                        You owe <strong className="font-mono-brand">₹{outstanding.toLocaleString('en-IN')}</strong>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-teal">
+                        <CheckCircle2 size={16} /> Nothing outstanding right now
+                      </span>
+                    )}
+                  </div>
+                  {outstanding > 0 && !intentQuery.data && (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex flex-col text-xs font-semibold text-muted">
+                        Amount to pay
+                        <input
+                          type="number"
+                          aria-label="Amount to pay"
+                          value={amountInput}
+                          onChange={(e) => setAmountInput(e.target.value)}
+                          min={0.01}
+                          max={outstanding}
+                          step="0.01"
+                          className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => lockMutation.mutate(parsedAmount)}
+                        disabled={lockMutation.isPending || !isAmountValid}
+                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+                      >
+                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
+                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">
+                    Enter an amount between ₹1 and ₹{outstanding.toLocaleString('en-IN')}.
+                  </p>
+                )}
+
+                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
+
+                {intentOpenForThisPool && intentQuery.data && (
+                  <PayIntentPanel
+                    intent={intentQuery.data}
+                    isMobile={isMobile}
+                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
+                  />
+                )}
+                {/* docs/other-charges/ — at most one open intent at a time, across both
+                    pools. If it's for Maintenance, this page can't start a new one
+                    (server-blocked) — point at where to finish it instead. */}
+                {intentOpenForOtherPool && (
+                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                    You have a pending payment for Maintenance — finish or cancel it on the{' '}
+                    <Link to="/maintenance-book" className="font-semibold text-teal">
+                      Maintenance Book
+                    </Link>{' '}
+                    page before paying here.
+                  </div>
                 )}
               </div>
-              {outstanding > 0 && !intentQuery.data && (
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="flex flex-col text-xs font-semibold text-muted">
-                    Amount to pay
-                    <input
-                      type="number"
-                      aria-label="Amount to pay"
-                      value={amountInput}
-                      onChange={(e) => setAmountInput(e.target.value)}
-                      min={0.01}
-                      max={outstanding}
-                      step="0.01"
-                      className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-                    />
-                  </label>
+
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <label className="text-xs font-semibold text-muted">
+                  From
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-muted">
+                  To
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                {(fromDate || toDate) && (
                   <button
                     type="button"
-                    onClick={() => lockMutation.mutate(parsedAmount)}
-                    disabled={lockMutation.isPending || !isAmountValid}
-                    className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+                    onClick={() => {
+                      setFromDate('');
+                      setToDate('');
+                    }}
+                    className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
                   >
-                    <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
+                    Clear
                   </button>
-                </div>
-              )}
-            </div>
-
-            {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
-              <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">
-                Enter an amount between ₹1 and ₹{outstanding.toLocaleString('en-IN')}.
-              </p>
-            )}
-
-            {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
-
-            {intentOpenForThisPool && intentQuery.data && (
-              <PayIntentPanel
-                intent={intentQuery.data}
-                isMobile={isMobile}
-                onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
-              />
-            )}
-            {/* docs/other-charges/ — at most one open intent at a time, across both
-                pools. If it's for Maintenance, this page can't start a new one
-                (server-blocked) — point at where to finish it instead. */}
-            {intentOpenForOtherPool && (
-              <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
-                You have a pending payment for Maintenance — finish or cancel it on the{' '}
-                <Link to="/dashboard" className="font-semibold text-teal">
-                  Dashboard
-                </Link>{' '}
-                page before paying here.
+                )}
               </div>
-            )}
 
-            {data.rows.length === 0 && (
+              <DataTable data={rows} columns={columns} getRowId={(r) => r.id} emptyMessage="No charges billed yet." />
+            </>
+          )}
+
+          {activeTab === 'PAYMENTS' &&
+            (data.depositRows.length === 0 ? (
               <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
-                <Check size={14} /> No charges billed yet
+                <Check size={14} /> No payments yet
               </p>
-            )}
-          </div>
-
-          <DataTable
-            data={data.rows}
-            columns={columns}
-            getRowId={(r) => r.id}
-            emptyMessage="No charges billed yet."
-          />
+            ) : (
+              <DataTable
+                data={data.depositRows}
+                columns={depositColumns}
+                getRowId={(r) => r.id}
+                emptyMessage="No payments yet."
+              />
+            ))}
         </>
       )}
     </div>

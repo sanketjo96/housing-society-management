@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
@@ -166,8 +166,11 @@ describe('AdminDashboardPage', () => {
     // The maintenance-only figure is still shown separately, unmerged.
     expect(screen.getByText('₹2,700')).toBeInTheDocument();
 
+    // Links to the read-only flat-wise dues table, not the /other-charges billing
+    // page (deliberately unlinked from the Dashboard card, per the admin nav
+    // restructure — that page is reached via the sidebar's "Custom Bills" instead).
     const link = await screen.findByRole('link', { name: /other charges outstanding total/i });
-    expect(link).toHaveAttribute('href', '/other-charges');
+    expect(link).toHaveAttribute('href', '/other-charges-dues');
   });
 
   it('links the Total Owners tile to the flats and residents page', async () => {
@@ -194,13 +197,70 @@ describe('AdminDashboardPage', () => {
     expect(link).toHaveAttribute('href', '/tenants');
   });
 
-  it('shows a Total Credits card summing every flat\'s available credit', async () => {
+  it('shows a Total Maintenance Credit card summing every flat\'s available credit', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Total Credits')).toBeInTheDocument());
-    const card = screen.getByText('Total Credits').closest('a,div') as HTMLElement;
+    await waitFor(() => expect(screen.getByText('Total Maintenance Credit')).toBeInTheDocument());
+    const card = screen.getByText('Total Maintenance Credit').closest('a,div') as HTMLElement;
     expect(card).toHaveTextContent('₹300');
+  });
+
+  it('groups the cards into Finance, Maintenance, Other Charges, and Society containers', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Finance')).toBeInTheDocument());
+    expect(screen.getByText('Maintenance')).toBeInTheDocument();
+    expect(screen.getByText('Other Charges')).toBeInTheDocument();
+    expect(screen.getByText('Society')).toBeInTheDocument();
+
+    // Finance's heading and its 2 cards live in the same container — Maintenance
+    // Collection Rate now lives here, not in the Maintenance group below.
+    const financeGroup = screen.getByText('Finance').closest('div')!.parentElement!;
+    expect(within(financeGroup).getByText('Total Outstanding')).toBeInTheDocument();
+    expect(within(financeGroup).getByText('Maintenance Collection Rate')).toBeInTheDocument();
+
+    // Society's heading and its 3 cards live in the same container.
+    const societyGroup = screen.getByText('Society').closest('div')!.parentElement!;
+    expect(within(societyGroup).getByText('Total Owners')).toBeInTheDocument();
+    expect(within(societyGroup).getByText('Total Flats')).toBeInTheDocument();
+    expect(within(societyGroup).getByText('Total Tenants')).toBeInTheDocument();
+    expect(within(societyGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
+
+    // Maintenance's heading and its 2 cards (Outstanding + Credit only, Collection
+    // Rate moved to Finance) live in the same container, separate from Other
+    // Charges' single card.
+    const maintenanceGroup = screen.getByText('Maintenance').closest('div')!.parentElement!;
+    expect(within(maintenanceGroup).getByText('Maintenance Outstanding Total')).toBeInTheDocument();
+    expect(within(maintenanceGroup).getByText('Total Maintenance Credit')).toBeInTheDocument();
+    expect(within(maintenanceGroup).queryByText('Maintenance Collection Rate')).not.toBeInTheDocument();
+    expect(within(maintenanceGroup).queryByText('Other Charges Outstanding Total')).not.toBeInTheDocument();
+  });
+
+  it('orders the cards: pending-proofs widget, Finance, Maintenance, Other Charges, Society', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Total Outstanding')).toBeInTheDocument());
+    const labels = [
+      'payment proof', // the pending-proofs widget, at the very top of the dashboard
+      'Total Outstanding',
+      'Maintenance Collection Rate',
+      'Maintenance Outstanding Total',
+      'Total Maintenance Credit',
+      'Other Charges Outstanding Total',
+      'Total Owners',
+      'Total Flats',
+      'Total Tenants',
+    ];
+    const elements = labels.map((label) => screen.getByText(new RegExp(label, 'i')));
+    for (let i = 0; i < elements.length - 1; i++) {
+      // DOCUMENT_POSITION_FOLLOWING (4) means the next element comes after the
+      // current one in the DOM.
+      // eslint-disable-next-line no-bitwise
+      expect(elements[i].compareDocumentPosition(elements[i + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   it('shows Total Owners, Total Tenants, and Total Flats counts', async () => {

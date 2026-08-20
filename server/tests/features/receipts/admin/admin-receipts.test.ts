@@ -126,6 +126,7 @@ describe('GET /api/admin/receipts', () => {
     expect(receipt.receiptNumber).toMatch(/^RCPT-R201-/);
     expect(receipt.ledgerEntry.id).toBe(created.body.id);
     expect(receipt.ledgerEntry.type).toBe('DEPOSIT');
+    expect(receipt.ledgerEntry.category).toBe('MAINTENANCE');
     expect(receipt.ledgerEntry.amount).toBe('100');
     expect(receipt.ledgerEntry.flat.wing).toBe('R');
     expect(receipt.ledgerEntry.flat.flatNumber).toBe('201');

@@ -40,7 +40,7 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
       return Promise.resolve({
         ok: true,
         json: async () => ({
-          maintenance: { outstanding: 0 },
+          maintenance: { outstanding: 0, availableCredit: 0 },
           otherCharges: { outstanding: 0 },
           totalOutstanding: 0,
         }),

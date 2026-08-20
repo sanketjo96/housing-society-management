@@ -1,9 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, QrCode } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DataTable } from '../components/DataTable';
+import { ErrorBanner } from '../components/FormField';
+import {
+  ApprovalBadge,
+  type ApprovalStatus,
+  dateLabel,
+  ReceiptDownloadButton,
+  SummaryCard,
+} from '../components/LedgerEntryDisplay';
+import { fetchOpenIntent, PayIntentPanel } from '../components/PayIntentPanel';
 import { authedFetch } from '../lib/api';
+import { useIsMobile } from '../lib/use-is-mobile';
 
 type SettlementStatus = 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID';
 
@@ -16,6 +27,14 @@ interface MaintenanceRow {
   settlementStatus: SettlementStatus;
 }
 
+interface DepositRow {
+  id: string;
+  date: string;
+  amount: number;
+  status: ApprovalStatus;
+  hasReceipt: boolean;
+}
+
 interface LedgerResponse {
   entries: {
     id: string;
@@ -23,28 +42,34 @@ interface LedgerResponse {
     period?: string;
     date: string;
     amount: number;
+    status?: string;
     settledAmount?: number;
     settlementStatus?: SettlementStatus;
+    hasReceipt?: boolean;
   }[];
-  totals: { totalCharges: number };
+  totals: { totalCharges: number; outstanding: number };
 }
 
 interface MaintenanceBookData {
-  rows: MaintenanceRow[];
+  chargeRows: MaintenanceRow[];
+  depositRows: DepositRow[];
   totalMaintenanceAmount: number;
+  outstanding: number;
 }
 
-// Reuses GET /api/me/ledger (no `year` param — lifetime, every SYSTEM charge ever)
-// and filters to SYSTEM rows client-side rather than adding a dedicated backend
-// endpoint — the data is already there and a flat's full history is at most a
-// couple hundred rows. `totals.totalCharges` is always lifetime regardless of any
-// `year` param (see ledger.service.ts), so it's exactly the right figure for the
-// "Total maintenance amount" card without any extra computation.
-async function fetchMaintenanceRecords(): Promise<MaintenanceBookData> {
+// Reuses GET /api/me/ledger (no `year` param — lifetime, every row ever) and
+// filters client-side into the two tables this page shows (SYSTEM charges and
+// DEPOSIT history) rather than adding dedicated backend endpoints — the data is
+// already there and a flat's full history is at most a couple hundred rows. CREDIT
+// rows are deliberately excluded — those live on CreditBookPage.tsx now. `totals`
+// is always lifetime regardless of any `year` param (see ledger.service.ts), so it's
+// exactly right for both the "Total maintenance amount" and "Maintenance
+// Outstanding" cards without any extra computation.
+async function fetchMaintenanceBook(): Promise<MaintenanceBookData> {
   const res = await authedFetch('/api/me/ledger');
   if (!res.ok) throw new Error('Could not load your maintenance book.');
   const body: LedgerResponse = await res.json();
-  const rows = body.entries
+  const chargeRows = body.entries
     .filter((e) => e.type === 'SYSTEM')
     .map((e) => ({
       id: e.id,
@@ -54,17 +79,31 @@ async function fetchMaintenanceRecords(): Promise<MaintenanceBookData> {
       settledAmount: e.settledAmount ?? 0,
       settlementStatus: e.settlementStatus ?? 'UNPAID',
     }));
-  return { rows, totalMaintenanceAmount: body.totals.totalCharges };
+  const depositRows = body.entries
+    .filter((e) => e.type === 'DEPOSIT')
+    .map((e) => ({
+      id: e.id,
+      date: e.date,
+      amount: e.amount,
+      status: (e.status ?? 'PENDING') as ApprovalStatus,
+      hasReceipt: e.hasReceipt ?? false,
+    }));
+  return {
+    chargeRows,
+    depositRows,
+    totalMaintenanceAmount: body.totals.totalCharges,
+    outstanding: body.totals.outstanding,
+  };
 }
 
-const STATUS_META: Record<SettlementStatus, { className: string; label: string }> = {
+const SETTLEMENT_META: Record<SettlementStatus, { className: string; label: string }> = {
   PAID: { className: 'bg-teal-light text-teal', label: 'Paid' },
   PARTIALLY_SETTLED: { className: 'bg-amber-light text-brass', label: 'Partially settled' },
   UNPAID: { className: 'bg-coral-light text-coral', label: 'Unpaid' },
 };
 
 function SettlementBadge({ row }: { row: MaintenanceRow }) {
-  const meta = STATUS_META[row.settlementStatus];
+  const meta = SETTLEMENT_META[row.settlementStatus];
   return (
     <div className="inline-flex flex-col items-end gap-0.5">
       <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
@@ -113,21 +152,103 @@ function SortableHeader({
   );
 }
 
-// SYSTEM-charges-only view — the resident-view restructure's "Maintenance Book" nav
-// item, sibling to the Dashboard (which shows Deposit rows only). "Status" is a real,
-// per-record Unpaid/Partially settled/Paid badge — derived server-side by FIFO-filling
-// the flat's approved deposits across its records oldest-first (see CLAUDE.md's
-// settlement-tracking addendum; ledger.service.ts's computeRecordSettlements). Lifetime
-// view, no year concept — only the date-range filter narrows what's shown.
+const depositColumns: ColumnDef<DepositRow, unknown>[] = [
+  {
+    id: 'date',
+    header: 'Date',
+    cell: ({ row }) => <span className="font-mono-brand text-ink">{dateLabel(row.original.date)}</span>,
+  },
+  {
+    id: 'amount',
+    header: 'Amount',
+    meta: { align: 'right' },
+    cell: ({ row }) => (
+      <span className="font-mono-brand text-teal">+₹{row.original.amount.toLocaleString('en-IN')}</span>
+    ),
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    meta: { align: 'right' },
+    cell: ({ row }) => <ApprovalBadge status={row.original.status} />,
+  },
+  {
+    id: 'receipt',
+    header: '',
+    cell: ({ row }) =>
+      row.original.status === 'APPROVED' && row.original.hasReceipt ? (
+        <ReceiptDownloadButton entryId={row.original.id} />
+      ) : null,
+  },
+];
+
+type BookTab = 'BILLS' | 'PAYMENTS';
+
+const BOOK_TABS: { value: BookTab; label: string }[] = [
+  { value: 'PAYMENTS', label: 'Payment History' },
+  { value: 'BILLS', label: 'Bills' },
+];
+
+// SYSTEM-charges-and-Deposit-history view — the resident-view restructure's
+// "Maintenance Book" page, now the home for Maintenance's own Pay control too
+// (previously on the Dashboard, moved here so the Dashboard can be a pure 4-card
+// navigation hub — see ResidentDashboardOverview.tsx). Split into two tabs —
+// "Payment History" (past Deposits, shown first and the default) and "Bills"
+// (charges + the Pay control + date filters) — same role="tablist" pattern as
+// admin/PaymentProofsPage.tsx's status tabs, rather than stacking both tables on one
+// page. Same tab structure as OtherChargesBookPage.tsx. "Status" on the Bills table
+// is a real,
+// per-record Unpaid/Partially settled/Paid badge — derived server-side by
+// FIFO-filling the flat's approved deposits+credits across its records oldest-first
+// (see CLAUDE.md's settlement-tracking addendum; ledger.service.ts's
+// computeRecordSettlements). Lifetime view, no year concept — only the Bills tab's
+// date-range filter narrows what's shown.
 export function MaintenanceBookPage() {
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const [amountInput, setAmountInput] = useState('');
+  const [activeTab, setActiveTab] = useState<BookTab>('PAYMENTS');
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-maintenance-records'],
-    queryFn: fetchMaintenanceRecords,
+    queryFn: fetchMaintenanceBook,
   });
+  // Shared with OtherChargesBookPage.tsx and the (retired) Dashboard pay panel —
+  // there's only ever one intent, across both pools (docs/other-charges/).
+  const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
+  const intentOpenForThisPool = intentQuery.data?.category === 'MAINTENANCE';
+  const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'MAINTENANCE';
+
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  useEffect(() => {
+    if (data) setAmountInput(String(data.outstanding));
+  }, [data]);
+
+  const outstanding = data?.outstanding ?? 0;
+  const parsedAmount = Number(amountInput);
+  const isAmountValid =
+    amountInput.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= outstanding;
+
+  const lockMutation = useMutation<{ intent: unknown }, Error, number>({
+    mutationFn: async (amount: number) => {
+      const res = await authedFetch('/api/me/ledger/deposits/intent', {
+        method: 'POST',
+        body: JSON.stringify({ amount, category: 'MAINTENANCE' }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not lock this payment.');
+      return body;
+    },
+    onSuccess: (body) => {
+      queryClient.setQueryData(['payment-intent'], (body as { intent: { upiLink?: string } }).intent);
+      const intent = (body as { intent: { upiLink?: string } }).intent;
+      if (isMobile && intent.upiLink) window.location.href = intent.upiLink;
+    },
+  });
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -140,7 +261,7 @@ export function MaintenanceBookPage() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    const filtered = data.rows.filter((r) => {
+    const filtered = data.chargeRows.filter((r) => {
       const d = r.date.slice(0, 10);
       if (fromDate && d < fromDate) return false;
       if (toDate && d > toDate) return false;
@@ -193,47 +314,158 @@ export function MaintenanceBookPage() {
 
       {data && (
         <>
-          <div className="mb-5 rounded-2xl border border-ink bg-ink p-5">
-            <p className="m-0 text-xs uppercase tracking-wide text-[#B7BCB2]">Total maintenance amount</p>
-            <p className="m-0 mt-1 font-mono-brand text-2xl font-semibold text-white">
-              ₹{data.totalMaintenanceAmount.toLocaleString('en-IN')}
-            </p>
+          <div className="mb-5 grid grid-cols-2 gap-4">
+            <SummaryCard label="Total maintenance amount" value={data.totalMaintenanceAmount} />
+            <SummaryCard
+              label="Maintenance Outstanding"
+              value={outstanding}
+              accent={outstanding > 0 ? 'coral' : undefined}
+            />
           </div>
 
-          <div className="mb-4 flex flex-wrap items-end gap-3">
-            <label className="text-xs font-semibold text-muted">
-              From
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-              />
-            </label>
-            <label className="text-xs font-semibold text-muted">
-              To
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-              />
-            </label>
-            {(fromDate || toDate) && (
+          <div className="mb-4 flex gap-2" role="tablist">
+            {BOOK_TABS.map((tab) => (
               <button
+                key={tab.value}
                 type="button"
-                onClick={() => {
-                  setFromDate('');
-                  setToDate('');
-                }}
-                className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
+                role="tab"
+                aria-selected={activeTab === tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+                  activeTab === tab.value ? 'bg-teal text-white' : 'border border-line text-ink'
+                }`}
               >
-                Clear
+                {tab.label}
               </button>
-            )}
+            ))}
           </div>
 
-          <DataTable data={rows} columns={columns} getRowId={(r) => r.id} emptyMessage="No maintenance records yet." />
+          {activeTab === 'BILLS' && (
+            <>
+              <div className="mb-5 rounded-2xl border border-line bg-white p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+                  <div>
+                    {outstanding > 0 ? (
+                      <span className="text-sm text-ink">
+                        You owe <strong className="font-mono-brand">₹{outstanding.toLocaleString('en-IN')}</strong>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-teal">
+                        <CheckCircle2 size={16} /> Nothing outstanding right now
+                      </span>
+                    )}
+                  </div>
+                  {outstanding > 0 && !intentQuery.data && (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex flex-col text-xs font-semibold text-muted">
+                        Amount to pay
+                        <input
+                          type="number"
+                          aria-label="Amount to pay"
+                          value={amountInput}
+                          onChange={(e) => setAmountInput(e.target.value)}
+                          min={0.01}
+                          max={outstanding}
+                          step="0.01"
+                          className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => lockMutation.mutate(parsedAmount)}
+                        disabled={lockMutation.isPending || !isAmountValid}
+                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+                      >
+                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
+                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">
+                    Enter an amount between ₹1 and ₹{outstanding.toLocaleString('en-IN')}.
+                  </p>
+                )}
+
+                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
+
+                {intentOpenForThisPool && intentQuery.data && (
+                  <PayIntentPanel
+                    intent={intentQuery.data}
+                    isMobile={isMobile}
+                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] })}
+                  />
+                )}
+                {/* docs/other-charges/ — at most one open intent at a time, across both
+                    pools. If it's for Other Charges, this page can't start a new one
+                    (server-blocked) — point at where to finish it instead. */}
+                {intentOpenForOtherPool && (
+                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                    You have a pending payment for Other Charges — finish or cancel it on the{' '}
+                    <Link to="/other-charges-book" className="font-semibold text-teal">
+                      Other Charges
+                    </Link>{' '}
+                    page before paying here.
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <label className="text-xs font-semibold text-muted">
+                  From
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-muted">
+                  To
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                {(fromDate || toDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromDate('');
+                      setToDate('');
+                    }}
+                    className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <DataTable
+                data={rows}
+                columns={columns}
+                getRowId={(r) => r.id}
+                emptyMessage="No maintenance records yet."
+              />
+            </>
+          )}
+
+          {activeTab === 'PAYMENTS' &&
+            (data.depositRows.length === 0 ? (
+              <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
+                <Check size={14} /> No payments yet
+              </p>
+            ) : (
+              <DataTable
+                data={data.depositRows}
+                columns={depositColumns}
+                getRowId={(r) => r.id}
+                emptyMessage="No payments yet."
+              />
+            ))}
         </>
       )}
     </div>

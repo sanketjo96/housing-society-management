@@ -3,11 +3,14 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DashboardLayout } from './components/DashboardLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
+import { CreditBookPage } from './pages/CreditBookPage'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
+import { OtherChargesFlatDuesPage } from './pages/admin/OtherChargesFlatDuesPage'
 import { OtherChargesPage } from './pages/admin/OtherChargesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
 import { ReceiptBookPage } from './pages/admin/ReceiptBookPage'
+import { ResidentLedgerPage } from './pages/admin/ResidentLedgerPage'
 import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
 import { FeeTypesPage } from './pages/admin/settings/FeeTypesPage'
@@ -51,6 +54,11 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
 
               <Route path="/flats" element={<ProtectedRoute allowedRoles={['ADMIN']}><FlatsListPage /></ProtectedRoute>} />
+              {/* Sidebar nav item (DashboardLayout.tsx) — also still reachable via the
+                  "N payment proofs pending review" tile on AdminDashboardPage, same
+                  page either way. Menu access exists specifically so "Mark as paid"
+                  (this page's manual cash/bank-transfer fallback) doesn't require
+                  going through the dashboard tile first. */}
               <Route
                 path="/payment-proofs"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><PaymentProofsPage /></ProtectedRoute>}
@@ -58,6 +66,14 @@ function App() {
               <Route
                 path="/receipt-book"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ReceiptBookPage /></ProtectedRoute>}
+              />
+              {/* Sidebar nav item, labeled "Resident Charges" (DashboardLayout.tsx)
+                  — a comprehensive per-flat overview (both pools in one row), unlike
+                  /flat-dues and /other-charges-dues, which are dashboard-card
+                  drill-downs filtered to only what's still owed. */}
+              <Route
+                path="/resident-ledger"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><ResidentLedgerPage /></ProtectedRoute>}
               />
               {/* Not a sidebar nav item — reached only via the "Maintenance Outstanding
                   Total" tile on AdminDashboardPage, same admin-only guard as every
@@ -85,9 +101,21 @@ function App() {
                 path="/settings/fee-types"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><FeeTypesPage /></ProtectedRoute>}
               />
+              {/* Sidebar nav item, labeled "Custom Bills" (DashboardLayout.tsx) — the
+                  primary action of billing a new ad-hoc charge, distinct from the
+                  read-only /other-charges-dues drill-down below. */}
               <Route
                 path="/other-charges"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesPage /></ProtectedRoute>}
+              />
+              {/* Not a sidebar nav item — reached only via the "Other Charges
+                  Outstanding Total" tile on AdminDashboardPage, same drill-down
+                  convention as /flat-dues above (docs/other-charges/). Deliberately
+                  NOT linked from /other-charges — that page is the billing action,
+                  this one is the read-only per-flat dues table. */}
+              <Route
+                path="/other-charges-dues"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesFlatDuesPage /></ProtectedRoute>}
               />
 
               <Route
@@ -100,6 +128,13 @@ function App() {
               <Route
                 path="/other-charges-book"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><OtherChargesBookPage /></ProtectedRoute>}
+              />
+              {/* Not a sidebar nav item — reached only via the resident Dashboard's
+                  "Available Maintenance Credit" card, same drill-down convention as
+                  /other-charges-book above (resident-dashboard restructure). */}
+              <Route
+                path="/credit-book"
+                element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><CreditBookPage /></ProtectedRoute>}
               />
               <Route
                 path="/my-details"

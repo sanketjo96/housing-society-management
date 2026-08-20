@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { ReceiptText } from 'lucide-react';
+import { BadgeIndianRupee, Building2, IndianRupee, ReceiptText, Wrench } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { authedFetch } from '../../lib/api';
 import type { ResidentSummary } from '../../types';
@@ -85,6 +87,22 @@ function SummaryCard({
   return <div className="rounded-2xl border border-line bg-white p-5">{content}</div>;
 }
 
+// A titled, bordered container grouping one kind of card together (Society,
+// Finance, Maintenance, Other Charges) — each SummaryCard is still its own white
+// card, but now sits inside a paper-toned panel so a related group visually reads
+// as one unit rather than an unbroken 8-card grid with no structure.
+function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
+  return (
+    <div className="mb-5 rounded-2xl border border-line bg-paper p-4">
+      <div className="mb-3 flex items-center gap-2 px-1">
+        <Icon size={15} className="text-brass" />
+        <h2 className="m-0 font-display text-sm text-ink">{title}</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">{children}</div>
+    </div>
+  );
+}
+
 // Flat-wise dues moved off this page entirely (admin-only /flat-dues, reached only by
 // clicking the Outstanding tile below) — this page now only shows society-wide
 // headline numbers, never the per-flat table.
@@ -120,63 +138,10 @@ export function AdminDashboardPage() {
         </p>
       )}
 
-      {summaryQuery.data && duesQuery.data && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <SummaryCard
-            label="Maintenance Outstanding Total"
-            value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
-            accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
-            note="View flat-wise dues →"
-            to="/flat-dues"
-          />
-          <SummaryCard
-            label="Other Charges Outstanding Total"
-            value={`₹${summaryQuery.data.otherChargesOutstandingTotal.toLocaleString('en-IN')}`}
-            accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
-            note="View other charges →"
-            to="/other-charges"
-          />
-          <SummaryCard
-            label="Total Outstanding"
-            value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
-            accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
-          />
-          <SummaryCard
-            label="Maintenance Collection Rate"
-            value={`${summaryQuery.data.collectionRatePercent}%`}
-            accent="teal"
-            note="Share of total dues actually paid in so far. Approved credit adjustments aren't counted."
-          />
-          <SummaryCard
-            label="Total Credits"
-            value={`₹${totalCredits.toLocaleString('en-IN')}`}
-            accent={totalCredits > 0 ? 'teal' : undefined}
-          />
-          <SummaryCard
-            label="Total Owners"
-            value={totalOwners.toLocaleString('en-IN')}
-            note="View flats and residents →"
-            to="/flats"
-          />
-          <SummaryCard
-            label="Total Tenants"
-            value={totalTenants.toLocaleString('en-IN')}
-            note="View tenants →"
-            to="/tenants"
-          />
-          <SummaryCard
-            label="Total Flats"
-            value={totalFlats.toLocaleString('en-IN')}
-            note="View flats and residents →"
-            to="/flats"
-          />
-        </div>
-      )}
-
       {pendingProofsQuery.data !== undefined && (
         <Link
           to="/payment-proofs"
-          className="mt-6 flex w-full items-center justify-between rounded-2xl border border-line bg-white p-5 text-left"
+          className="mb-5 flex w-full items-center justify-between rounded-2xl border border-line bg-white p-5 text-left"
         >
           <span className="flex items-center gap-2.5">
             <ReceiptText size={16} className="text-brass" />
@@ -186,6 +151,70 @@ export function AdminDashboardPage() {
           </span>
           <span className="text-xs font-semibold text-teal">Review →</span>
         </Link>
+      )}
+
+      {summaryQuery.data && duesQuery.data && (
+        <>
+          <CardGroup icon={IndianRupee} title="Finance">
+            <SummaryCard
+              label="Total Outstanding"
+              value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
+              accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
+            />
+            <SummaryCard
+              label="Maintenance Collection Rate"
+              value={`${summaryQuery.data.collectionRatePercent}%`}
+              accent="teal"
+              note="Share of total dues actually paid in so far. Approved credit adjustments aren't counted."
+            />
+          </CardGroup>
+
+          <CardGroup icon={Wrench} title="Maintenance">
+            <SummaryCard
+              label="Maintenance Outstanding Total"
+              value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
+              accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
+              note="View flat-wise dues →"
+              to="/flat-dues"
+            />
+            <SummaryCard
+              label="Total Maintenance Credit"
+              value={`₹${totalCredits.toLocaleString('en-IN')}`}
+              accent={totalCredits > 0 ? 'teal' : undefined}
+            />
+          </CardGroup>
+
+          <CardGroup icon={BadgeIndianRupee} title="Other Charges">
+            <SummaryCard
+              label="Other Charges Outstanding Total"
+              value={`₹${summaryQuery.data.otherChargesOutstandingTotal.toLocaleString('en-IN')}`}
+              accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
+              note="View flat-wise dues →"
+              to="/other-charges-dues"
+            />
+          </CardGroup>
+
+          <CardGroup icon={Building2} title="Society">
+            <SummaryCard
+              label="Total Owners"
+              value={totalOwners.toLocaleString('en-IN')}
+              note="View flats and residents →"
+              to="/flats"
+            />
+            <SummaryCard
+              label="Total Flats"
+              value={totalFlats.toLocaleString('en-IN')}
+              note="View flats and residents →"
+              to="/flats"
+            />
+            <SummaryCard
+              label="Total Tenants"
+              value={totalTenants.toLocaleString('en-IN')}
+              note="View tenants →"
+              to="/tenants"
+            />
+          </CardGroup>
+        </>
       )}
     </div>
   );

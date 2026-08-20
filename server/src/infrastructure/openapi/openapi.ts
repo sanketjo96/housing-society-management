@@ -238,6 +238,11 @@ const definition: swaggerJsdoc.Options['definition'] = {
             properties: {
               id: { type: 'string' },
               type: { type: 'string', enum: ['DEPOSIT', 'CREDIT'] },
+              category: {
+                type: 'string',
+                enum: ['MAINTENANCE', 'OTHER_CHARGE'],
+                description: 'Which balance pool this receipt is for (docs/other-charges/).',
+              },
               amount: { type: 'string', description: 'Decimal, serialized as a string.' },
               note: { type: 'string', nullable: true },
               payer: { $ref: '#/components/schemas/ContactSummary' },
