@@ -29,6 +29,9 @@ const summary = {
   collectionRatePercent: 23,
   otherChargesOutstandingTotal: 900,
   totalOutstandingTotal: 3600,
+  societyTotalIncome: 5000,
+  societyTotalExpense: 3200,
+  societyNetPosition: 1800,
 };
 
 const flatDues = [

@@ -7,6 +7,7 @@ import {
 } from '../../shared/billing/escalation';
 import { balancesFromRows, computeRecordSettlements } from '../ledger/ledger-shared';
 import { listFlats } from '../flats/admin/admin-flats-onboarding-service';
+import { getSocietyLedgerTotals } from '../society-ledger/society-ledger.service';
 
 type FlatWithResidents = Awaited<ReturnType<typeof listFlats>>[number];
 
@@ -19,6 +20,13 @@ export interface DashboardSummary {
   // docs/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
+  // docs/manage-finance/ — the society's own income/expenditure (SocietyLedgerEntry),
+  // entirely unrelated to the resident-billing figures above (no shared rows, no
+  // shared math). "Recorded since tracking began" — NOT a live bank balance; there
+  // is no admin-configurable opening balance to anchor it to one (future scope).
+  societyTotalIncome: number;
+  societyTotalExpense: number;
+  societyNetPosition: number;
 }
 
 // Society-wide bulk fetch (two queries total, not N+1 across flats), grouped by
@@ -81,9 +89,10 @@ async function getBalancesByFlat(societyId: string, category: LedgerCategory = '
 // chasing — a Credit is a committee-approved adjustment, not money that came in the
 // door. This only affects the rate; totalPaid itself is unchanged.
 export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
-  const [byFlat, byFlatOtherCharges] = await Promise.all([
+  const [byFlat, byFlatOtherCharges, societyLedgerTotals] = await Promise.all([
     getBalancesByFlat(societyId),
     getBalancesByFlat(societyId, 'OTHER_CHARGE'),
+    getSocietyLedgerTotals(societyId),
   ]);
 
   let totalBilled = 0;
@@ -118,6 +127,9 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
     collectionRatePercent,
     otherChargesOutstandingTotal,
     totalOutstandingTotal: outstandingTotal + otherChargesOutstandingTotal,
+    societyTotalIncome: societyLedgerTotals.totalIncome,
+    societyTotalExpense: societyLedgerTotals.totalExpense,
+    societyNetPosition: societyLedgerTotals.net,
   };
 }
 

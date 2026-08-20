@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, Settings, Tag, Users, Wallet, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, Settings, Tag, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavEntry } from './DashboardShell';
@@ -34,10 +34,16 @@ import { DashboardShell, type NavEntry } from './DashboardShell';
 // category filter), so there's no separate "receipts" entry per pool. Society
 // details lives inside the Settings submenu, alongside Billing plan and Fee types —
 // all three are admin-configuration screens, not primary/repeated actions.
+// '/manage-finance' IS a sidebar item ("Manage Finance") — the primary action of
+// recording the society's own income/expenditure (SocietyLedgerEntry,
+// docs/manage-finance/), a write action same as '/other-charges', not a
+// dashboard-tile drill-down. Its supporting category catalog, '/settings/finance-
+// categories', lives in the Settings submenu next to Fee types, same convention.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Custom Bills', icon: BadgeIndianRupee },
   { to: '/resident-ledger', label: 'Resident Charges', icon: Users },
+  { to: '/manage-finance', label: 'Manage Finance', icon: Wallet2 },
   { to: '/payment-proofs', label: 'Mark as Paid', icon: Banknote },
   { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
   {
@@ -47,6 +53,7 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/settings/society', label: 'Society details', icon: Building2 },
       { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
       { to: '/settings/fee-types', label: 'Fee types', icon: Tag },
+      { to: '/settings/finance-categories', label: 'Finance categories', icon: ListTree },
     ],
   },
 ];

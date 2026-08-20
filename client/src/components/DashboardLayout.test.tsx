@@ -122,6 +122,9 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           collectionRatePercent: 0,
           otherChargesOutstandingTotal: 0,
           totalOutstandingTotal: 0,
+          societyTotalIncome: 0,
+          societyTotalExpense: 0,
+          societyNetPosition: 0,
         }),
       });
     }
@@ -154,7 +157,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Charges, Mark as Paid, Receipt Book, Settings) for an ADMIN, with Settings collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Charges, Manage Finance, Mark as Paid, Receipt Book, Settings) for an ADMIN, with Settings collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
@@ -164,15 +167,17 @@ describe('DashboardLayout', () => {
       .getAllByRole('link')
       .map((el) => el.textContent)
       .concat(within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '');
-    // Dashboard, Custom Bills, Resident Charges, Mark as Paid, Receipt Book are
-    // direct links; Settings is the collapsed group toggle — its children
-    // (including Society details, moved inside Settings) aren't links yet.
+    // Dashboard, Custom Bills, Resident Charges, Manage Finance, Mark as Paid,
+    // Receipt Book are direct links; Settings is the collapsed group toggle —
+    // its children (including Society details, moved inside Settings) aren't
+    // links yet.
     expect(labels[0]).toMatch(/dashboard/i);
     expect(labels[1]).toMatch(/custom bills/i);
     expect(labels[2]).toMatch(/resident charges/i);
-    expect(labels[3]).toMatch(/mark as paid/i);
-    expect(labels[4]).toMatch(/receipt book/i);
-    expect(labels[5]).toMatch(/settings/i);
+    expect(labels[3]).toMatch(/manage finance/i);
+    expect(labels[4]).toMatch(/mark as paid/i);
+    expect(labels[5]).toMatch(/receipt book/i);
+    expect(labels[6]).toMatch(/settings/i);
 
     expect(screen.queryByRole('link', { name: /society details/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /billing plan/i })).not.toBeInTheDocument();

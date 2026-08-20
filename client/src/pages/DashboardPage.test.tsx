@@ -68,6 +68,9 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           collectionRatePercent: 0,
           otherChargesOutstandingTotal: 0,
           totalOutstandingTotal: 0,
+          societyTotalIncome: 0,
+          societyTotalExpense: 0,
+          societyNetPosition: 0,
         }),
       });
     }

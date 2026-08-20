@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import { CreditBookPage } from './pages/CreditBookPage'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
+import { ManageFinancePage } from './pages/admin/ManageFinancePage'
 import { OtherChargesFlatDuesPage } from './pages/admin/OtherChargesFlatDuesPage'
 import { OtherChargesPage } from './pages/admin/OtherChargesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
@@ -14,6 +15,7 @@ import { ResidentLedgerPage } from './pages/admin/ResidentLedgerPage'
 import { TenantsListPage } from './pages/admin/TenantsListPage'
 import { BillingPlanPage } from './pages/admin/settings/BillingPlanPage'
 import { FeeTypesPage } from './pages/admin/settings/FeeTypesPage'
+import { FinanceCategoriesPage } from './pages/admin/settings/FinanceCategoriesPage'
 import { SocietyDetailsPage } from './pages/admin/settings/SocietyDetailsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -100,6 +102,18 @@ function App() {
               <Route
                 path="/settings/fee-types"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><FeeTypesPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/settings/finance-categories"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><FinanceCategoriesPage /></ProtectedRoute>}
+              />
+              {/* Sidebar nav item, labeled "Manage Finance" (DashboardLayout.tsx) — the
+                  primary action of recording the society's own income/expenditure
+                  (SocietyLedgerEntry, docs/manage-finance/), entirely separate from
+                  resident-billing LedgerEntry. */}
+              <Route
+                path="/manage-finance"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><ManageFinancePage /></ProtectedRoute>}
               />
               {/* Sidebar nav item, labeled "Custom Bills" (DashboardLayout.tsx) — the
                   primary action of billing a new ad-hoc charge, distinct from the

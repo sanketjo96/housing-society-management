@@ -170,10 +170,12 @@ model Society {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users    User[]
-  flats    Flat[]
-  receipts Receipt[]
-  feeTypes FeeType[]
+  users                User[]
+  flats                Flat[]
+  receipts             Receipt[]
+  feeTypes             FeeType[]
+  financeCategories    SocietyLedgerCategory[]
+  societyLedgerEntries SocietyLedgerEntry[]
 }
 
 model User {
@@ -189,23 +191,24 @@ model User {
   societyId String
   society   Society @relation(fields: [societyId], references: [id])
 
-  ownedFlats            Flat[]               @relation("FlatOwner")
-  currentTenantFlats    Flat[]               @relation("FlatCurrentTenant")
-  chairmanOfSocieties   Society[]            @relation("SocietyChairman")
-  secretaryOfSocieties  Society[]            @relation("SocietySecretary")
-  treasurerOfSocieties  Society[]            @relation("SocietyTreasurer")
-  occupancyChanges      OccupancyChange[]
-  ledgerEntries         LedgerEntry[]        @relation("LedgerPayer")
-  reviewedLedgerEntries LedgerEntry[]        @relation("LedgerReviewer")
-  createdLedgerEntries  LedgerEntry[]        @relation("LedgerCreatedBy")
-  otherChargesOwed      OtherCharge[]        @relation("OtherChargePayer")
-  otherChargesBilled    OtherCharge[]        @relation("OtherChargeBilledBy")
-  issuedReceipts        Receipt[]            @relation("ReceiptIssuer")
-  auditLogs             AuditLog[]
-  billedRecords         MaintenanceRecord[]
-  paymentIntents        PaymentIntent[]
-  refreshTokens         RefreshToken[]
-  passwordResetTokens   PasswordResetToken[]
+  ownedFlats                   Flat[]               @relation("FlatOwner")
+  currentTenantFlats           Flat[]               @relation("FlatCurrentTenant")
+  chairmanOfSocieties          Society[]            @relation("SocietyChairman")
+  secretaryOfSocieties         Society[]            @relation("SocietySecretary")
+  treasurerOfSocieties         Society[]            @relation("SocietyTreasurer")
+  occupancyChanges             OccupancyChange[]
+  ledgerEntries                LedgerEntry[]        @relation("LedgerPayer")
+  reviewedLedgerEntries        LedgerEntry[]        @relation("LedgerReviewer")
+  createdLedgerEntries         LedgerEntry[]        @relation("LedgerCreatedBy")
+  otherChargesOwed             OtherCharge[]        @relation("OtherChargePayer")
+  otherChargesBilled           OtherCharge[]        @relation("OtherChargeBilledBy")
+  recordedSocietyLedgerEntries SocietyLedgerEntry[] @relation("SocietyLedgerRecordedBy")
+  issuedReceipts               Receipt[]            @relation("ReceiptIssuer")
+  auditLogs                    AuditLog[]
+  billedRecords                MaintenanceRecord[]
+  paymentIntents               PaymentIntent[]
+  refreshTokens                RefreshToken[]
+  passwordResetTokens          PasswordResetToken[]
 
   @@index([societyId])
 }
@@ -461,6 +464,104 @@ model FeeType {
 
   @@unique([societyId, name])
   @@index([societyId])
+}
+
+// SocietyLedgerEntry / SocietyLedgerCategory — "Manage Finance" (docs/manage-finance/).
+// The existing LedgerEntry model is resident-centric: every row always carries a
+// flatId/payerId and settles a specific flat's own Outstanding balance
+// (balancesFromRows/computeRecordSettlements, ledger-shared.ts). SocietyLedgerEntry
+// is society-centric: money the society itself pays out (vendor bills, salaries,
+// repairs) or receives from a non-resident source (bank interest, common-area
+// rental, donations) — no flat, no payer, no settlement math, no FIFO fill. The two
+// models are deliberately never merged or unioned; nothing here reads or writes
+// LedgerEntry, MaintenanceRecord, or OtherCharge.
+enum SocietyLedgerDirection {
+  INCOME
+  EXPENSE
+}
+
+// Cash and cheque are legitimate here in a way they never are for a resident
+// Deposit (always UPI in practice, via PaymentIntent/QR) — society-level expenses
+// are genuinely paid multiple ways, including with no bank trail at all.
+enum SocietyLedgerPaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  OTHER
+}
+
+// Admin-configurable catalog of society-level income/expense heads (Electricity,
+// Salaries, Repairs, Bank Interest, Donations, ...) — a real table, not an enum,
+// same reasoning as FeeType (must be addable without a deploy). Deliberately NOT
+// FeeType: FeeType is resident-billing-specific ("Transfer Fee", "Joining Fee") and
+// has no direction concept — semantically wrong for a society-level head like
+// "Electricity" or "Bank Interest". `direction` lives here, on the category, not
+// re-specified independently per entry: a category like "Electricity" is
+// inherently an expense head, "Bank Interest" inherently income. An entry's own
+// `direction` must match its chosen category's `direction` — enforced in
+// society-ledger.service.ts (Prisma can't express a cross-row check constraint).
+// Same isActive-only soft-delete, create-and-deactivate-only pattern as FeeType —
+// no rename in v1 (docs/manage-finance/05-future-scope.md).
+model SocietyLedgerCategory {
+  id          String                 @id @default(cuid())
+  name        String
+  description String?
+  direction   SocietyLedgerDirection
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  societyId String
+  society   Society              @relation(fields: [societyId], references: [id])
+  entries   SocietyLedgerEntry[]
+
+  @@unique([societyId, name])
+  @@index([societyId])
+}
+
+// A complete, already-true transaction record the moment it's created — same shape
+// as OtherCharge/manualDeposit ("an admin recording something that already
+// happened"), NOT LedgerEntry's Deposit/Credit PENDING-then-reviewed shape.
+// Single-admin entry, immutable once created (confirmed decision — matches
+// OtherCharge's precedent exactly, not a two-person approval workflow). No
+// settlement/FIFO concept at all: a SocietyLedgerEntry doesn't pay down anything,
+// it IS the transaction.
+model SocietyLedgerEntry {
+  id              String                     @id @default(cuid())
+  direction       SocietyLedgerDirection
+  amount          Decimal                    @db.Decimal(10, 2)
+  transactionDate DateTime // when the money actually moved, distinct from createdAt
+  paymentMethod   SocietyLedgerPaymentMethod
+
+  // Required unless paymentMethod = CASH — enforced in society-ledger.service.ts,
+  // same "Prisma can't express conditional requiredness" precedent as
+  // Society.bankAccountNumber/bankIfsc's pair-validation in
+  // society-settings.service.ts's updateSocietySettings.
+  bankReference String?
+
+  // Opaque StorageAdapter key, same contract as LedgerEntry.fileUrl. Nullable in
+  // the schema (consistency with LedgerEntry.fileUrl) but the create endpoint
+  // REJECTS a request with no file — mirrors createCredit's mandatory-proof
+  // reasoning: an admin unilaterally recording money in/out needs independent
+  // evidence attached every time, not sometimes.
+  fileUrl  String?
+  mimeType String?
+  note     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  societyId    String
+  society      Society               @relation(fields: [societyId], references: [id])
+  categoryId   String
+  category     SocietyLedgerCategory @relation(fields: [categoryId], references: [id])
+  recordedById String
+  recordedBy   User                  @relation("SocietyLedgerRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([societyId])
+  @@index([categoryId])
+  @@index([transactionDate])
 }
 
 // A one-off, admin-billed charge against a flat's OWNER (never the tenant — payer is

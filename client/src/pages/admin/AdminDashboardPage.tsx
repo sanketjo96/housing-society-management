@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { BadgeIndianRupee, Building2, IndianRupee, ReceiptText, Wrench } from 'lucide-react';
+import { BadgeIndianRupee, Building2, IndianRupee, ReceiptText, Wallet2, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,6 +15,11 @@ interface DashboardSummary {
   // docs/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
+  // docs/manage-finance/ — the society's own income/expenditure, unrelated to the
+  // resident-billing figures above.
+  societyTotalIncome: number;
+  societyTotalExpense: number;
+  societyNetPosition: number;
 }
 
 interface FlatDues {
@@ -191,6 +196,26 @@ export function AdminDashboardPage() {
               accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
               note="View flat-wise dues →"
               to="/other-charges-dues"
+            />
+          </CardGroup>
+
+          <CardGroup icon={Wallet2} title="Society Finance">
+            <SummaryCard
+              label="Total Income"
+              value={`₹${summaryQuery.data.societyTotalIncome.toLocaleString('en-IN')}`}
+              accent="teal"
+            />
+            <SummaryCard
+              label="Total Expense"
+              value={`₹${summaryQuery.data.societyTotalExpense.toLocaleString('en-IN')}`}
+              accent="coral"
+            />
+            <SummaryCard
+              label="Net"
+              value={`₹${summaryQuery.data.societyNetPosition.toLocaleString('en-IN')}`}
+              accent={summaryQuery.data.societyNetPosition >= 0 ? 'teal' : 'coral'}
+              note="Recorded since tracking began — not the society's live bank balance."
+              to="/manage-finance"
             />
           </CardGroup>
 
