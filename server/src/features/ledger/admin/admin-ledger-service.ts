@@ -4,6 +4,7 @@
 // by both live in ../ledger-shared.ts.
 import { randomUUID } from 'node:crypto';
 import type {
+  CreatedByType,
   LedgerCategory,
   LedgerType,
   ProofStatus,
@@ -65,7 +66,12 @@ export const LEDGER_ENTRY_LIST_INCLUDE = {
 // now that there's something to distinguish again post-Credit-reintroduction).
 export async function listPendingLedgerEntries(
   societyId: string,
-  filters: { status?: ProofStatus; type?: LedgerType; category?: LedgerCategory } = {},
+  filters: {
+    status?: ProofStatus;
+    type?: LedgerType;
+    category?: LedgerCategory;
+    createdByType?: CreatedByType;
+  } = {},
 ) {
   return prisma.ledgerEntry.findMany({
     where: {
@@ -73,6 +79,7 @@ export async function listPendingLedgerEntries(
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.type ? { type: filters.type } : {}),
       ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.createdByType ? { createdByType: filters.createdByType } : {}),
     },
     include: LEDGER_ENTRY_LIST_INCLUDE,
     orderBy: { createdAt: 'desc' },

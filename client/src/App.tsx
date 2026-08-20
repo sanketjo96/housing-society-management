@@ -7,6 +7,7 @@ import { CreditBookPage } from './pages/CreditBookPage'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
 import { ManageFinancePage } from './pages/admin/ManageFinancePage'
+import { MarkAsPaidPage } from './pages/admin/MarkAsPaidPage'
 import { OtherChargesFlatDuesPage } from './pages/admin/OtherChargesFlatDuesPage'
 import { OtherChargesPage } from './pages/admin/OtherChargesPage'
 import { PaymentProofsPage } from './pages/admin/PaymentProofsPage'
@@ -56,20 +57,36 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
 
               <Route path="/flats" element={<ProtectedRoute allowedRoles={['ADMIN']}><FlatsListPage /></ProtectedRoute>} />
-              {/* Sidebar nav item (DashboardLayout.tsx) — also still reachable via the
+              {/* Not a sidebar item (DashboardLayout.tsx) — reached only via the
                   "N payment proofs pending review" tile on AdminDashboardPage, same
-                  page either way. Menu access exists specifically so "Mark as paid"
-                  (this page's manual cash/bank-transfer fallback) doesn't require
-                  going through the dashboard tile first. */}
+                  drill-down convention as /flats, /tenants, /flat-dues, and
+                  /other-charges-dues. Moved out of the sidebar 2026-08-20 once
+                  /mark-as-paid below took over as the "Mark Paid" child under the
+                  Manage Finance submenu — the manual cash/bank-transfer fallback
+                  ("Mark as paid") used to live here too as a modal, but a
+                  manualDeposit entry has no proof file and so never actually
+                  appeared in this page's proof-filtered tabs anyway. */}
               <Route
                 path="/payment-proofs"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><PaymentProofsPage /></ProtectedRoute>}
               />
+              {/* "Mark Paid" child under the "Manage Finance" submenu (DashboardLayout.tsx)
+                  — the manual cash/bank-transfer fallback (manualDeposit), delinked
+                  from /payment-proofs above. Lists only entries an admin recorded
+                  directly (createdByType=ADMIN); the payer is still whichever
+                  resident the payment was recorded against. */}
+              <Route
+                path="/mark-as-paid"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><MarkAsPaidPage /></ProtectedRoute>}
+              />
+              {/* "Receipt Book" child under the "Manage Finance" submenu
+                  (DashboardLayout.tsx) — covers issued receipts for both Maintenance
+                  and Other Charges (its backend query has no category filter). */}
               <Route
                 path="/receipt-book"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ReceiptBookPage /></ProtectedRoute>}
               />
-              {/* Sidebar nav item, labeled "Resident Charges" (DashboardLayout.tsx)
+              {/* Sidebar nav item, labeled "Resident Book" (DashboardLayout.tsx)
                   — a comprehensive per-flat overview (both pools in one row), unlike
                   /flat-dues and /other-charges-dues, which are dashboard-card
                   drill-downs filtered to only what's still owed. */}
@@ -107,7 +124,8 @@ function App() {
                 path="/settings/finance-categories"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><FinanceCategoriesPage /></ProtectedRoute>}
               />
-              {/* Sidebar nav item, labeled "Manage Finance" (DashboardLayout.tsx) — the
+              {/* "Record" child under the "Manage Finance" submenu (DashboardLayout.tsx,
+                  restructured 2026-08-20 from a standalone top-level item) — the
                   primary action of recording the society's own income/expenditure
                   (SocietyLedgerEntry, docs/manage-finance/), entirely separate from
                   resident-billing LedgerEntry. */}

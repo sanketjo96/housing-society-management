@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, Settings, Tag, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavEntry } from './DashboardShell';
@@ -12,40 +12,49 @@ import { DashboardShell, type NavEntry } from './DashboardShell';
 // their own top-level URLs (see App.tsx) needs exactly one place that still knows
 // "which nav items for which role" — this file is that place; it owns no routing
 // of its own beyond rendering the matched child via <Outlet/>.
-// '/flats', '/tenants', '/flat-dues', and '/other-charges-dues' are deliberately
-// not here — all four are still real, admin-only routes (App.tsx), but reached only
-// by clicking the corresponding tile on the dashboard (AdminDashboardPage: Total
-// Owners/Total Flats → /flats, Total Tenants → /tenants, Maintenance Outstanding
-// Total → /flat-dues, Other Charges Outstanding Total → /other-charges-dues), not
-// via the sidebar. '/payment-proofs' IS a sidebar item now, labeled "Mark as Paid"
-// below — it carries the manual cash/bank-transfer fallback (recorded outside the
-// app), which needs to be reachable without first going through the dashboard's
-// pending-review tile; it's still also linked from that tile, same page either way
-// (that page shows the full Pending/Approved/Rejected proof queue too, not just the
-// Mark-as-Paid action — the nav label just names its most-used entry point).
+// '/flats', '/tenants', '/flat-dues', '/other-charges-dues', and '/payment-proofs'
+// are deliberately not here — all five are still real, admin-only routes (App.tsx),
+// but reached only by clicking the corresponding tile on the dashboard
+// (AdminDashboardPage: Total Owners/Total Flats → /flats, Total Tenants →
+// /tenants, Maintenance Outstanding Total → /flat-dues, Other Charges Outstanding
+// Total → /other-charges-dues, "N payment proofs pending review" → /payment-proofs),
+// not via the sidebar — each is a read-only/review drill-down of an existing
+// dashboard figure, not a primary repeated action.
 // '/other-charges' IS a sidebar item (labeled "Custom Bills" below) — it's the
 // primary billing action, not a drill-down of an existing dashboard figure, so it's
 // deliberately unlinked from the Dashboard card (which instead links to the
 // read-only /other-charges-dues table). '/resident-ledger' IS also a sidebar item
-// ("Resident Charges") — a comprehensive, browsable per-flat overview (every flat,
+// ("Resident Book") — a comprehensive, browsable per-flat overview (every flat,
 // both pools combined), distinct from /flat-dues and /other-charges-dues, which are
-// exception lists filtered to only what's still owed. Receipt Book already covers
-// receipts for both Maintenance and Other Charges (its backend query has no
-// category filter), so there's no separate "receipts" entry per pool. Society
-// details lives inside the Settings submenu, alongside Billing plan and Fee types —
-// all three are admin-configuration screens, not primary/repeated actions.
-// '/manage-finance' IS a sidebar item ("Manage Finance") — the primary action of
-// recording the society's own income/expenditure (SocietyLedgerEntry,
-// docs/manage-finance/), a write action same as '/other-charges', not a
-// dashboard-tile drill-down. Its supporting category catalog, '/settings/finance-
-// categories', lives in the Settings submenu next to Fee types, same convention.
+// exception lists filtered to only what's still owed.
+// "Manage Finance" is a submenu group (restructured 2026-08-20, was three separate
+// top-level items) — Record (/manage-finance, recording the society's own
+// income/expenditure — SocietyLedgerEntry, docs/manage-finance/), Mark Paid
+// (/mark-as-paid, the manualDeposit cash/bank-transfer fallback, delinked from
+// /payment-proofs the same day since a manualDeposit entry has no proof file and
+// never actually appeared in that page's proof-filtered tabs), and Receipt Book
+// (/receipt-book, covering issued receipts for both Maintenance and Other Charges —
+// its backend query has no category filter, so there's no separate "receipts" entry
+// per pool). Grouped together because all three are the admin's day-to-day money
+// actions (record income/expense, record a manual payment, look up a receipt), same
+// "collapsed group of related screens" pattern the Settings submenu already uses.
+// Society details lives inside the Settings submenu, alongside Billing plan and Fee
+// types — all three are admin-configuration screens, not primary/repeated actions.
+// Manage Finance's supporting category catalog, '/settings/finance-categories',
+// lives in the Settings submenu next to Fee types, same convention.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Custom Bills', icon: BadgeIndianRupee },
-  { to: '/resident-ledger', label: 'Resident Charges', icon: Users },
-  { to: '/manage-finance', label: 'Manage Finance', icon: Wallet2 },
-  { to: '/payment-proofs', label: 'Mark as Paid', icon: Banknote },
-  { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
+  { to: '/resident-ledger', label: 'Resident Book', icon: Users },
+  {
+    label: 'Manage Finance',
+    icon: Wallet2,
+    children: [
+      { to: '/manage-finance', label: 'Record', icon: PlusCircle },
+      { to: '/mark-as-paid', label: 'Mark Paid', icon: Banknote },
+      { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
+    ],
+  },
   {
     label: 'Settings',
     icon: Settings,

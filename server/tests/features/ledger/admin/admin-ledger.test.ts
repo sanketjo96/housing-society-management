@@ -110,6 +110,32 @@ describe('/api/admin/ledger-entries*', () => {
       expect(res.status).toBe(200);
       expect(res.body.some((e: { id: string }) => e.id === created.body.id)).toBe(true);
     });
+
+    // Mark as Paid page (delinked from Payment Proofs, 2026-08-20) — filters to
+    // exactly the entries an admin recorded directly (manualDeposit), excluding a
+    // resident's own Deposit even though both are DEPOSIT/APPROVED rows.
+    it('filters to createdByType=ADMIN, excluding a resident-submitted deposit', async () => {
+      const residentDeposit = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '100')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(residentDeposit.status).toBe(201);
+
+      const manualDeposit = await request(app)
+        .post('/api/admin/ledger-entries/manual-deposit')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ flatId, amount: 300 });
+      expect(manualDeposit.status).toBe(201);
+
+      const res = await request(app)
+        .get('/api/admin/ledger-entries?createdByType=ADMIN')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((e: { id: string }) => e.id);
+      expect(ids).toContain(manualDeposit.body.id);
+      expect(ids).not.toContain(residentDeposit.body.id);
+    });
   });
 
   describe('POST /api/admin/ledger-entries/:id/approve', () => {

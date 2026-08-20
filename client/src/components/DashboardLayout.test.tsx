@@ -157,7 +157,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Charges, Manage Finance, Mark as Paid, Receipt Book, Settings) for an ADMIN, with Settings collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Book, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
@@ -166,35 +166,50 @@ describe('DashboardLayout', () => {
     const labels = within(nav)
       .getAllByRole('link')
       .map((el) => el.textContent)
-      .concat(within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '');
-    // Dashboard, Custom Bills, Resident Charges, Manage Finance, Mark as Paid,
-    // Receipt Book are direct links; Settings is the collapsed group toggle —
-    // its children (including Society details, moved inside Settings) aren't
-    // links yet.
+      .concat(
+        within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
+        within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
+      );
+    // Dashboard, Custom Bills, Resident Book are direct links; Manage Finance and
+    // Settings are collapsed group toggles — their children (Record/Mark
+    // Paid/Receipt Book, and Society details/Billing plan/Fee types/Finance
+    // categories respectively) aren't links yet.
     expect(labels[0]).toMatch(/dashboard/i);
     expect(labels[1]).toMatch(/custom bills/i);
-    expect(labels[2]).toMatch(/resident charges/i);
+    expect(labels[2]).toMatch(/resident book/i);
     expect(labels[3]).toMatch(/manage finance/i);
-    expect(labels[4]).toMatch(/mark as paid/i);
-    expect(labels[5]).toMatch(/receipt book/i);
-    expect(labels[6]).toMatch(/settings/i);
+    expect(labels[4]).toMatch(/settings/i);
 
+    expect(screen.queryByRole('link', { name: /^record$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /mark paid/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /receipt book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /society details/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /billing plan/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /fee types/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my details/i })).not.toBeInTheDocument();
-    // Flats and residents, Tenants, and Flat-wise/Other charges dues are all real
-    // routes but not sidebar nav items — reached only via dashboard tiles.
+    // Flats and residents, Tenants, Flat-wise/Other charges dues, and Payment
+    // proofs are all real routes but not sidebar nav items — reached only via
+    // dashboard tiles.
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^payment proofs$/i })).not.toBeInTheDocument();
   });
 
-  it('links "Mark as Paid" to /payment-proofs', async () => {
+  it('expands the Manage Finance submenu on click, revealing Record, Mark Paid, and Receipt Book as real top-level URLs', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
+    const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /mark as paid/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /mark as paid/i })).toHaveAttribute('href', '/payment-proofs');
+    await user.click(await screen.findByRole('button', { name: /^manage finance$/i }));
+
+    expect(screen.getByRole('link', { name: /^record$/i })).toHaveAttribute('href', '/manage-finance');
+    expect(screen.getByRole('link', { name: /mark paid/i })).toHaveAttribute('href', '/mark-as-paid');
+    expect(screen.getByRole('link', { name: /receipt book/i })).toHaveAttribute('href', '/receipt-book');
+
+    // Toggling again collapses it.
+    await user.click(screen.getByRole('button', { name: /^manage finance$/i }));
+    expect(screen.queryByRole('link', { name: /^record$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /mark paid/i })).not.toBeInTheDocument();
   });
 
   it('links "Custom Bills" to /other-charges', async () => {
@@ -205,12 +220,12 @@ describe('DashboardLayout', () => {
     expect(screen.getByRole('link', { name: /custom bills/i })).toHaveAttribute('href', '/other-charges');
   });
 
-  it('links "Resident Charges" to /resident-ledger', async () => {
+  it('links "Resident Book" to /resident-ledger', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /resident charges/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /resident charges/i })).toHaveAttribute('href', '/resident-ledger');
+    await waitFor(() => expect(screen.getByRole('link', { name: /resident book/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /resident book/i })).toHaveAttribute('href', '/resident-ledger');
   });
 
   it('expands the Settings submenu on click, revealing Society details, Billing plan, and Fee types as real top-level URLs', async () => {

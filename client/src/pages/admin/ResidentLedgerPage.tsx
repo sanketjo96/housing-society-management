@@ -31,7 +31,7 @@ function money(value: number, accent?: 'coral' | 'teal') {
   );
 }
 
-// "Resident Charges" — admin-only page (App.tsx: /resident-ledger,
+// "Resident Book" — admin-only page (App.tsx: /resident-ledger,
 // allowedRoles ADMIN), a sidebar nav item (unlike /flat-dues and
 // /other-charges-dues, which are dashboard-card drill-downs filtered to only
 // what's still owed). Lists every flat, both pools (Maintenance + Other Charges)
@@ -106,7 +106,7 @@ export function ResidentLedgerPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6">
-        <h1 className="m-0 font-display text-xl text-ink">Resident charges</h1>
+        <h1 className="m-0 font-display text-xl text-ink">Resident book</h1>
         <p className="m-0 mt-0.5 text-xs text-muted">{ledgerQuery.data?.length ?? 0} flats</p>
       </div>
 
