@@ -5,9 +5,8 @@ import { authedFetch } from '../lib/api';
 
 // Small shared display pieces for a resident's ledger rows (approval-status badge,
 // receipt download) — previously duplicated inline in ResidentDashboardOverview.tsx
-// before the resident-dashboard restructure split its Deposit/Credit history out to
-// MaintenanceBookPage.tsx and the new CreditBookPage.tsx, both of which need the
-// exact same rendering.
+// before the resident-dashboard restructure split its Deposit history out to
+// MaintenanceBookPage.tsx.
 
 export type ApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
 

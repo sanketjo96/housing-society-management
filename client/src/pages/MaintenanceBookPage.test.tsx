@@ -23,8 +23,7 @@ function renderPage() {
 // amount-sorted output can't accidentally pass just because it matches date order.
 // totals.totalCharges (6500) intentionally excludes the DEPOSIT row (4000) — only
 // SYSTEM charges count toward it. settlementStatus/settledAmount mix all three states
-// so the badge/amount rendering can be asserted per-row. A CREDIT row is included to
-// confirm it's excluded from both tables (it belongs to Credit Book now).
+// so the badge/amount rendering can be asserted per-row.
 const ledger = {
   entries: [
     {
@@ -62,7 +61,6 @@ const ledger = {
       status: 'APPROVED',
       hasReceipt: true,
     },
-    { id: 'cred-1', type: 'CREDIT', date: '2026-06-20T00:00:00.000Z', amount: 300, status: 'APPROVED' },
   ],
   totals: { totalCharges: 6500, outstanding: 1100 },
 };
@@ -134,12 +132,11 @@ describe('MaintenanceBookPage', () => {
     expect(screen.queryByText('Mar 2026')).not.toBeInTheDocument(); // Bills table is hidden
   });
 
-  it('the Payment History tab shows only DEPOSIT rows (no CREDIT), with a receipt button where hasReceipt is set', async () => {
+  it('the Payment History tab shows DEPOSIT rows with a receipt button where hasReceipt is set', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByText('+₹4,000')).toBeInTheDocument());
-    expect(screen.queryByText('+₹300')).not.toBeInTheDocument(); // the CREDIT row
     expect(screen.getByRole('button', { name: /^receipt$/i })).toBeInTheDocument();
   });
 
@@ -274,6 +271,33 @@ describe('MaintenanceBookPage', () => {
     const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
     expect(submitButton).toBeEnabled();
+  });
+
+  it('accepts a Pay amount above Outstanding and shows the Available Credit hint (2026-08-20 pivot — no longer capped)', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await goToBillsTab(user);
+    const amountInput = await screen.findByLabelText('Amount to pay');
+    await waitFor(() => expect(amountInput).toHaveValue(1100));
+
+    await user.clear(amountInput);
+    await user.type(amountInput, '1600');
+
+    await waitFor(() =>
+      expect(screen.getByText(/₹500 will be applied as Available Credit/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: /^pay$/i })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/me\/ledger\/deposits\/intent$/),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 1600, category: 'MAINTENANCE' }) }),
+      );
+    });
   });
 
   it('shows a notice instead of the Pay button on the Bills tab when the open intent is for Other Charges', async () => {

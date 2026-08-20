@@ -108,13 +108,12 @@ const definition: swaggerJsdoc.Options['definition'] = {
       LedgerEntry: {
         type: 'object',
         description:
-          'A resident-created Deposit or Credit row. Only APPROVED rows count toward ' +
-          'a flat\'s Outstanding/Available Credit — see docs/payments.md.',
+          'A resident-created Deposit row. Only APPROVED rows count toward a flat\'s ' +
+          'Outstanding/Available Credit — see docs/payments.md.',
         properties: {
           id: { type: 'string' },
           flatId: { type: 'string' },
           payerId: { type: 'string' },
-          type: { type: 'string', enum: ['DEPOSIT', 'CREDIT'] },
           amount: { type: 'string', description: 'Decimal, serialized as a string.' },
           status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
           note: { type: 'string', nullable: true },
@@ -237,7 +236,6 @@ const definition: swaggerJsdoc.Options['definition'] = {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              type: { type: 'string', enum: ['DEPOSIT', 'CREDIT'] },
               category: {
                 type: 'string',
                 enum: ['MAINTENANCE', 'OTHER_CHARGE'],

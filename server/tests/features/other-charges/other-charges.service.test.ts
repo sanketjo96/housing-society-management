@@ -200,7 +200,6 @@ describe('other-charges service', () => {
       data: {
         flatId: flat!.id,
         payerId: flat!.ownerId,
-        type: 'DEPOSIT',
         status: 'APPROVED',
         amount: 1000,
         createdById: flat!.ownerId,

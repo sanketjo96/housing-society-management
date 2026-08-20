@@ -6,7 +6,6 @@ import type { NotificationEvent, NotificationEventType } from '../notification.t
 import { sendWhatsAppTemplate } from './whatsapp.client';
 import { buildMaintenanceBillGeneratedTemplate } from './templates/maintenance-bill-generated';
 import { buildDepositPaymentApprovedTemplate } from './templates/deposit-payment-approved';
-import { buildCreditPaymentApprovedTemplate } from './templates/credit-payment-approved';
 import { buildOtherChargeBilledTemplate } from './templates/other-charge-billed';
 import { buildHelloWorldTemplate } from './templates/hello-world';
 import { SendWhatsAppTemplateResult, WhatsAppPermanentError, WhatsAppTemplate } from './whatsapp.types';
@@ -55,10 +54,6 @@ function buildTemplate(eventType: NotificationEventType, payload: unknown): What
     case 'DEPOSIT_PAYMENT_APPROVED':
       return buildDepositPaymentApprovedTemplate(
         payload as Extract<NotificationEvent, { eventType: 'DEPOSIT_PAYMENT_APPROVED' }>['data'],
-      );
-    case 'CREDIT_PAYMENT_APPROVED':
-      return buildCreditPaymentApprovedTemplate(
-        payload as Extract<NotificationEvent, { eventType: 'CREDIT_PAYMENT_APPROVED' }>['data'],
       );
     case 'OTHER_CHARGE_BILLED':
       return buildOtherChargeBilledTemplate(

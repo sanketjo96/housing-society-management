@@ -7,16 +7,12 @@ export {};
  * /api/admin/ledger-entries:
  *   get:
  *     tags: [Ledger (Admin)]
- *     summary: List ledger entries (Deposits/Credits) for the society
+ *     summary: List ledger entries (Deposits) for the society
  *     parameters:
  *       - name: status
  *         in: query
  *         required: false
  *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED] }
- *       - name: type
- *         in: query
- *         required: false
- *         schema: { type: string, enum: [DEPOSIT, CREDIT] }
  *     responses:
  *       200:
  *         description: OK.

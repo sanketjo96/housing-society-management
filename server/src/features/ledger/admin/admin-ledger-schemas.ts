@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 export const ledgerListQuerySchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
-  type: z.enum(['DEPOSIT', 'CREDIT']).optional(),
   category: z.enum(['MAINTENANCE', 'OTHER_CHARGE']).optional(),
   // Mark as Paid page (delinked from Payment Proofs) — filters to entries an admin
   // recorded directly (manualDeposit), never a resident's own Deposit/Credit.

@@ -4,7 +4,6 @@ import { Check, Download, Eye, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { LedgerCategoryBadge, type LedgerCategory } from '../../components/LedgerCategoryBadge';
-import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
 import { ReceiptApprovalModal } from '../../components/ReceiptApprovalModal';
 import { authedFetch } from '../../lib/api';
 import { downloadAuthedFile } from '../../lib/download-file';
@@ -14,7 +13,6 @@ type CreatedByType = 'OWNER' | 'TENANT' | 'ADMIN';
 
 interface LedgerEntryListItem {
   id: string;
-  type: LedgerEntryType;
   status: LedgerEntryStatus;
   amount: string;
   note: string | null;
@@ -244,16 +242,8 @@ export function PaymentProofsPage() {
           <span className="text-ink">
             {row.original.flat.wing}-{row.original.flat.flatNumber}
             <div className="text-xs text-muted">{row.original.payer.name}</div>
-            {row.original.type === 'CREDIT' && row.original.note && (
-              <div className="mt-0.5 whitespace-normal break-words text-xs text-muted">{row.original.note}</div>
-            )}
           </span>
         ),
-      },
-      {
-        id: 'type',
-        header: 'Type',
-        cell: ({ row }) => <LedgerTypeBadge type={row.original.type} />,
       },
       {
         id: 'category',

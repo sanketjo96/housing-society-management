@@ -15,7 +15,6 @@ import {
 } from '../../../src/features/ledger/admin/admin-ledger-service';
 import {
   cancelPaymentIntent,
-  createCredit,
   createDeposit,
   createOrReplacePaymentIntent,
   getLedgerEntryFileForViewing,
@@ -23,7 +22,6 @@ import {
   getOpenPaymentIntent,
   IntentAlreadyOpenForOtherCategoryError,
   InvalidAmountError,
-  InvalidDepositAmountError,
   NoOpenPaymentIntentError,
   PaymentMethodNotConfiguredError,
   submitPaymentIntent,
@@ -128,9 +126,9 @@ describe('ledger service', () => {
   });
 
   // Pure-function coverage of the FIFO settlement spec's worked test cases (Cases
-  // 1-9; Case 10 — reject overpayment — is already covered by the createDeposit/
-  // createOrReplacePaymentIntent InvalidDepositAmountError tests, since amount
-  // validation is unchanged by this feature).
+  // 1-9; overpayment past a record's amount is covered by the "overpaying a Deposit
+  // past Outstanding" describe block below, since a Deposit is no longer capped at
+  // Outstanding — 2026-08-20 pivot).
   describe('computeRecordSettlements (FIFO fill)', () => {
     const jun = { id: 'jun', period: '2026-06', amount: 800 };
     const jul = { id: 'jul', period: '2026-07', amount: 800 };
@@ -224,164 +222,110 @@ describe('ledger service', () => {
     });
   });
 
-  // Pure-function coverage of the credit-allocation spec's 10 worked cases —
-  // balancesFromRows (approvedCredits/availableCredit) combined with
-  // computeRecordSettlements fed the deposits+credits lump sum, exactly as
-  // getLedgerForResident/admin-dashboard.service.ts actually call them. No DB
-  // involved; createCredit/approveLedgerEntry's DB-integration behavior is covered
-  // separately below.
-  describe('credit allocation (balancesFromRows + computeRecordSettlements combined)', () => {
+  // Credit (a separate resident-requested adjustment type) was removed for good on
+  // 2026-08-20 — see CLAUDE.md's pivot addendum. Overpaying a Deposit past
+  // Outstanding is allowed now and produces exactly the same "leftover becomes
+  // Available Credit" result via the plain balancesFromRows/computeRecordSettlements
+  // formula — no separate credit-allocation cases needed any more.
+  describe('overpaying a Deposit past Outstanding (balancesFromRows + computeRecordSettlements combined)', () => {
     const jun = { id: 'jun', period: '2026-06', amount: 800 };
     const jul = { id: 'jul', period: '2026-07', amount: 800 };
-    const aug = { id: 'aug', period: '2026-08', amount: 800 };
 
     function run(
       records: { id: string; period: string; amount: number }[],
-      entries: {
-        type: 'DEPOSIT' | 'CREDIT';
-        status: 'PENDING' | 'APPROVED' | 'REJECTED';
-        amount: number;
-      }[],
+      entries: { status: 'PENDING' | 'APPROVED' | 'REJECTED'; amount: number }[],
     ) {
       const balances = balancesFromRows(records, entries);
-      const settlements = computeRecordSettlements(
-        records,
-        balances.approvedDeposits + balances.approvedCredits,
-      );
+      const settlements = computeRecordSettlements(records, balances.approvedDeposits);
       return { balances, settlements };
     }
 
-    it('Case 1: credit smaller than a single outstanding record', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [{ type: 'CREDIT', status: 'APPROVED', amount: 550 }],
-      );
+    it('a Deposit smaller than a single outstanding record only partially settles it', () => {
+      const { balances, settlements } = run([jun], [{ status: 'APPROVED', amount: 550 }]);
       expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
       expect(balances.outstanding).toBe(250);
       expect(balances.availableCredit).toBe(0);
     });
 
-    it('Case 2: credit larger than total outstanding — leftover becomes Available Credit', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [{ type: 'CREDIT', status: 'APPROVED', amount: 1200 }],
-      );
+    it('a Deposit larger than total outstanding settles it in full and the leftover becomes Available Credit', () => {
+      const { balances, settlements } = run([jun], [{ status: 'APPROVED', amount: 1200 }]);
       expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
       expect(balances.outstanding).toBe(0);
       expect(balances.availableCredit).toBe(400);
     });
 
-    it('Case 3: credit exactly equals the outstanding amount', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [{ type: 'CREDIT', status: 'APPROVED', amount: 800 }],
-      );
+    it('a Deposit exactly equal to the outstanding amount settles it with no leftover', () => {
+      const { balances, settlements } = run([jun], [{ status: 'APPROVED', amount: 800 }]);
       expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
       expect(balances.outstanding).toBe(0);
       expect(balances.availableCredit).toBe(0);
     });
 
-    it('Case 4: credit spans two records — one full, one partial', () => {
-      const { balances, settlements } = run(
-        [jun, jul],
-        [{ type: 'CREDIT', status: 'APPROVED', amount: 1000 }],
-      );
-      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
-      expect(settlements.get('jul')).toEqual({ settledAmount: 200, status: 'PARTIALLY_SETTLED' });
-      expect(balances.outstanding).toBe(600);
-      expect(balances.availableCredit).toBe(0);
-    });
-
-    it('Case 5: credit approved when there are no open dues at all — entire amount becomes Available Credit', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [
-          { type: 'DEPOSIT', status: 'APPROVED', amount: 800 },
-          { type: 'CREDIT', status: 'APPROVED', amount: 550 },
-        ],
-      );
-      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
-      expect(balances.outstanding).toBe(0);
-      expect(balances.availableCredit).toBe(550);
-    });
-
-    it('Case 6: a still-pending credit has zero effect on any balance', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [{ type: 'CREDIT', status: 'PENDING', amount: 550 }],
-      );
+    it('a still-pending Deposit has zero effect on any balance', () => {
+      const { balances, settlements } = run([jun], [{ status: 'PENDING', amount: 550 }]);
       expect(settlements.get('jun')).toEqual({ settledAmount: 0, status: 'UNPAID' });
       expect(balances.outstanding).toBe(800);
       expect(balances.availableCredit).toBe(0);
     });
 
-    it('Case 7: multiple credits approved separately apply cumulatively', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [
-          { type: 'CREDIT', status: 'APPROVED', amount: 300 },
-          { type: 'CREDIT', status: 'APPROVED', amount: 250 },
-        ],
-      );
-      expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
-      expect(balances.outstanding).toBe(250);
-      expect(balances.availableCredit).toBe(0);
-    });
-
-    it('Case 8: existing pending dues get immediate benefit from newly approved credit', () => {
-      const { balances, settlements } = run(
-        [jun, jul],
-        [{ type: 'CREDIT', status: 'APPROVED', amount: 550 }],
-      );
-      expect(settlements.get('jun')).toEqual({ settledAmount: 550, status: 'PARTIALLY_SETTLED' });
-      expect(settlements.get('jul')).toEqual({ settledAmount: 0, status: 'UNPAID' });
-      expect(balances.outstanding).toBe(1050);
-    });
-
-    it('Case 9: Available Credit is automatically consumed when a new due is generated — no special "consumption" code needed, just rerunning the same fill against a larger record set', () => {
-      const entries: { type: 'DEPOSIT' | 'CREDIT'; status: 'APPROVED'; amount: number }[] = [
-        { type: 'CREDIT', status: 'APPROVED', amount: 1200 },
-      ];
+    it('Available Credit is automatically consumed when a new due is generated — no special "consumption" code needed, just rerunning the same fill against a larger record set', () => {
+      const entries = [{ status: 'APPROVED' as const, amount: 1200 }];
       const before = run([jun], entries);
       expect(before.balances.outstanding).toBe(0);
       expect(before.balances.availableCredit).toBe(400);
 
-      // Aug is generated later — same entries, one more record.
-      const after = run([jun, aug], entries);
+      // Jul is generated later — same entries, one more record.
+      const after = run([jun, jul], entries);
       expect(after.settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
-      expect(after.settlements.get('aug')).toEqual({
+      expect(after.settlements.get('jul')).toEqual({
         settledAmount: 400,
         status: 'PARTIALLY_SETTLED',
       });
       expect(after.balances.outstanding).toBe(400);
       expect(after.balances.availableCredit).toBe(0);
     });
-
-    it('Case 10: credit combined with a partially-settled record from a prior payment — sources are just added together', () => {
-      const { balances, settlements } = run(
-        [jun],
-        [
-          { type: 'DEPOSIT', status: 'APPROVED', amount: 300 },
-          { type: 'CREDIT', status: 'APPROVED', amount: 500 },
-        ],
-      );
-      expect(settlements.get('jun')).toEqual({ settledAmount: 800, status: 'PAID' });
-      expect(balances.outstanding).toBe(0);
-      expect(balances.availableCredit).toBe(0);
-    });
   });
 
   describe('createDeposit', () => {
     it('rejects an amount of 0 or less', async () => {
       await expect(createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 0 })).rejects.toThrow(
-        InvalidDepositAmountError,
+        InvalidAmountError,
       );
     });
 
-    it('rejects an amount greater than the current outstanding', async () => {
-      await expect(createDeposit(ownerId, flatId, societyId, 'OWNER', { amount: 5000 })).rejects.toThrow(
-        InvalidDepositAmountError,
-      );
+    it('accepts an amount greater than the current outstanding — no longer capped (2026-08-20 pivot); the excess becomes Available Credit once approved', async () => {
+      // Uses its own flat (rather than the shared `flatId`) so approving here doesn't
+      // disturb the shared flat's outstanding balance that later tests depend on.
+      const overpaySuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const overpayFlat = await createFlat({
+        societyId,
+        wing: 'L',
+        flatNumber: `OVP-${overpaySuffix}`,
+        baseRate: 1000,
+        ownerName: 'Overpay Owner',
+        ownerEmail: `overpay-owner-${overpaySuffix}@example.com`,
+      });
+      createdFlatIds.push(overpayFlat!.id);
+      await prisma.maintenanceRecord.create({
+        data: {
+          flatId: overpayFlat!.id,
+          period: '2026-01',
+          payerType: 'OWNER',
+          amount: 800,
+          dueDate: new Date('2026-01-15'),
+          payerId: overpayFlat!.ownerId,
+        },
+      });
+
+      const deposit = await createDeposit(overpayFlat!.ownerId, overpayFlat!.id, societyId, 'OWNER', {
+        amount: 1300,
+      });
+      expect(deposit.status).toBe('PENDING');
+      await approveLedgerEntry(deposit.id, societyId, adminId);
+
+      const after = await computeFlatBalances(overpayFlat!.id);
+      expect(after.outstanding).toBe(0);
+      expect(after.availableCredit).toBe(500);
     });
 
     it('creates a PENDING deposit with no proof file required', async () => {
@@ -432,110 +376,6 @@ describe('ledger service', () => {
       expect(result).toBeNull();
       await prisma.society.delete({ where: { id: otherSociety.id } });
     });
-
-    it('logs APPROVE_CREDIT/REJECT_CREDIT distinctly from the Deposit action names', async () => {
-      const approved = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 60,
-        note: 'Approved-credit audit check',
-        file: fakeProofFile,
-      });
-      await approveLedgerEntry(approved.id, societyId, adminId);
-      const approveLog = await prisma.auditLog.findFirst({
-        where: { entityId: approved.id, entityType: 'LedgerEntry' },
-        orderBy: { createdAt: 'desc' },
-      });
-      expect(approveLog?.action).toBe('APPROVE_CREDIT');
-
-      const rejected = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 60,
-        note: 'Rejected-credit audit check',
-        file: fakeProofFile,
-      });
-      await rejectLedgerEntry(rejected.id, societyId, adminId, 'not enough context');
-      const rejectLog = await prisma.auditLog.findFirst({
-        where: { entityId: rejected.id, entityType: 'LedgerEntry' },
-        orderBy: { createdAt: 'desc' },
-      });
-      expect(rejectLog?.action).toBe('REJECT_CREDIT');
-    });
-  });
-
-  describe('createCredit', () => {
-    it('rejects an amount of 0 or less', async () => {
-      await expect(
-        createCredit(ownerId, flatId, societyId, 'OWNER', { amount: 0, note: 'x', file: fakeProofFile }),
-      ).rejects.toThrow(InvalidAmountError);
-    });
-
-    it('allows an amount that exceeds the current Outstanding — unlike a Deposit, Credit is never capped', async () => {
-      const balances = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: balances.outstanding + 10_000,
-        note: 'Large repair reimbursement, exceeds Outstanding on purpose',
-        file: fakeProofFile,
-      });
-      expect(credit.status).toBe('PENDING');
-      expect(credit.type).toBe('CREDIT');
-      expect(Number(credit.amount)).toBe(balances.outstanding + 10_000);
-    });
-
-    it("requires a proof attachment, same as it requires a note — saved via the storage adapter like a Deposit's screenshot", async () => {
-      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 40,
-        note: 'Receipt attached',
-        file: fakeProofFile,
-      });
-      expect(credit.fileUrl).not.toBeNull();
-      expect(credit.mimeType).toBe('image/png');
-    });
-
-    it('a PENDING credit has zero effect on Outstanding or Available Credit until approved', async () => {
-      const before = await computeFlatBalances(flatId);
-      await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 500,
-        note: 'Still pending, must not move anything',
-        file: fakeProofFile,
-      });
-
-      const after = await computeFlatBalances(flatId);
-      expect(after.outstanding).toBe(before.outstanding);
-      expect(after.availableCredit).toBe(before.availableCredit);
-      expect(after.approvedCredits).toBe(before.approvedCredits);
-    });
-
-    it('approving a credit increases approvedCredits by exactly its amount', async () => {
-      const before = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 150,
-        note: 'Common-area repair',
-        file: fakeProofFile,
-      });
-      await approveLedgerEntry(credit.id, societyId, adminId);
-
-      const after = await computeFlatBalances(flatId);
-      expect(after.approvedCredits).toBe(before.approvedCredits + 150);
-    });
-
-    it('rejecting a credit stores the reason and never moves any balance', async () => {
-      const before = await computeFlatBalances(flatId);
-      const credit = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 75,
-        note: 'Disputed reimbursement',
-        file: fakeProofFile,
-      });
-      const rejected = await rejectLedgerEntry(
-        credit.id,
-        societyId,
-        adminId,
-        'insufficient documentation',
-      );
-      expect(rejected!.status).toBe('REJECTED');
-      expect(rejected!.adminNote).toBe('insufficient documentation');
-
-      const after = await computeFlatBalances(flatId);
-      expect(after.outstanding).toBe(before.outstanding);
-      expect(after.approvedCredits).toBe(before.approvedCredits);
-    });
   });
 
   describe('payment intents', () => {
@@ -543,11 +383,16 @@ describe('ledger service', () => {
       expect(await getOpenPaymentIntent(flatId, societyId)).toBeNull();
     });
 
-    it('rejects locking an amount above the current outstanding', async () => {
+    it('accepts locking an amount above the current outstanding — no longer capped (2026-08-20 pivot)', async () => {
       const balances = await computeFlatBalances(flatId);
-      await expect(
-        createOrReplacePaymentIntent(flatId, ownerId, societyId, balances.outstanding + 1),
-      ).rejects.toThrow(InvalidDepositAmountError);
+      const intent = await createOrReplacePaymentIntent(
+        flatId,
+        ownerId,
+        societyId,
+        balances.outstanding + 1,
+      );
+      expect(intent.amount).toBe(balances.outstanding + 1);
+      await cancelPaymentIntent(flatId, societyId);
     });
 
     it('creates an intent, replaces it on a second lock, and cancel clears it', async () => {
@@ -723,11 +568,10 @@ describe('ledger service', () => {
   });
 
   describe('getLedgerForResident', () => {
-    it('merges SYSTEM charges with LedgerEntry rows (Deposit and Credit) and includes the running totals', async () => {
+    it('merges SYSTEM charges with LedgerEntry (Deposit) rows and includes the running totals', async () => {
       const ledger = await getLedgerForResident(flatId);
       expect(ledger.entries.some((e) => e.type === 'SYSTEM')).toBe(true);
       expect(ledger.entries.some((e) => e.type === 'DEPOSIT')).toBe(true);
-      expect(ledger.entries.some((e) => e.type === 'CREDIT')).toBe(true);
       expect(ledger.totals.totalCharges).toBe(2000);
       expect(ledger.availableYears).toContain(2026);
     });
@@ -757,14 +601,10 @@ describe('ledger service', () => {
       expect(pendingDeposits.every((e) => e.status === 'PENDING')).toBe(true);
     });
 
-    it('filters by type', async () => {
-      const credits = await listPendingLedgerEntries(societyId, { type: 'CREDIT' });
-      expect(credits.length).toBeGreaterThan(0);
-      expect(credits.every((e) => e.type === 'CREDIT')).toBe(true);
-
-      const deposits = await listPendingLedgerEntries(societyId, { type: 'DEPOSIT' });
-      expect(deposits.length).toBeGreaterThan(0);
-      expect(deposits.every((e) => e.type === 'DEPOSIT')).toBe(true);
+    it('filters by category', async () => {
+      const entries = await listPendingLedgerEntries(societyId, { category: 'MAINTENANCE' });
+      expect(entries.length).toBeGreaterThan(0);
+      expect(entries.every((e) => e.category === 'MAINTENANCE')).toBe(true);
     });
   });
 

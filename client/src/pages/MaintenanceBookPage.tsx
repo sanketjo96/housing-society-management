@@ -60,9 +60,8 @@ interface MaintenanceBookData {
 // Reuses GET /api/me/ledger (no `year` param — lifetime, every row ever) and
 // filters client-side into the two tables this page shows (SYSTEM charges and
 // DEPOSIT history) rather than adding dedicated backend endpoints — the data is
-// already there and a flat's full history is at most a couple hundred rows. CREDIT
-// rows are deliberately excluded — those live on CreditBookPage.tsx now. `totals`
-// is always lifetime regardless of any `year` param (see ledger.service.ts), so it's
+// already there and a flat's full history is at most a couple hundred rows. `totals`
+// is always lifetime regardless of any `year` param (see ledger-shared.ts), so it's
 // exactly right for both the "Total maintenance amount" and "Maintenance
 // Outstanding" cards without any extra computation.
 async function fetchMaintenanceBook(): Promise<MaintenanceBookData> {
@@ -230,8 +229,10 @@ export function MaintenanceBookPage() {
 
   const outstanding = data?.outstanding ?? 0;
   const parsedAmount = Number(amountInput);
-  const isAmountValid =
-    amountInput.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= outstanding;
+  // No longer capped at Outstanding (2026-08-20 pivot) — any amount beyond it settles
+  // Outstanding in full and the remainder becomes Available Credit once approved.
+  const isAmountValid = amountInput.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const overpayAmount = isAmountValid && parsedAmount > outstanding ? parsedAmount - outstanding : 0;
 
   const lockMutation = useMutation<{ intent: unknown }, Error, number>({
     mutationFn: async (amount: number) => {
@@ -365,7 +366,6 @@ export function MaintenanceBookPage() {
                           value={amountInput}
                           onChange={(e) => setAmountInput(e.target.value)}
                           min={0.01}
-                          max={outstanding}
                           step="0.01"
                           className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
                         />
@@ -383,8 +383,12 @@ export function MaintenanceBookPage() {
                 </div>
 
                 {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
-                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">
-                    Enter an amount between ₹1 and ₹{outstanding.toLocaleString('en-IN')}.
+                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">Enter an amount greater than ₹0.</p>
+                )}
+
+                {outstanding > 0 && !intentQuery.data && overpayAmount > 0 && (
+                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-teal">
+                    ₹{overpayAmount.toLocaleString('en-IN')} will be applied as Available Credit.
                   </p>
                 )}
 

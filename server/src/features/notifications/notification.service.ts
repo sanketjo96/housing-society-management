@@ -24,7 +24,6 @@ function businessIdFor(event: NotificationEvent): string {
     case 'OTHER_CHARGE_BILLED':
       return event.data.chargeId;
     case 'DEPOSIT_PAYMENT_APPROVED':
-    case 'CREDIT_PAYMENT_APPROVED':
       return event.data.paymentId;
   }
 }
@@ -40,7 +39,6 @@ function relatedEntityFor(event: NotificationEvent): { type: string; id: string 
     case 'OTHER_CHARGE_BILLED':
       return { type: 'OtherCharge', id: event.data.chargeId };
     case 'DEPOSIT_PAYMENT_APPROVED':
-    case 'CREDIT_PAYMENT_APPROVED':
       return { type: 'LedgerEntry', id: event.data.paymentId };
   }
 }

@@ -150,8 +150,7 @@ describe('admin-dashboard service', () => {
           payerId: flatDRow.ownerId,
         },
         // Flat E: an old charge, well past grace, but fully settled via an approved
-        // CREDIT (not a Deposit) below — the escalation check's lump sum must include
-        // approvedCredits, not just approvedDeposits, or this would wrongly flag off it.
+        // Deposit below.
         {
           flatId: flatEId,
           period: '2026-01',
@@ -178,7 +177,6 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
-          type: 'DEPOSIT',
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
@@ -188,7 +186,6 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatCId,
           payerId: flatCRow.ownerId,
-          type: 'DEPOSIT',
           status: 'PENDING',
           amount: 1200,
           note: 'Second deposit, still awaiting review',
@@ -198,7 +195,6 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatDId,
           payerId: flatDRow.ownerId,
-          type: 'DEPOSIT',
           status: 'APPROVED',
           amount: 800,
           reviewedAt: new Date(),
@@ -208,7 +204,6 @@ describe('admin-dashboard service', () => {
         {
           flatId: flatEId,
           payerId: flatERow.ownerId,
-          type: 'CREDIT',
           status: 'APPROVED',
           amount: 800,
           note: 'Repair cost settled against Jan',
@@ -240,20 +235,18 @@ describe('admin-dashboard service', () => {
     it('computes totals and collection rate across every flat', async () => {
       const summary = await getDashboardSummary(societyId);
       // totalBilled = 1000(B)+500(B)+800(C)+800(D)+800(D)+800(E)+800(E) = 5500;
-      // totalPaid counts approvedDeposits + approvedCredits (2026-08-08 pivot — an
-      // approved Credit counts as paid the same as a Deposit) — 800(C's deposit) +
-      // 800(D's deposit) + 800(E's credit) = 2400.
+      // totalPaid = approvedDeposits — every LedgerEntry is a Deposit now (Credit
+      // removed for good, 2026-08-20 pivot) — 800(C) + 800(D) + 800(E) = 2400.
       expect(summary.totalBilled).toBe(5500);
       expect(summary.totalPaid).toBe(2400);
       // outstandingTotal = sum of per-flat Outstanding: A=0, B=1500, C=0 (800 charge
       // fully covered by the approved deposit; the second pending deposit doesn't
       // count), D=800 (one of its two 800 charges covered, the other still open),
-      // E=800 (same shape as D, but covered by an approved Credit instead).
+      // E=800 (same shape as D).
       expect(summary.outstandingTotal).toBe(3100);
       expect(summary.pendingReviewTotal).toBe(1200); // C's pending deposit
-      // collectionRatePercent (2026-08-09 pivot) is deposits-only, unlike totalPaid —
-      // C's deposit 800 + D's deposit 800 = 1600 (E's 800 is a Credit, excluded).
-      expect(summary.collectionRatePercent).toBe(29); // round(1600/5500*100)
+      // collectionRatePercent now reads the same totalPaid figure — 2400/5500.
+      expect(summary.collectionRatePercent).toBe(44); // round(2400/5500*100)
     });
 
     // docs/other-charges/ — a fully separate pool: billing an Other Charge must
@@ -305,14 +298,14 @@ describe('admin-dashboard service', () => {
       expect(indexB).toBeLessThan(indexC); // 1500 > 0
     });
 
-    it("surfaces each flat's paidTotal as its approvedDeposits + approvedCredits", async () => {
+    it("surfaces each flat's paidTotal as its approvedDeposits", async () => {
       const dues = await getFlatWiseDues(societyId);
       const flatB = dues.find((d) => d.flat.id === flatBId)!;
       const flatC = dues.find((d) => d.flat.id === flatCId)!;
       const flatE = dues.find((d) => d.flat.id === flatEId)!;
       expect(flatB.paidTotal).toBe(0); // nothing paid
       expect(flatC.paidTotal).toBe(800); // the approved deposit, not the pending one
-      expect(flatE.paidTotal).toBe(800); // settled via an approved Credit, which now counts as paid too
+      expect(flatE.paidTotal).toBe(800); // settled via an approved deposit
     });
 
     it("surfaces each flat's creditTotal as its availableCredit, the flip side of outstandingTotal", async () => {
@@ -412,17 +405,17 @@ describe('admin-dashboard service', () => {
       expect(flatD.overdueRecordCount).toBe(1); // only Feb — Jan is PAID, excluded even though it's also "overdue"
     });
 
-    it("does the same for a Credit-settled old charge — flat E's Jan is PAID via an approved Credit (not a Deposit), so it must not be falsely flagged off it either", async () => {
+    it("does the same for flat E's Jan, settled via an approved Deposit — must not be falsely flagged off it either", async () => {
       const flagged = await getFlaggedFlats(societyId);
       expect(flagged.some((f) => f.flat.id === flatEId)).toBe(false);
     });
 
-    it('flags flat E once its newer charge passes a shorter grace period, confirming the settlement lump sum used for escalation includes approvedCredits, not just approvedDeposits', async () => {
+    it('flags flat E once its newer charge passes a shorter grace period', async () => {
       const flagged = await getFlaggedFlats(societyId, 1);
       const flatE = flagged.find((f) => f.flat.id === flatEId)!;
       expect(flatE).toBeDefined();
       expect(flatE.outstandingTotal).toBe(800);
-      expect(flatE.overdueRecordCount).toBe(1); // only Feb — Jan is PAID (via Credit), excluded
+      expect(flatE.overdueRecordCount).toBe(1); // only Feb — Jan is PAID, excluded
     });
   });
 });

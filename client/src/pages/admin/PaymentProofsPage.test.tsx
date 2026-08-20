@@ -19,7 +19,6 @@ function renderPage() {
 
 const depositEntry = {
   id: 'entry-1',
-  type: 'DEPOSIT' as const,
   status: 'PENDING' as const,
   amount: '2000',
   note: 'UPI payment - awaiting review',
@@ -36,22 +35,6 @@ const depositEntryNoFile = {
   id: 'entry-2',
   amount: '500',
   fileUrl: null,
-};
-
-const creditEntry = {
-  id: 'entry-3',
-  type: 'CREDIT' as const,
-  status: 'PENDING' as const,
-  amount: '550',
-  note: 'Plumber repair for the common water tank',
-  // A Credit's proof is mandatory at creation (unlike a Deposit's optional
-  // screenshot) — always has a fileUrl in practice.
-  fileUrl: 'credits/proof.jpg',
-  createdAt: '2026-08-01T00:00:00.000Z',
-  createdByType: 'OWNER' as const,
-  category: 'MAINTENANCE' as const,
-  payer: { id: 'owner-2', name: 'Bob Owner', email: 'bob@example.com' },
-  flat: { id: 'f2', wing: 'B', flatNumber: '201' },
 };
 
 const approvedEntry = { ...depositEntry, id: 'entry-4', status: 'APPROVED' as const };
@@ -99,18 +82,6 @@ describe('PaymentProofsPage', () => {
 
     await waitFor(() => expect(screen.getByText('₹2,000')).toBeInTheDocument());
     expect(screen.queryByText('₹500')).not.toBeInTheDocument();
-  });
-
-  it('shows a Type column distinguishing Deposit from Credit rows, and a Credit row\'s required reason note', async () => {
-    const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockResolvedValue({ ok: true, json: async () => [depositEntry, creditEntry] });
-
-    renderPage();
-
-    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
-    expect(screen.getByText('Deposit')).toBeInTheDocument();
-    expect(screen.getByText('Credit')).toBeInTheDocument();
-    expect(screen.getByText('Plumber repair for the common water tank')).toBeInTheDocument();
   });
 
   it('shows an empty state when there is nothing pending', async () => {

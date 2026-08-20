@@ -53,8 +53,10 @@ to keep in sync by hand.
 
 ## Approval flow
 
-Clicking **Approve** on a pending Deposit or Credit no longer settles it directly.
-It opens a receipt-preview modal (`client/src/components/ReceiptApprovalModal.tsx`)
+Clicking **Approve** on a pending Deposit no longer settles it directly (Credit,
+a separate resident-requested adjustment type, was removed for good 2026-08-20 —
+see `CLAUDE.md`; every `LedgerEntry` is a Deposit now). It opens a receipt-preview
+modal (`client/src/components/ReceiptApprovalModal.tsx`)
 that streams the **exact PDF that will be issued** — not a separate hand-built
 preview template, which would eventually drift from the real one. **Cancel** closes
 the modal with no action taken; the entry stays `PENDING`. **Confirm and approve**
@@ -86,19 +88,19 @@ eventually-issued receipt number match exactly" test).
 ## Receipt content
 
 Society name and address, the receipt number, the resident's name and flat
-(`wing-flatNumber`), the date, transaction type (Deposit/Credit), a purpose line,
-the amount shown **both numerically and in words** (`lib/number-to-words.ts`'s
-`toIndianCurrencyWords` — Indian numbering: crore/lakh/thousand, plus paise when
-the amount isn't a whole rupee), and a signatory block (name, title, and the
-uploaded signature image if one exists, else a blank line).
+(`wing-flatNumber`), the date, transaction type (always `Deposit`, 2026-08-20
+pivot), a purpose line, the amount shown **both numerically and in words**
+(`lib/number-to-words.ts`'s `toIndianCurrencyWords` — Indian numbering:
+crore/lakh/thousand, plus paise when the amount isn't a whole rupee), and a
+signatory block (name, title, and the uploaded signature image if one exists,
+else a blank line).
 
-**Purpose text is a generic label per type, not an itemized per-month
+**Purpose text is a generic label per category, not an itemized per-month
 breakdown** (confirmed scope decision, made explicitly before implementing): a
-Deposit's purpose is always `"Maintenance dues payment"`; a Credit's purpose is
-its own existing required `note` field (the reason a resident already has to
-supply when requesting a Credit — see `docs/payments.md`). This matches the
-ledger model directly: a Deposit is never tied to specific `MaintenanceRecord`s
-under the 2026-08-06 pivot, so there's nothing itemizable to list.
+Deposit's purpose is `"Maintenance dues payment"` or `"Other charges payment"`
+depending on which pool it settles. This matches the ledger model directly: a
+Deposit is never tied to specific `MaintenanceRecord`s under the 2026-08-06
+pivot, so there's nothing itemizable to list.
 
 ## Template customization — `GET`/`PATCH /api/admin/settings`
 
@@ -263,8 +265,10 @@ separate "Treasurer signature" widget with its own immediate-effect upload/
 remove mutations (a file action doesn't belong inside a single-submit text
 form — same reasoning as the pre-existing CSV-import panel on the Flats page).
 
-**`client/src/pages/ResidentDashboardOverview.tsx`** (Passbook): each
-Deposit/Credit row's `LedgerRow` gained an optional `hasReceipt` field; an
+**`client/src/pages/MaintenanceBookPage.tsx`** (corrected file path, 2026-08-20 —
+the resident-dashboard restructure moved the Passbook off
+`ResidentDashboardOverview.tsx`, now a pure navigation hub, onto this page):
+each Deposit row's `LedgerRow` gained an optional `hasReceipt` field; an
 `APPROVED` row with `hasReceipt: true` shows a small "Receipt" download button
 next to its status badge, hitting the same shared `GET
 /api/ledger-entries/:id/receipt` endpoint the admin page uses. Residents
@@ -309,9 +313,10 @@ downloadable.
 
 **`GET /api/admin/receipts`** (admin-only): returns every `Receipt` for the caller's
 society, newest (`issuedAt desc`) first, each joined to its `LedgerEntry`'s
-`type`/`amount`/`note`/`payer`/`flat`. No query params, no pagination — same
-unbounded-`findMany`-then-filter-client-side convention as
-`GET /api/admin/ledger-entries` (`listPendingLedgerEntries`), consistent with this
+`category`/`amount`/`note`/`payer`/`flat` (`type` dropped from this join 2026-08-20,
+same pivot as everywhere else — every `LedgerEntry` is a Deposit now). No query
+params, no pagination — same unbounded-`findMany`-then-filter-client-side convention
+as `GET /api/admin/ledger-entries` (`listPendingLedgerEntries`), consistent with this
 24-flat MVP's philosophy (`DataTable.tsx`'s own comment). Example response row:
 
 ```json
@@ -321,9 +326,9 @@ unbounded-`findMany`-then-filter-client-side convention as
   "issuedAt": "2026-08-16T15:19:26.926Z",
   "ledgerEntry": {
     "id": "cmsvy9oyb000a01o6cr3c93md",
-    "type": "CREDIT",
+    "category": "MAINTENANCE",
     "amount": "500",
-    "note": "wlwejnlqe",
+    "note": null,
     "payer": { "id": "...", "name": "Mr. Chaware", "email": "chaware@yahoo.com" },
     "flat": { "id": "...", "wing": "A", "flatNumber": "2" }
   }
@@ -351,12 +356,14 @@ rather than redefining it.
 `/receipt-book` (admin-only, `App.tsx`). Fetched once via React Query, then filtered
 client-side by an issued-date range and a free-text search (matches receipt number,
 flat, or resident name) — same pattern as `MaintenanceBookPage.tsx`'s date-range
-filter. Two small helpers were extracted for reuse rather than copied a third time:
-`components/LedgerTypeBadge.tsx` (the Deposit/Credit badge, previously private to
-`PaymentProofsPage.tsx`) and `lib/download-file.ts`'s `downloadAuthedFile` (the
+filter. `lib/download-file.ts`'s `downloadAuthedFile` (the
 authenticated-blob-then-`window.open` idiom, previously duplicated locally in both
-`PaymentProofsPage.tsx` and `ResidentDashboardOverview.tsx`) — both pages now import
-from these shared locations instead of keeping their own copies.
+`PaymentProofsPage.tsx` and `ResidentDashboardOverview.tsx`) was extracted for reuse
+rather than copied a third time — both pages now import from this shared location
+instead of keeping their own copies. (`components/LedgerTypeBadge.tsx`, the
+Deposit/Credit badge this section originally also mentioned, was deleted 2026-08-20
+along with Credit itself — nothing left to distinguish once every `LedgerEntry` is a
+Deposit.)
 
 Tests: `server/tests/features/receipts/admin/admin-receipts.test.ts` (admin-only
 403, empty list, an approved deposit appears with the right shape after approval,

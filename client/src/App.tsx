@@ -3,7 +3,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DashboardLayout } from './components/DashboardLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
-import { CreditBookPage } from './pages/CreditBookPage'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
 import { ManageFinancePage } from './pages/admin/ManageFinancePage'
@@ -160,13 +159,6 @@ function App() {
               <Route
                 path="/other-charges-book"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><OtherChargesBookPage /></ProtectedRoute>}
-              />
-              {/* Not a sidebar nav item — reached only via the resident Dashboard's
-                  "Available Maintenance Credit" card, same drill-down convention as
-                  /other-charges-book above (resident-dashboard restructure). */}
-              <Route
-                path="/credit-book"
-                element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><CreditBookPage /></ProtectedRoute>}
               />
               <Route
                 path="/my-details"

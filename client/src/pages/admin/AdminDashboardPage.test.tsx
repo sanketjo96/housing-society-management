@@ -89,7 +89,6 @@ describe('AdminDashboardPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
-    expect(screen.getByText('23%')).toBeInTheDocument();
   });
 
   it('no longer shows the numeric "Pending review" amount card', async () => {
@@ -217,12 +216,18 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText('Maintenance')).toBeInTheDocument();
     expect(screen.getByText('Other Charges')).toBeInTheDocument();
     expect(screen.getByText('Society')).toBeInTheDocument();
+    // "Society Finance" was merged into "Finance" — no separate heading remains.
+    expect(screen.queryByText('Society Finance')).not.toBeInTheDocument();
+    // Maintenance Collection Rate was dropped entirely, not just relocated.
+    expect(screen.queryByText('Maintenance Collection Rate')).not.toBeInTheDocument();
 
-    // Finance's heading and its 2 cards live in the same container — Maintenance
-    // Collection Rate now lives here, not in the Maintenance group below.
+    // Finance's heading and its 4 cards (dues Outstanding + the former Society
+    // Finance income/expense/net cards) live in the same container.
     const financeGroup = screen.getByText('Finance').closest('div')!.parentElement!;
     expect(within(financeGroup).getByText('Total Outstanding')).toBeInTheDocument();
-    expect(within(financeGroup).getByText('Maintenance Collection Rate')).toBeInTheDocument();
+    expect(within(financeGroup).getByText('Total Income')).toBeInTheDocument();
+    expect(within(financeGroup).getByText('Total Expense')).toBeInTheDocument();
+    expect(within(financeGroup).getByText('Net')).toBeInTheDocument();
 
     // Society's heading and its 3 cards live in the same container.
     const societyGroup = screen.getByText('Society').closest('div')!.parentElement!;
@@ -231,17 +236,15 @@ describe('AdminDashboardPage', () => {
     expect(within(societyGroup).getByText('Total Tenants')).toBeInTheDocument();
     expect(within(societyGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
 
-    // Maintenance's heading and its 2 cards (Outstanding + Credit only, Collection
-    // Rate moved to Finance) live in the same container, separate from Other
-    // Charges' single card.
+    // Maintenance's heading and its 2 cards (Outstanding + Credit only) live in the
+    // same container, separate from Other Charges' single card.
     const maintenanceGroup = screen.getByText('Maintenance').closest('div')!.parentElement!;
     expect(within(maintenanceGroup).getByText('Maintenance Outstanding Total')).toBeInTheDocument();
     expect(within(maintenanceGroup).getByText('Total Maintenance Credit')).toBeInTheDocument();
-    expect(within(maintenanceGroup).queryByText('Maintenance Collection Rate')).not.toBeInTheDocument();
     expect(within(maintenanceGroup).queryByText('Other Charges Outstanding Total')).not.toBeInTheDocument();
   });
 
-  it('orders the cards: pending-proofs widget, Finance, Maintenance, Other Charges, Society', async () => {
+  it('orders the cards: pending-proofs widget, Finance (incl. society income/expense), Maintenance, Other Charges, Society', async () => {
     mockFetch();
     renderPage();
 
@@ -249,7 +252,9 @@ describe('AdminDashboardPage', () => {
     const labels = [
       'payment proof', // the pending-proofs widget, at the very top of the dashboard
       'Total Outstanding',
-      'Maintenance Collection Rate',
+      'Total Income',
+      'Total Expense',
+      'Net',
       'Maintenance Outstanding Total',
       'Total Maintenance Credit',
       'Other Charges Outstanding Total',

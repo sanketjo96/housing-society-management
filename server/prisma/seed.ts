@@ -58,7 +58,7 @@ async function backfillMaintenanceRecords(societyId: string) {
     const flats = await prisma.flat.findMany({ where: { societyId } });
     for (const flat of flats) {
       const alreadyBackfilled = await prisma.ledgerEntry.findFirst({
-        where: { flatId: flat.id, type: 'DEPOSIT' },
+        where: { flatId: flat.id },
       });
       if (alreadyBackfilled) continue;
 
@@ -68,15 +68,17 @@ async function backfillMaintenanceRecords(societyId: string) {
       const amount = historicalRecords.reduce((sum, r) => sum + Number(r.amount), 0);
       if (amount <= 0) continue;
 
+      const payerId = flat.currentTenantId ?? flat.ownerId;
       await prisma.ledgerEntry.create({
         data: {
           flatId: flat.id,
-          type: 'DEPOSIT',
           status: 'APPROVED',
           amount,
           note: `UPI payment — covers ${historicalPeriods[0]} to ${historicalPeriods[historicalPeriods.length - 1]}`,
-          payerId: flat.currentTenantId ?? flat.ownerId,
+          payerId,
           reviewedAt: new Date(),
+          createdById: payerId,
+          createdByType: flat.currentTenantId ? 'TENANT' : 'OWNER',
         },
       });
       depositsCreated += 1;

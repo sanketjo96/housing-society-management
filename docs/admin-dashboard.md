@@ -32,31 +32,24 @@ Task 8.1. Response: `{ totalBilled, totalPaid, outstandingTotal, pendingReviewTo
 collectionRatePercent }`, computed across every flat in the society (all periods, not
 just the current one). Internals: `getBalancesByFlat` fetches every `MaintenanceRecord`
 and `LedgerEntry` for the society in two bulk queries (not N+1), groups by `flatId`, and
-calls `ledger.service.ts`'s `balancesFromRows` per flat — the exact same formula the
+calls `ledger-shared.ts`'s `balancesFromRows` per flat — the exact same formula the
 resident's own Dashboard uses (`docs/payments.md`), never duplicated.
 
 - `totalBilled` = sum of every flat's `totalCharges`.
-- `totalPaid` = sum of every flat's `approvedDeposits + approvedCredits`
-  (`approvedFunds`) — **2026-08-08 pivot**: this reverses the prior 2026-08-07 rule
-  that excluded Credit from `totalPaid` as "not collected cash." An approved Credit
-  now counts as paid the same as a Deposit, matching the fungible-funds treatment
-  `balancesFromRows` already used for Outstanding/Available Credit. See CLAUDE.md's
-  "Pivot (2026-08-08)" addendum for the full reasoning.
-- `outstandingTotal` = **sum of each flat's own `outstanding`** (which does already
-  fold in Credit — see `docs/payments.md`'s balance formula) — summed per flat, not
+- `totalPaid` = sum of every flat's `approvedDeposits` — every `LedgerEntry` is a
+  Deposit (Credit removed for good, 2026-08-20 pivot; see CLAUDE.md).
+- `outstandingTotal` = **sum of each flat's own `outstanding`** — summed per flat, not
   computed as one global subtraction, since a flat that has overpaid must never offset
   another flat's balance (each `max(0, ...)` is per-flat).
-- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` (Deposit *and*
-  Credit, since 2026-08-07) amounts — neither "confirmed collected" nor "still owed
-  with no action taken."
-- `collectionRatePercent` = `round(totalApprovedDeposits / totalBilled * 100)`, `0`
-  when `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`).
-  **2026-08-09 pivot**: deliberately *not* `totalPaid` — at the society-wide
-  headline-metric level, folding in approved Credit overstates actual cash collected
-  and can discourage collection follow-up (a Credit is a committee-approved
-  adjustment, not money that came in the door). `totalPaid` itself is unchanged and
-  still feeds `getFlatWiseDues`'s `paidTotal` below. The admin dashboard UI shows this
-  formula as a small note under the "Collection rate" card
+- `pendingReviewTotal` = sum of every flat's `PENDING` `LedgerEntry` amounts — neither
+  "confirmed collected" nor "still owed with no action taken."
+- `collectionRatePercent` = `round(totalPaid / totalBilled * 100)`, `0` when
+  `totalBilled` is `0` (no records generated yet — avoids a `0/0` `NaN`). Reads the
+  same `totalPaid` figure now that Credit no longer exists to distinguish it from —
+  the earlier 2026-08-09 pivot that split them off (to avoid folding a
+  committee-approved adjustment into a "cash collected" headline metric) became moot
+  once Credit itself was removed. The admin dashboard UI still shows the formula as a
+  small note under the "Collection rate" card
   (`client/src/pages/admin/AdminDashboardPage.tsx`).
 
 ## `getFlatWiseDues(societyId)` — `GET /api/admin/dashboard/flat-dues`
@@ -66,17 +59,18 @@ scanning the table needs to see "this flat is fully settled" as a positive absen
 debt, not have the flat silently missing. Each row: `{ flat: {id, wing, flatNumber},
 owner, currentTenant, paidTotal, outstandingTotal, creditTotal }`.
 
-- `paidTotal` = that flat's `approvedDeposits + approvedCredits` — same convention as
-  `getDashboardSummary`'s `totalPaid` above (2026-08-08 pivot), reused here per-flat.
-  Rendered as the admin dashboard table's "Paid" column. Distinct from `creditTotal`
-  below: `paidTotal` is the cumulative funds ever approved for the flat, `creditTotal`
-  is whatever of that is still unused after covering `totalCharges`.
+- `paidTotal` = that flat's `approvedDeposits` — same convention as
+  `getDashboardSummary`'s `totalPaid` above, reused here per-flat. Rendered as the
+  admin dashboard table's "Paid" column. Distinct from `creditTotal` below:
+  `paidTotal` is the cumulative funds ever approved for the flat, `creditTotal` is
+  whatever of that is still unused after covering `totalCharges`.
 - `outstandingTotal` = the flat's **Outstanding** — the primary "what they owe right
   now" figure under the ledger model, replacing the old UNPAID+PENDING_REVIEW sum.
 - `creditTotal` = that flat's `availableCredit` — the flip side of `outstandingTotal`
-  (`ledger.service.ts`'s `balancesFromRows`: exactly one of the two is ever nonzero).
-  Rendered as the table's "Credit" column, replacing the old pending-`LedgerEntry`
-  "Unpaid" count column.
+  (`ledger-shared.ts`'s `balancesFromRows`: exactly one of the two is ever nonzero),
+  now produced purely by Deposit overpayment rather than a separate Credit request
+  (2026-08-20 pivot). Rendered as the table's "Credit" column, replacing the old
+  pending-`LedgerEntry` "Unpaid" count column.
 - `currentTenant` is still returned (used to show "Tenant: {name}" under the owner's
   name in the table's Owner cell) even though there's no longer a standalone Tenant
   column.
@@ -94,16 +88,14 @@ overdueRecordCount, message }`.
 - **Redefined again for the 2026-08-07 settlement addendum**: the 2026-08-06 ledger
   pivot's version of this check used the literal oldest `MaintenanceRecord.dueDate`,
   since there was no per-charge paid/unpaid state to consult at all back then. Now
-  that `ledger.service.ts`'s `computeRecordSettlements` derives one (see
+  that `ledger-shared.ts`'s `computeRecordSettlements` derives one (see
   `docs/payments.md`'s "Settlement status" section), this endpoint fetches each
   flagged-candidate flat's full record set, runs the FIFO fill against that flat's
-  `approvedDeposits + approvedCredits` (updated again, same day, when Credit was
-  re-introduced — see `CLAUDE.md`'s "Credit re-introduced" addendum), and picks the
-  oldest record whose status **isn't** `PAID`. A flat that already settled its oldest
-  months but still owes a newer one is now judged against the newer, still-open
-  month's due date — not a stale one that's already been paid off, whether the
-  settlement came from a Deposit or a Credit. (`balances.outstanding > 0` guarantees
-  at least one non-`PAID` record exists, so there's always a valid candidate.)
+  `approvedDeposits`, and picks the oldest record whose status **isn't** `PAID`. A
+  flat that already settled its oldest months but still owes a newer one is now
+  judged against the newer, still-open month's due date — not a stale one that's
+  already been paid off. (`balances.outstanding > 0` guarantees at least one
+  non-`PAID` record exists, so there's always a valid candidate.)
 - **`gracePeriodDays` is still the "configurable" knob from rule 8** — exposed as an
   optional query param (`?gracePeriodDays=N`, positive integer, `zod`-validated, `400`
   on a non-numeric value), unchanged mechanism from before the pivot.

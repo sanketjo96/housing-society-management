@@ -34,16 +34,6 @@ enum ProofStatus {
   REJECTED
 }
 
-// Re-added 2026-08-07 (same day as its removal) — see CLAUDE.md's "Credit
-// re-introduced" addendum. DEPOSIT = a resident's UPI payment, capped at Outstanding
-// when created. CREDIT = a committee-approved adjustment (e.g. a repair cost the
-// owner wants settled against maintenance), NOT capped — see
-// ledger.service.ts's createCredit.
-enum LedgerType {
-  DEPOSIT
-  CREDIT
-}
-
 // Which balance pool a LedgerEntry/PaymentIntent belongs to (docs/other-charges/) —
 // two fully independent Outstanding tracks, never combined into one settlement fill.
 // Default MAINTENANCE is a safe backfill: every row that existed before this feature
@@ -337,16 +327,14 @@ model MaintenanceRecord {
 
 // A resident-created Deposit or Credit row. SYSTEM charges are NOT stored here —
 // they remain MaintenanceRecord rows, always implicitly "Approved" (see below).
-// Credit was removed on 2026-08-07, then re-introduced the same day in a different
-// shape (allocation-based, not a separate netted balance) — see CLAUDE.md's "Credit
-// re-introduced" addendum. `type` distinguishes the two: a DEPOSIT is capped at the
-// flat's Outstanding when created; a CREDIT is not. Both are summed together once
-// APPROVED for balance/settlement purposes (ledger.service.ts) — `type` only matters
-// at creation-time validation and for admin/audit display, never in the balance math
-// itself.
+// Credit (a separate committee-approved adjustment request, capped-off history in
+// CLAUDE.md's "Credit re-introduced"/2026-08-20 pivot addenda) was removed for good
+// on 2026-08-20 — a LedgerEntry only ever represents a Deposit now. Overpaying a
+// Deposit past the flat's Outstanding is allowed (no cap) and the excess surfaces as
+// Available Credit via the exact same balance formula, so nothing is lost by dropping
+// the `type` discriminator — see ledger-shared.ts's balancesFromRows.
 model LedgerEntry {
   id     String      @id @default(cuid())
-  type   LedgerType
   amount Decimal     @db.Decimal(10, 2)
   status ProofStatus @default(PENDING)
   note   String?

@@ -1,10 +1,10 @@
 // Internals shared across ledger/admin and ledger/resident — the balance/settlement
-// formulas, and InvalidAmountError (thrown by both admin's manualDeposit and
-// resident's createCredit). Also consumed cross-feature by
+// formulas, and InvalidAmountError (thrown by resident createDeposit/createOrReplace-
+// PaymentIntent and admin manualDeposit alike). Also consumed cross-feature by
 // admin-dashboard.service.ts, which needs the exact same balance formula the
 // resident's own Passbook uses, never duplicated.
 import { prisma } from '../../infrastructure/prisma/client';
-import type { LedgerCategory, LedgerType, ProofStatus } from '../../infrastructure/prisma/generated/client';
+import type { LedgerCategory, ProofStatus } from '../../infrastructure/prisma/generated/client';
 
 export class InvalidAmountError extends Error {
   constructor() {
@@ -16,7 +16,6 @@ export class InvalidAmountError extends Error {
 export interface FlatBalances {
   totalCharges: number;
   approvedDeposits: number;
-  approvedCredits: number;
   outstanding: number;
   availableCredit: number;
 }
@@ -29,30 +28,24 @@ export interface FlatBalances {
 // computing every flat in a society from two bulk queries rather than N+1) can reuse
 // the exact same formula without a redundant per-flat query.
 //
-// Credit re-introduced (2026-08-07, same day it was removed) in a different shape
-// than before — see CLAUDE.md's "Credit re-introduced" addendum. It's no longer a
-// separately-netted "Credit balance" (the old `Payable = Outstanding - Credit`
-// split); Deposit and Credit money is simply pooled together — `outstanding`
-// subtracts both, and `availableCredit` is just the *other side* of the same
-// subtraction: whichever of (money owed) or (money paid in excess) is positive.
-// Exactly one of `outstanding`/`availableCredit` is ever nonzero at a time.
+// Credit removed for good (2026-08-20) — see CLAUDE.md's pivot addendum. A
+// LedgerEntry only ever represents a Deposit now, and Deposit's amount cap against
+// Outstanding was lifted the same day: a resident can pay more than they currently
+// owe, and the excess is exactly `availableCredit` below — the *other side* of the
+// same subtraction as `outstanding`. Exactly one of the two is ever nonzero at a time.
 export function balancesFromRows(
   records: { amount: unknown }[],
-  entries: { type: LedgerType; status: ProofStatus; amount: unknown }[],
+  entries: { status: ProofStatus; amount: unknown }[],
 ): FlatBalances {
   const totalCharges = records.reduce((sum, r) => sum + Number(r.amount), 0);
   const approvedDeposits = entries
-    .filter((e) => e.type === 'DEPOSIT' && e.status === 'APPROVED')
-    .reduce((sum, e) => sum + Number(e.amount), 0);
-  const approvedCredits = entries
-    .filter((e) => e.type === 'CREDIT' && e.status === 'APPROVED')
+    .filter((e) => e.status === 'APPROVED')
     .reduce((sum, e) => sum + Number(e.amount), 0);
 
-  const approvedFunds = approvedDeposits + approvedCredits;
-  const outstanding = Math.max(0, totalCharges - approvedFunds);
-  const availableCredit = Math.max(0, approvedFunds - totalCharges);
+  const outstanding = Math.max(0, totalCharges - approvedDeposits);
+  const availableCredit = Math.max(0, approvedDeposits - totalCharges);
 
-  return { totalCharges, approvedDeposits, approvedCredits, outstanding, availableCredit };
+  return { totalCharges, approvedDeposits, outstanding, availableCredit };
 }
 
 export type RecordSettlementStatus = 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID';
@@ -73,15 +66,11 @@ export interface RecordSettlement {
 // instead of mutating a stored column — there's no history to replay, only the
 // current sum of approved funds and the current set of records.
 //
-// Since 2026-08-07's Credit re-introduction, `totalApprovedFunds` is always
-// `approvedDeposits + approvedCredits` (FlatBalances) — this function itself has no
-// idea Deposit vs Credit even exists, and doesn't need to: money is money once it's
-// summed (see CLAUDE.md's "Credit re-introduced" addendum, and the credit spec's own
-// Case 10 — "the engine doesn't care whether the ₹800 came from one source or a mix
-// of payment + credit"). This is also exactly what makes Case 9 (available credit
-// auto-consumed by a newly-generated record) work with no extra code: rerunning this
-// same fill against a larger record set naturally lands leftover funds on the new
-// record.
+// `totalApprovedFunds` is `approvedDeposits` (FlatBalances) — this function itself
+// never needed to know Deposit vs Credit even when Credit existed: money is money
+// once it's summed. This is also exactly what makes "available credit auto-consumed
+// by a newly-generated record" work with no extra code: rerunning this same fill
+// against a larger record set naturally lands leftover funds on the new record.
 export function computeRecordSettlements(
   records: { id: string; period: string; amount: unknown }[],
   totalApprovedFunds: number,
@@ -141,7 +130,7 @@ export async function computeFlatBalances(
         }),
     prisma.ledgerEntry.findMany({
       where: { flatId, category, ...ledgerEntryYearFilter(year) },
-      select: { type: true, status: true, amount: true },
+      select: { status: true, amount: true },
     }),
   ]);
   return balancesFromRows(records, entries);

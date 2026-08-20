@@ -10,7 +10,3 @@ export const ledgerAmountSchema = z.object({
   amount: z.coerce.number().positive(),
   category: categorySchema,
 });
-export const creditSchema = z.object({
-  amount: z.coerce.number().positive(),
-  note: z.string().min(1),
-});

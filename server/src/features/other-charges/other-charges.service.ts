@@ -63,7 +63,7 @@ export async function listOtherCharges(societyId: string): Promise<OtherChargeLi
     orderBy: { createdAt: 'desc' },
   });
 
-  const entriesByFlat = new Map<string, { type: string; status: string; amount: unknown }[]>();
+  const entriesByFlat = new Map<string, { status: string; amount: unknown }[]>();
   const chargesByFlat = new Map<string, typeof charges>();
   for (const charge of charges) {
     chargesByFlat.set(charge.flatId, [...(chargesByFlat.get(charge.flatId) ?? []), charge]);
@@ -72,7 +72,7 @@ export async function listOtherCharges(societyId: string): Promise<OtherChargeLi
   const flatIds = [...chargesByFlat.keys()];
   const entries = await prisma.ledgerEntry.findMany({
     where: { flatId: { in: flatIds }, category: 'OTHER_CHARGE' },
-    select: { flatId: true, type: true, status: true, amount: true },
+    select: { flatId: true, status: true, amount: true },
   });
   for (const entry of entries) {
     entriesByFlat.set(entry.flatId, [...(entriesByFlat.get(entry.flatId) ?? []), entry]);

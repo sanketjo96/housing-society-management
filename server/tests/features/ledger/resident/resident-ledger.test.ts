@@ -133,12 +133,25 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
       expect(res.body.intent).toBeNull();
     });
 
-    it('POST rejects an amount above payable (400)', async () => {
+    it('POST rejects an amount of 0 or less (400)', async () => {
+      const res = await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 0 });
+      expect(res.status).toBe(400);
+    });
+
+    it('POST accepts an amount above Outstanding — no longer capped (2026-08-20 pivot)', async () => {
       const res = await request(app)
         .post('/api/me/ledger/deposits/intent')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({ amount: 999999 });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(201);
+      expect(res.body.intent.amount).toBe(999999);
+
+      await request(app)
+        .delete('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`);
     });
 
     it('POST locks an amount and returns a QR/UPI link; GET then reflects it', async () => {
@@ -231,49 +244,6 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('Unsupported file type');
-    });
-  });
-
-  describe('POST /api/me/ledger/credits', () => {
-    it('rejects with no file attached (400) — unlike a Deposit, proof is mandatory for a Credit', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '300')
-        .field('note', 'Plumber repair for the common water tank');
-      expect(res.status).toBe(400);
-    });
-
-    it('rejects with no note (400)', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '300')
-        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
-      expect(res.status).toBe(400);
-    });
-
-    it('rejects an amount of 0 or less (400), even with a file and note attached', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '0')
-        .field('note', 'Plumber repair')
-        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
-      expect(res.status).toBe(400);
-    });
-
-    it('creates a PENDING credit with amount, note, and proof file, not capped at Outstanding', async () => {
-      const res = await request(app)
-        .post('/api/me/ledger/credits')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .field('amount', '999999') // far above this flat's Outstanding — must still succeed
-        .field('note', 'Plumber repair for the common water tank')
-        .attach('file', TINY_JPEG_BYTES, { filename: 'receipt.jpg', contentType: 'image/jpeg' });
-      expect(res.status).toBe(201);
-      expect(res.body.type).toBe('CREDIT');
-      expect(res.body.status).toBe('PENDING');
-      expect(res.body.fileUrl).not.toBeNull();
     });
   });
 

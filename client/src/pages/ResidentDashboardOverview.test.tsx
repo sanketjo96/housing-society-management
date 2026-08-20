@@ -35,10 +35,9 @@ function mockFetch(balances: unknown = baseBalances) {
 }
 
 // The resident Dashboard restructure reduced this page to exactly 4 summary cards,
-// each reading GET /api/me/balances — no Pay control, no Add-credit control, no
-// ledger table here anymore (all moved to each pool's own book page). See
-// MaintenanceBookPage.test.tsx / OtherChargesBookPage.test.tsx / CreditBookPage.test.tsx
-// for coverage of that relocated behavior.
+// each reading GET /api/me/balances — no Pay control, no ledger table here anymore
+// (all moved to each pool's own book page). See MaintenanceBookPage.test.tsx /
+// OtherChargesBookPage.test.tsx for coverage of that relocated behavior.
 describe('ResidentDashboardOverview', () => {
   beforeEach(() => {
     setAccessToken('fake-token');
@@ -67,7 +66,7 @@ describe('ResidentDashboardOverview', () => {
     expect(screen.getByText('₹0')).toBeInTheDocument();
   });
 
-  it('links Maintenance Outstanding to /maintenance-book, Other Outstanding to /other-charges-book, and Available Maintenance Credit to /credit-book, with Total Outstanding not a link', async () => {
+  it('links Maintenance Outstanding and Available Maintenance Credit to /maintenance-book, Other Outstanding to /other-charges-book, with Total Outstanding not a link', async () => {
     mockFetch();
     renderPage();
 
@@ -79,8 +78,12 @@ describe('ResidentDashboardOverview', () => {
     const otherLink = screen.getByText(/^other outstanding$/i).closest('a');
     expect(otherLink).toHaveAttribute('href', '/other-charges-book');
 
+    // Available Maintenance Credit points at /maintenance-book too (2026-08-20
+    // pivot) — the standalone Credit Book was removed; overpaying a Deposit is now
+    // the only way to produce Available Credit, so the Pay flow's own book page is
+    // the natural drill-down target.
     const creditLink = screen.getByText(/^available maintenance credit$/i).closest('a');
-    expect(creditLink).toHaveAttribute('href', '/credit-book');
+    expect(creditLink).toHaveAttribute('href', '/maintenance-book');
 
     const totalCard = screen.getByText(/^total outstanding$/i);
     expect(totalCard.closest('a')).toBeNull();

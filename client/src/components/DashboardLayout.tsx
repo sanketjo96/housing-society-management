@@ -67,11 +67,11 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
   },
 ];
 
-// '/other-charges-book' and '/credit-book' are deliberately not here — reached only
-// via the Dashboard's "Other Outstanding"/"Available Maintenance Credit" cards, same
-// drill-down convention as the admin side's non-sidebar routes above
-// (docs/other-charges/, resident-dashboard restructure). '/maintenance-book' stays a
-// sidebar item — it predates that drill-down convention and gained its own Pay
+// '/other-charges-book' is deliberately not here — reached only via the Dashboard's
+// "Other Outstanding" card, same drill-down convention as the admin side's
+// non-sidebar routes above (docs/other-charges/, resident-dashboard restructure).
+// '/maintenance-book' stays a sidebar item — it predates that drill-down convention
+// and gained its own Pay
 // control without moving off the sidebar.
 const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },

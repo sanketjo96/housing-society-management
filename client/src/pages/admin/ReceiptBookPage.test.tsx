@@ -27,7 +27,6 @@ const receipts = [
     issuedAt: '2026-06-20T00:00:00.000Z',
     ledgerEntry: {
       id: 'le-1',
-      type: 'DEPOSIT',
       category: 'MAINTENANCE',
       amount: '2000',
       note: null,
@@ -41,7 +40,6 @@ const receipts = [
     issuedAt: '2026-07-05T00:00:00.000Z',
     ledgerEntry: {
       id: 'le-2',
-      type: 'DEPOSIT',
       category: 'OTHER_CHARGE',
       amount: '500',
       note: null,
@@ -72,7 +70,7 @@ describe('ReceiptBookPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists every receipt with a Category badge distinguishing Maintenance from Other Charge, alongside the Type badge', async () => {
+  it('lists every receipt with a Category badge distinguishing Maintenance from Other Charge', async () => {
     mockFetch();
     renderPage();
 
@@ -81,7 +79,6 @@ describe('ReceiptBookPage', () => {
 
     expect(screen.getByText('Maintenance')).toBeInTheDocument();
     expect(screen.getByText('Other Charge')).toBeInTheDocument();
-    expect(screen.getAllByText('Deposit')).toHaveLength(2);
   });
 
   it('filters by date range', async () => {

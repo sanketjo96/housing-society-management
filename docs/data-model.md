@@ -384,6 +384,16 @@ model MaintenanceRecord {
 > FIFO-allocated across records by the same `computeRecordSettlements` the
 > per-record-settlement addendum (below) already built for payments. See `CLAUDE.md`'s
 > "Credit re-introduced" addendum for the full reasoning and the worked formula.
+>
+> **Pivot (2026-08-20): Credit removed a third time, for good.** `type`/`LedgerType`
+> are dropped again (migration `20260820191542_remove_credit_type_final`) — a
+> `LedgerEntry` only ever represents a Deposit now. Instead of a resident requesting a
+> separate Credit, the Deposit amount cap against Outstanding was lifted the same
+> day: overpaying settles Outstanding in full and the remainder surfaces as
+> `availableCredit` through the exact same formula below, unchanged in shape. Existing
+> rows previously marked `CREDIT` needed no data migration — their `amount` already
+> counted toward the flat's balance regardless of the label. See `CLAUDE.md`'s dated
+> pivot for the full reasoning.
 
 ```prisma
 enum ProofStatus {
@@ -392,14 +402,8 @@ enum ProofStatus {
   REJECTED
 }
 
-enum LedgerType {
-  DEPOSIT
-  CREDIT
-}
-
 model LedgerEntry {
   id       String      @id @default(cuid())
-  type     LedgerType
   amount   Decimal     @db.Decimal(10, 2)
   status   ProofStatus @default(PENDING)
   note     String?
@@ -428,57 +432,49 @@ model LedgerEntry {
 `LedgerEntry` is never linked to specific `MaintenanceRecord`s, because settlement is
 computed against the flat's aggregate funds, not particular months (a partial deposit
 might not exactly cover any one charge — see `computeRecordSettlements`, below). A
-`LedgerEntry` row represents either a **Deposit** (a UPI payment, `fileUrl` optional)
-or a **Credit** (a committee-approved adjustment, `note` **and** `fileUrl` both
-required at the application level — the inverse of a Deposit, where proof is
+`LedgerEntry` row represents a **Deposit** (a UPI or bank-transfer payment, `fileUrl`
 optional) — SYSTEM charges are *not* stored here at all; they remain
-`MaintenanceRecord` rows (above), always implicitly "Approved."
+`MaintenanceRecord` rows (above), always implicitly "Approved." Credit (a separate,
+resident-requested adjustment type) existed at various points in this project's
+history and is removed for good as of 2026-08-20 (see the pivot note above).
 
 **Only `APPROVED` rows count toward the running balance** (computed in
-`ledger.service.ts`'s `balancesFromRows`, reused by both the resident's own Dashboard
-and the admin dashboard so the formula lives in exactly one place). Updated 2026-08-07
-to fold Credit back in — `outstanding` and `availableCredit` are the two sides of the
-same subtraction, exactly one of them is ever nonzero:
+`ledger-shared.ts`'s `balancesFromRows`, reused by both the resident's own Dashboard
+and the admin dashboard so the formula lives in exactly one place). `outstanding` and
+`availableCredit` are the two sides of the same subtraction, exactly one of them is
+ever nonzero:
 
 ```
 totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
-approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
-approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
-approvedFunds    = approvedDeposits + approvedCredits
+approvedDeposits = sum(LedgerEntry.amount) where status=APPROVED
 
-outstanding      = max(0, totalCharges - approvedFunds)
-availableCredit  = max(0, approvedFunds - totalCharges)
+outstanding      = max(0, totalCharges - approvedDeposits)
+availableCredit  = max(0, approvedDeposits - totalCharges)
 ```
 
 `PENDING`/`REJECTED` rows stay visible in the resident's dashboard for transparency
-but are excluded from every sum — including a still-pending Credit request, which must
-have zero effect on any balance until an admin approves it.
+but are excluded from every sum.
 
 **Per-record settlement (Unpaid/Partially Settled/Paid), derived — not stored.**
-`ledger.service.ts`'s `computeRecordSettlements(records, totalApprovedFunds)` FIFO-fills
-`approvedFunds` (the same lump sum as above) across a flat's `MaintenanceRecord`s
+`ledger-shared.ts`'s `computeRecordSettlements(records, totalApprovedFunds)` FIFO-fills
+`approvedDeposits` (the same lump sum as above) across a flat's `MaintenanceRecord`s
 oldest-first, computed fresh on every read rather than adding a stored per-record
-column. See `CLAUDE.md`'s per-record-settlement and "Credit re-introduced" addenda for
-the full reasoning — in short, the fill is order-independent (a Deposit and a Credit
-contributing to the same record just add together, and it doesn't matter which arrived
-first or was approved first), so no history ever needs to be replayed.
+column. See `CLAUDE.md`'s per-record-settlement addendum for the full reasoning — in
+short, the fill is order-independent (it doesn't matter which Deposit arrived first
+or was approved first), so no history ever needs to be replayed. This is the same
+mechanism that turns an overpayment (2026-08-20: no longer capped at Outstanding)
+into `availableCredit` — no special-case code needed.
 
 **`fileUrl`/`mimeType` are optional at the schema level** — unlike the pre-pivot
 `PaymentProof.fileUrl` (required), a proof screenshot is no longer mandatory to
-submit a Deposit (a real reversal of the old rule 7, see `CLAUDE.md`). **A Credit is
-the exception**: `createCredit` requires `file` at the application level (not the
-schema — nothing stops a future caller from omitting it at the DB layer, but
-`POST /api/me/ledger/credits` always rejects with `400` first), same server-side
-validation as a Deposit's optional screenshot. Same opaque-storage-key contract as
-before otherwise (`StorageAdapter`, `docs/payments.md`) — served only through the
-authenticated `GET /api/ledger-entries/:id/file`.
+submit a Deposit (a real reversal of the old rule 7, see `CLAUDE.md`). Same
+opaque-storage-key contract as before (`StorageAdapter`, `docs/payments.md`) — served
+only through the authenticated `GET /api/ledger-entries/:id/file`.
 
 **`note` vs `adminNote`** — for a Deposit, `note` is a short fixed string set by the
-server (e.g. "UPI payment - awaiting review"), not resident-authored input. For a
-Credit, `note` **is** resident-authored and required — the reason a committee needs to
-evaluate an arbitrary discretionary adjustment (`createCredit`'s `note` param). Either
-way, `adminNote` is the admin's rejection reason (rule 7), set only on reject —
-distinct fields because they're written by different parties at different times.
+server (e.g. "UPI payment - awaiting review"), not resident-authored input.
+`adminNote` is the admin's rejection reason (rule 7), set only on reject — distinct
+fields because they're written by different parties at different times.
 
 ### Why `payer`/`reviewedBy` need two named relations to `User`
 

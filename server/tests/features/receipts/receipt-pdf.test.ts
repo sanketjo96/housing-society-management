@@ -45,6 +45,7 @@ describe('renderReceiptPdf', () => {
     expect(text).toContain('RCPT-A101-abc123');
     expect(text).toContain('Priya Nair');
     expect(text).toContain('A-101');
+    expect(text).toContain('Deposit');
     expect(text).toContain('Maintenance dues payment');
     expect(text).toContain('Rupees One Thousand Five Hundred and Fifty Paise Only');
     expect(text).toContain('Sunrise Residency');
@@ -53,18 +54,6 @@ describe('renderReceiptPdf', () => {
     expect(text).toContain('Sunita Deshmukh');
     expect(text).toContain('Secretary');
     expect(text).toContain('This is a computer-generated receipt.');
-  });
-
-  it('renders a CREDIT entry with its own purpose text and type label', async () => {
-    const buffer = await renderReceiptPdf({
-      ...baseData,
-      transactionType: 'CREDIT',
-      purpose: 'Repair cost settled against maintenance',
-    });
-    const text = await extractText(buffer);
-
-    expect(text).toContain('Credit Adjustment');
-    expect(text).toContain('Repair cost settled against maintenance');
   });
 
   it('renders without either signatory name, without throwing', async () => {

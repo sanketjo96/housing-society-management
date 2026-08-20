@@ -127,36 +127,40 @@ overdue-dues escalation.
    below). This is a display/escalation concern layered on top of the aggregate
    model, not a reversion to a stored per-record paid flag.
 4. **A resident's Outstanding is a single running balance, not a sum of unpaid
-   months.** `Outstanding` = `totalCharges` − approved Deposits − approved Credits
-   (floored at 0); the flip side of the same subtraction, `Available Credit` = approved
-   Deposits + approved Credits − `totalCharges` (also floored at 0), is nonzero exactly
-   when funds exceed what's currently billed. No separate "Payable" — Outstanding
-   directly is the amount due. (Credit was removed entirely on 2026-08-07, then
-   re-introduced the same day in a different shape — see the "Credit re-introduced"
-   addendum, § below, for the full history and why this isn't the same three-number
-   split this rule originally described.)
+   months.** `Outstanding` = `totalCharges` − approved Deposits (floored at 0); the
+   flip side of the same subtraction, `Available Credit` = approved Deposits −
+   `totalCharges` (also floored at 0), is nonzero exactly when funds exceed what's
+   currently billed — which now only happens by a resident paying more than they
+   currently owe (see rule 6). No separate "Payable" — Outstanding directly is the
+   amount due. (Credit — a separate resident-requested adjustment type — was removed
+   entirely on 2026-08-07, re-introduced the same day in a different shape, then
+   removed a third and final time on 2026-08-20 when Deposit's Outstanding cap was
+   lifted, making a separate Credit request redundant — see the "Pivot (2026-08-20)"
+   addendum, § below, for the full history.)
 5. **Cadence**: exactly 12 maintenance records per flat per year (one per month).
-6. **Payment is against the aggregate balance — explicit partial payment is allowed.**
-   A resident may pay any amount from ₹1 up to the current Outstanding in one
-   Deposit; paying less than the full amount is expected and fine, not an error
-   case. This is a deliberate reversal of the original per-record "no partial
+6. **Payment is against the aggregate balance — explicit partial payment is allowed,
+   and so is overpayment.** A resident may pay any amount ≥ ₹1 in one Deposit — up to
+   the current Outstanding (partial payment), exactly matching it, or beyond it
+   (2026-08-20 pivot: the old cap at Outstanding was lifted). Paying less than the
+   full amount is expected and fine, not an error case; paying more settles
+   Outstanding in full and the remainder becomes `Available Credit` (rule 4) once
+   approved. This is a deliberate reversal of the original per-record "no partial
    payment" rule (see § Ledger Pivot below) — there is no longer a concept of the
    *resident* selecting specific records to pay. (The *system* does automatically
    allocate an approved payment across records for display purposes — see rule 3 and
    the 2026-08-07 settlement addendum — but this is invisible to the Pay flow itself:
-   the resident still only ever enters/confirms one amount against Outstanding.)
+   the resident still only ever enters/confirms one amount.)
 7. **Payment method (this phase): UPI QR + manual proof verification, proof now
    optional.** No payment gateway integration (that's Phase 2, out of scope here). Flow:
    - Resident views Outstanding → an amount field (pre-filled with the full
-     Outstanding, editable down to any smaller amount — rule 6) → taps Pay, which
-     locks whichever amount was entered as a payment intent (fixed/read-only from
-     that point on — no editing an already-locked intent) → sees a QR encoding a UPI
-     deep link for that amount (desktop) or gets deep-linked straight into a UPI app
-     (mobile) — see § Ledger Pivot below for the full intent-lock flow. (2026-08-07:
-     the amount field was originally missing from the frontend entirely — rule 6's
-     "pay any amount up to Outstanding" was implemented and enforced server-side from
-     the ledger pivot onward, but the UI only ever locked the full amount until this
-     gap was closed.)
+     Outstanding, editable to any amount ≥ ₹1 — rule 6, including above Outstanding
+     since the 2026-08-20 pivot) → taps Pay, which locks whichever amount was entered
+     as a payment intent (fixed/read-only from that point on — no editing an
+     already-locked intent) → sees a QR encoding a UPI deep link for that amount
+     (desktop) or gets deep-linked straight into a UPI app (mobile) — see § Ledger
+     Pivot below for the full intent-lock flow. (2026-08-07: the amount field was
+     originally missing from the frontend entirely — this gap was closed the same
+     day.)
    - Resident pays via any UPI app, then attaches a screenshot to finalize the
      intent into a Deposit — the screenshot **is** required at this step (unlike
      the lower-level one-shot `POST /api/me/ledger/deposits` primitive, which still
@@ -167,16 +171,12 @@ overdue-dues escalation.
    - Admin manual "mark as paid" fallback for cash/bank-transfer creates an
      already-`APPROVED` Deposit directly, logged distinctly in the audit trail
      (`MANUAL_MARK_PAID`, separate from QR-flow approvals).
-   - **Add credit** (re-introduced 2026-08-07): a resident may separately request a
-     Credit — amount + a required reason **+ a required proof attachment** (receipt,
-     invoice, or photo; added later the same day) — for a committee-approved
-     adjustment (e.g. a repair cost settled against maintenance). Same
-     `PENDING`/`APPROVED`/`REJECTED` review flow as a Deposit, but **not capped at
-     Outstanding** (a Deposit is; a Credit isn't — see the "Credit re-introduced"
-     addendum) and has zero effect on any balance until approved. Unlike a Deposit's
-     *optional* screenshot, a Credit's proof is *mandatory* — an arbitrary
-     discretionary adjustment needs independent evidence, not just a self-reported
-     amount and reason.
+   - **No separate "Add credit" request anymore (removed for good 2026-08-20).** A
+     resident-requested Credit (amount + required reason + required proof, for a
+     committee-approved adjustment like a repair cost) existed at points in this
+     project's history but is gone — the Pay flow above is the only way to affect the
+     balance, and paying beyond Outstanding is what now produces `Available Credit`.
+     See the "Pivot (2026-08-20)" addendum, § below.
 8. **Escalation**: a flat with Outstanding > 0 whose oldest **not-yet-fully-settled**
    maintenance charge is past due date + grace period → flagged (2026-08-07: keyed
    off the oldest *unsettled* charge, not the oldest charge overall — a flat that
@@ -800,6 +800,65 @@ Full contract: `docs/payments.md`'s "Payment method: UPI or bank transfer,
 UPI takes precedence" section; schema: `docs/data-model.md`'s `Society`
 section.
 
+### Pivot (2026-08-20): Credit removed again, Deposit cap lifted — overpayment becomes Available Credit
+
+Confirmed decision, following a short discussion about whether a separate
+"Add Credit" control was pulling its weight when the ordinary Pay flow could
+achieve the same outcome. Credit (the resident-initiated "request a
+committee-approved adjustment" feature, most recently described in the
+"Credit re-introduced" addendum above) is **removed a third time** —
+`LedgerEntry.type`/`LedgerType` are gone again (migration
+`20260820191542_remove_credit_type_final`), `POST /api/me/ledger/credits` no
+longer exists, and `CreditBookPage.tsx` (the page it moved to during the
+resident-dashboard restructure) is deleted outright. Unlike the first
+removal (2026-08-07), this one isn't expected to reverse: the reason Credit
+existed — letting a resident's payment exceed what's currently billed and
+have the excess tracked as `Available Credit` — is now achieved for free by
+a smaller, more targeted change described below, so there's no remaining gap
+for a future Credit feature to fill.
+
+**The actual change: Deposit's amount cap against Outstanding is lifted.**
+`createDeposit`/`createOrReplacePaymentIntent` (`ledger-shared.ts`'s
+`resident-ledger-service.ts`) validated `0 < amount <= outstanding`; this
+collapses to just `amount > 0`. A resident may now lock/submit a payment for
+more than they currently owe. Nothing else needed to change to make this
+safe: `balancesFromRows`'s formula was already `outstanding = max(0,
+totalCharges - approvedDeposits)` / `availableCredit = max(0, approvedDeposits
+- totalCharges)` — the two sides of one subtraction — so an approved
+overpayment already turned into `Available Credit` automatically, the same
+mechanism that used to require a resident to separately *request* Credit now
+kicks in from ordinary payment behavior. `computeRecordSettlements`'s FIFO
+fill needed zero code changes either, for the same reason it needed none for
+the original Credit-allocation spec (§ above): money is money once summed,
+regardless of which endpoint it arrived through.
+
+**What did NOT change**: `Available Credit` as a concept is untouched and
+still shown everywhere it was before — the resident Dashboard, the admin
+dashboard's per-flat `creditTotal`, `getFlatWiseDues`, `getResidentLedgerOverview`.
+Only its *source* changed — pure Deposit overpayment now, never a separately
+requested adjustment. The Pay flow's UPI/bank-transfer payment-intent
+lock/QR/deep-link mechanism, and the (already-optional) proof-upload step, are
+completely unchanged. `OtherChargesBookPage.tsx`'s own, separate Deposit cap
+was deliberately left untouched — Other Charges never had a Credit concept to
+begin with, so there was nothing to fold in there.
+
+**Frontend**: the resident Dashboard's "Available Maintenance Credit" card
+stays (always shown, same as before) but now links to `/maintenance-book`
+instead of the removed `/credit-book` — that's where the Pay flow (and,
+per this pivot, any resulting Available Credit) actually lives.
+`MaintenanceBookPage.tsx`'s Pay amount field lost its `max={outstanding}`
+constraint; when the entered amount exceeds Outstanding, an inline hint
+shows how much of it will land as Available Credit once approved, so an
+overpayment is never a silent surprise. The `Type` column (Deposit/Credit),
+including its `LedgerTypeBadge.tsx` component, is gone from the admin Payment
+Proofs queue and Receipt Book — there's nothing left to distinguish once
+every `LedgerEntry` is a Deposit, same reasoning as the 2026-08-07 removal's
+UI changes.
+
+Full contract: `docs/payments.md`'s balance-formula and Deposit-submission
+sections, `docs/data-model.md`'s `LedgerEntry` section, `docs/admin-dashboard.md`'s
+`getDashboardSummary`/`getFlatWiseDues` sections.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
@@ -832,7 +891,7 @@ section.
 | Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
 | OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
 | MaintenanceRecord | flatId, period, payerType, payerId, amount, dueDate | Monthly SYSTEM charge, always implicitly "Approved," never individually paid **in the schema** — permanently contributes `amount` to its flat's `totalCharges`. A per-record settlement status (Unpaid/Partially Settled/Paid) is derived at read time via FIFO fill against the flat's approved deposits (2026-08-07 addendum), never stored on this model. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
-| LedgerEntry | flatId, payerId, type, amount, status, note, fileUrl, mimeType, adminNote, reviewedBy/At | Resident-created Deposit or Credit row (ledger pivot, 2026-08-06; `type` dropped 2026-08-07 when Credit was removed, then re-added the same day when Credit came back in an allocation-based shape — see the "Credit re-introduced" addendum) — replaces PaymentProof. No link to specific MaintenanceRecords (settlement is computed against the aggregate, via `computeRecordSettlements`); only APPROVED rows count toward Outstanding/Available Credit. `fileUrl`/`mimeType` are optional at the schema level (a proof is never mandatory for a Deposit) but a Credit's `POST /api/me/ledger/credits` requires one at the application level, alongside `note` — see `docs/payments.md`. See `docs/data-model.md` |
+| LedgerEntry | flatId, payerId, amount, status, note, fileUrl, mimeType, adminNote, reviewedBy/At | Resident-created Deposit row (ledger pivot, 2026-08-06; had a `type` column distinguishing Deposit/Credit at various points in this project's history — dropped for good 2026-08-20 when Credit was removed a third and final time, see the "Pivot (2026-08-20)" addendum) — replaces PaymentProof. No link to specific MaintenanceRecords (settlement is computed against the aggregate, via `computeRecordSettlements`); only APPROVED rows count toward Outstanding/Available Credit. `fileUrl`/`mimeType` are optional at the schema level — a proof is never mandatory for a Deposit — see `docs/payments.md`. See `docs/data-model.md` |
 | Receipt | ledgerEntryId (unique), receiptNumber, fileKey, issuedAt, issuedById, societyId | Created only when a LedgerEntry is approved (2026-08-11 addendum) — `fileKey` points at an already-rendered PDF (StorageAdapter), never re-rendered on later reads. 1:1 with LedgerEntry; `receiptNumber` is derived (`prefix-flat-ledgerEntryId`), not a separate sequence. See `docs/receipts.md` |
 | NotificationLog | channel, recipient, status, linked entity | |
 | AuditLog | actor, action, entity, timestamp, note | Financial action trail |

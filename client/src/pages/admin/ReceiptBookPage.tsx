@@ -4,7 +4,6 @@ import { Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/DataTable';
 import { LedgerCategoryBadge, type LedgerCategory } from '../../components/LedgerCategoryBadge';
-import { LedgerTypeBadge, type LedgerEntryType } from '../../components/LedgerTypeBadge';
 import { authedFetch } from '../../lib/api';
 import { downloadAuthedFile } from '../../lib/download-file';
 
@@ -14,7 +13,6 @@ interface ReceiptListItem {
   issuedAt: string;
   ledgerEntry: {
     id: string;
-    type: LedgerEntryType;
     category: LedgerCategory;
     amount: string;
     note: string | null;
@@ -113,11 +111,6 @@ export function ReceiptBookPage() {
             <div className="text-xs text-muted">{row.original.ledgerEntry.payer.name}</div>
           </span>
         ),
-      },
-      {
-        id: 'type',
-        header: 'Type',
-        cell: ({ row }) => <LedgerTypeBadge type={row.original.ledgerEntry.type} />,
       },
       {
         id: 'category',

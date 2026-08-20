@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
   cancelPaymentIntentHandler,
-  createCreditHandler,
   createDepositHandler,
   createPaymentIntentHandler,
   getIssuedReceiptHandler,
@@ -60,17 +59,6 @@ residentLedgerRouter.post(
   proofUpload.single('file'),
   verifyProofSignature,
   createDepositHandler,
-);
-// Credit re-introduced 2026-08-07 — resident-submitted, admin-approved (same
-// PENDING/APPROVED/REJECTED flow as a Deposit). Proof upload is required here (unlike
-// a Deposit's optional screenshot) — the committee's only independent evidence for an
-// arbitrary discretionary adjustment, alongside the also-required note.
-residentLedgerRouter.post(
-  '/api/me/ledger/credits',
-  requireRole(['OWNER', 'TENANT']),
-  proofUpload.single('file'),
-  verifyProofSignature,
-  createCreditHandler,
 );
 // Admin or the entry's own payer, enforced in the service (getLedgerEntryForViewing)
 // since it depends on data (payerId), not just role — same pattern as the pre-pivot

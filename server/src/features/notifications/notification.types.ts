@@ -37,18 +37,6 @@ export interface DepositPaymentApprovedEvent extends NotificationEventBase {
   };
 }
 
-export interface CreditPaymentApprovedEvent extends NotificationEventBase {
-  eventType: 'CREDIT_PAYMENT_APPROVED';
-  data: {
-    paymentId: string;
-    receiptId: string;
-    flatId: string;
-    societyId: string;
-    amount: number;
-    paymentDate: string;
-  };
-}
-
 // docs/other-charges/ — fired when an admin bills an ad-hoc fee (joining fee,
 // transfer fee, fine, ...) to a flat's owner. A separate event from
 // MAINTENANCE_BILL_GENERATED even though both represent "a new charge exists" —
@@ -70,7 +58,6 @@ export interface OtherChargeBilledEvent extends NotificationEventBase {
 export type NotificationEvent =
   | MaintenanceBillGeneratedEvent
   | DepositPaymentApprovedEvent
-  | CreditPaymentApprovedEvent
   | OtherChargeBilledEvent;
 
 export type NotificationEventType = NotificationEvent['eventType'];

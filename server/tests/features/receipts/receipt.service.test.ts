@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { getStorageAdapter } from '../../../src/infrastructure/storage';
 import { approveLedgerEntry } from '../../../src/features/ledger/admin/admin-ledger-service';
-import { createCredit, createDeposit } from '../../../src/features/ledger/resident/resident-ledger-service';
+import { createDeposit } from '../../../src/features/ledger/resident/resident-ledger-service';
 import { createFlat } from '../../../src/features/flats/admin/admin-flats-onboarding-service';
 import {
   buildReceiptData,
@@ -146,23 +146,29 @@ describe('receipt service', () => {
       secretarySignatureFileKey: null,
     };
 
-    it('uses the generic "Maintenance dues payment" purpose for a DEPOSIT', () => {
-      const entry = { id: 'e1', type: 'DEPOSIT' as const, amount: 1500, note: null, payerId: 'p1' };
+    it('uses the generic "Maintenance dues payment" purpose for a Deposit', () => {
+      const entry = {
+        id: 'e1',
+        amount: 1500,
+        note: null,
+        payerId: 'p1',
+        category: 'MAINTENANCE' as const,
+      };
       const data = buildReceiptData(entry, flat, payer, society, { date: new Date('2026-08-11') });
       expect(data.purpose).toBe('Maintenance dues payment');
       expect(data.amount).toBe(1500);
     });
 
-    it("uses the entry's own note as the purpose for a CREDIT", () => {
+    it('uses the "Other charges payment" purpose for an OTHER_CHARGE category entry', () => {
       const entry = {
         id: 'e2',
-        type: 'CREDIT' as const,
         amount: 800,
-        note: 'Repair cost settled',
+        note: null,
         payerId: 'p1',
+        category: 'OTHER_CHARGE' as const,
       };
       const data = buildReceiptData(entry, flat, payer, society, { date: new Date('2026-08-11') });
-      expect(data.purpose).toBe('Repair cost settled');
+      expect(data.purpose).toBe('Other charges payment');
     });
   });
 
@@ -281,24 +287,6 @@ describe('receipt service', () => {
       await expect(
         getIssuedReceiptForViewing(entryId, 'someone-else-id', 'OWNER', societyId),
       ).rejects.toThrow(ForbiddenLedgerEntryAccessError);
-    });
-  });
-
-  describe('CREDIT receipts', () => {
-    it('renders and issues a receipt for an approved Credit, using its note as purpose', async () => {
-      const entry = await createCredit(ownerId, flatId, societyId, 'OWNER', {
-        amount: 400,
-        note: 'Plumbing repair reimbursement',
-        file: { buffer: Buffer.from('receipt-photo'), mimeType: 'image/png', extension: '.png' },
-      });
-      const entryId = (entry as { id: string }).id;
-      await approveLedgerEntry(entryId, societyId, adminId);
-
-      const result = await getIssuedReceiptForViewing(entryId, ownerId, 'OWNER', societyId);
-      const buffer = await streamToBuffer(result!.stream);
-      const text = await extractText(buffer);
-      expect(text).toContain('Plumbing repair reimbursement');
-      expect(text).toContain('Credit Adjustment');
     });
   });
 });

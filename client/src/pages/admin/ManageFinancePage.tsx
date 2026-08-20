@@ -75,7 +75,7 @@ function FileDownloadButton({ entryId }: { entryId: string }) {
 // Single combined form with a direction toggle (confirmed decision — one "Manage
 // Finance" page, not two separate Income/Expense flows), same list<->form swap
 // pattern as OtherChargesPage.tsx's BillChargeForm. Submitted as FormData since a
-// file is involved — same precedent as CreditBookPage.tsx's AddCreditModal.
+// file is involved.
 function RecordEntryForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const [direction, setDirection] = useState<Direction>('EXPENSE');

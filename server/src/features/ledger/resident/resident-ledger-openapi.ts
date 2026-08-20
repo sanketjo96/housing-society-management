@@ -55,9 +55,11 @@ export {};
  *     tags: [My Ledger]
  *     summary: Lock a payment intent for a given amount
  *     description: >
- *       Amount must be > 0 and <= current Outstanding. Locks in whichever payment
- *       method the society has configured (UPI takes precedence over bank transfer).
- *       Replaces any existing open intent for this flat.
+ *       Amount must be > 0 — no longer capped at Outstanding (2026-08-20 pivot); any
+ *       amount beyond Outstanding settles it in full and the remainder becomes
+ *       Available Credit once approved. Locks in whichever payment method the society
+ *       has configured (UPI takes precedence over bank transfer). Replaces any
+ *       existing open intent for this flat.
  *     requestBody:
  *       required: true
  *       content:
@@ -76,7 +78,7 @@ export {};
  *               type: object
  *               properties:
  *                 intent: { $ref: '#/components/schemas/PaymentIntent' }
- *       400: { description: 'Invalid amount (must be > 0 and <= Outstanding).', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       400: { description: 'Invalid amount (must be > 0).', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No flat associated with the caller's account., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       409: { description: Society has no UPI VPA or complete bank details configured., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -141,40 +143,7 @@ export {};
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/LedgerEntry' }
- *       400: { description: 'Invalid amount (must be > 0 and <= Outstanding), or file content mismatch.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       404: { description: No flat associated with the caller's account., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- */
-
-/**
- * @openapi
- * /api/me/ledger/credits:
- *   post:
- *     tags: [My Ledger]
- *     summary: Request a committee-approved Credit against the caller's balance
- *     description: >
- *       Unlike a Deposit, amount has no upper bound (only amount > 0 is checked) — a
- *       resident can request more credit than they currently owe. note and a proof
- *       attachment are both required (the one asymmetry with Deposit, whose proof is
- *       optional). Zero balance effect until an admin approves it.
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required: [amount, note, file]
- *             properties:
- *               amount: { type: number, exclusiveMinimum: 0 }
- *               note: { type: string, minLength: 1, description: Why this adjustment is being requested. }
- *               file: { type: string, format: binary, description: Required proof — receipt, invoice, or photo. }
- *     responses:
- *       201:
- *         description: Created, status PENDING.
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/LedgerEntry' }
- *       400: { description: Invalid amount/note, missing proof, or file content mismatch., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       400: { description: 'Invalid amount (must be > 0), or file content mismatch.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No flat associated with the caller's account., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */

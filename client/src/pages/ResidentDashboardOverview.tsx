@@ -18,13 +18,15 @@ async function fetchMyBalances(): Promise<BalancesSummary> {
 }
 
 // Resident Dashboard restructure: this page is now a pure navigation hub of exactly
-// 4 summary cards, one per balance pool — no Pay control, no Add-credit control, no
-// transaction table here anymore. That content moved to each pool's own book page:
-// Maintenance Outstanding -> /maintenance-book, Other Outstanding ->
-// /other-charges-book (docs/other-charges/ established this drill-down pattern
-// first), Available Maintenance Credit -> /credit-book. Total Outstanding has
-// nowhere to drill into — it's the sum of the other two Outstanding figures, not
-// its own pool.
+// 4 summary cards, one per balance pool — no Pay control, no transaction table here
+// anymore. That content moved to each pool's own book page: Maintenance Outstanding
+// -> /maintenance-book, Other Outstanding -> /other-charges-book (docs/other-charges/
+// established this drill-down pattern first). Total Outstanding has nowhere to drill
+// into — it's the sum of the other two Outstanding figures, not its own pool.
+// Available Maintenance Credit also points at /maintenance-book (2026-08-20 pivot) —
+// the standalone Credit Book/Add-credit flow was removed; overpaying a Deposit past
+// Outstanding is now what produces Available Credit, so the Maintenance book (where
+// Pay lives) is the natural drill-down target.
 export function ResidentDashboardOverview() {
   const { data, isLoading, isError } = useQuery({ queryKey: ['my-balances'], queryFn: fetchMyBalances });
 
@@ -63,7 +65,7 @@ export function ResidentDashboardOverview() {
               label="Available Maintenance Credit"
               value={data.maintenance.availableCredit}
               accent={data.maintenance.availableCredit > 0 ? 'teal' : undefined}
-              to="/credit-book"
+              to="/maintenance-book"
             />
           </div>
 

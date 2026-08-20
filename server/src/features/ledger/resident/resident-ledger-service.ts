@@ -5,7 +5,6 @@
 import { prisma } from '../../../infrastructure/prisma/client';
 import type {
   LedgerCategory,
-  LedgerType,
   ProofStatus,
   Role,
 } from '../../../infrastructure/prisma/generated/client';
@@ -23,15 +22,6 @@ import {
 
 export { ForbiddenLedgerEntryAccessError, InvalidAmountError };
 
-export class InvalidDepositAmountError extends Error {
-  constructor(public readonly outstanding: number) {
-    super(
-      `Amount must be greater than 0 and at most the current outstanding amount (${outstanding})`,
-    );
-    this.name = 'InvalidDepositAmountError';
-  }
-}
-
 export class NoOpenPaymentIntentError extends Error {
   constructor() {
     super('No pending payment to submit');
@@ -41,9 +31,9 @@ export class NoOpenPaymentIntentError extends Error {
 
 // Neither a UPI VPA nor a complete bank-account+IFSC pair is configured on the
 // society — there's nothing to show a resident trying to pay. Distinct from a
-// resident-facing input error (InvalidDepositAmountError/InvalidAmountError
-// above): this is a society-configuration gap the admin needs to fix, not
-// something the resident did wrong.
+// resident-facing input error (InvalidAmountError above): this is a
+// society-configuration gap the admin needs to fix, not something the resident
+// did wrong.
 export class PaymentMethodNotConfiguredError extends Error {
   constructor() {
     super('This society has no payment method configured yet — contact your society admin');
@@ -66,7 +56,7 @@ export class IntentAlreadyOpenForOtherCategoryError extends Error {
 
 export interface LedgerRow {
   id: string;
-  type: 'SYSTEM' | 'OTHER_CHARGE' | LedgerType;
+  type: 'SYSTEM' | 'OTHER_CHARGE' | 'DEPOSIT';
   period?: string;
   // Only set on OTHER_CHARGE rows — which fee type this charge is.
   feeTypeName?: string;
@@ -76,12 +66,12 @@ export interface LedgerRow {
   status: 'APPROVED' | ProofStatus;
   note?: string | null;
   // Only set on SYSTEM/OTHER_CHARGE rows — the derived per-record settlement (see
-  // computeRecordSettlements, ../ledger-shared.ts). Undefined on DEPOSIT/CREDIT
-  // rows, which have no concept of being "settled" themselves.
+  // computeRecordSettlements, ../ledger-shared.ts). Undefined on DEPOSIT rows,
+  // which have no concept of being "settled" themselves.
   settledAmount?: number;
   settlementStatus?: RecordSettlementStatus;
-  // Only meaningful on DEPOSIT/CREDIT rows — true once a Receipt row exists (i.e.
-  // the entry has been approved since the Receipt Generation & Approval Workflow
+  // Only meaningful on DEPOSIT rows — true once a Receipt row exists (i.e. the
+  // entry has been approved since the Receipt Generation & Approval Workflow
   // shipped, 2026-08-11). Lets the resident Passbook show a "Download receipt"
   // action only where one genuinely exists, rather than a failed round-trip for a
   // still-pending row or a legacy entry approved before this feature existed.
@@ -183,13 +173,13 @@ export async function getLedgerForResident(
     ...new Set([...allCharges.map((c) => c.year), ...allEntries.map((e) => e.createdAt.getFullYear())]),
   ].sort((a, b) => b - a);
 
-  // Always derived from the *lifetime* charge set and the *lifetime* approved funds
-  // (deposits + credits — never the year-filtered arrays) — a record's settlement
-  // depends on its position in the flat's full oldest-to-newest history, not on
-  // whichever year the resident happens to be browsing.
+  // Always derived from the *lifetime* charge set and the *lifetime* approved
+  // deposits (never the year-filtered arrays) — a record's settlement depends on
+  // its position in the flat's full oldest-to-newest history, not on whichever
+  // year the resident happens to be browsing.
   const settlements = computeRecordSettlements(
     allCharges.map((c) => ({ id: c.id, period: c.sortKey, amount: c.amount })),
-    totals.approvedDeposits + totals.approvedCredits,
+    totals.approvedDeposits,
   );
 
   const rowType: 'SYSTEM' | 'OTHER_CHARGE' = category === 'MAINTENANCE' ? 'SYSTEM' : 'OTHER_CHARGE';
@@ -211,7 +201,7 @@ export async function getLedgerForResident(
 
   const ledgerRows: LedgerRow[] = entries.map((e) => ({
     id: e.id,
-    type: e.type,
+    type: 'DEPOSIT',
     date: e.createdAt.toISOString(),
     payer: 'You',
     amount: Number(e.amount),
@@ -331,10 +321,10 @@ export async function getOpenPaymentIntent(
 // if the resident starts over with a different amount for the SAME category before
 // submitting. A different category is BLOCKED instead (docs/other-charges/ — at
 // most one open intent at a time, across both pools, a deliberate simplification
-// over independent per-pool intents). Always caps against the flat's lifetime
-// outstanding for the given pool (never a year-scoped one) — Outstanding is
-// current financial state, not a per-year concept, so a resident can't underpay by
-// switching to a smaller-year view before tapping Pay.
+// over independent per-pool intents). No longer capped at the flat's outstanding
+// (2026-08-20 pivot) — a resident may lock any positive amount; any part beyond
+// Outstanding settles it in full and the remainder surfaces as Available Credit
+// once approved, via the same balancesFromRows formula (../ledger-shared.ts).
 export async function createOrReplacePaymentIntent(
   flatId: string,
   payerId: string,
@@ -342,9 +332,7 @@ export async function createOrReplacePaymentIntent(
   amount: number,
   category: LedgerCategory = 'MAINTENANCE',
 ): Promise<PaymentIntentResult> {
-  const balances = await computeFlatBalances(flatId, undefined, category);
-  if (!(amount > 0) || amount > balances.outstanding)
-    throw new InvalidDepositAmountError(balances.outstanding);
+  if (!(amount > 0)) throw new InvalidAmountError();
 
   const existing = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
   if (existing && existing.category !== category) {
@@ -395,7 +383,6 @@ export async function submitPaymentIntent(
       data: {
         flatId,
         payerId,
-        type: 'DEPOSIT',
         status: 'PENDING',
         amount: intent.amount,
         note: 'UPI payment - awaiting review',
@@ -434,6 +421,7 @@ export interface CreateDepositInput {
 // payment proof" button in the Pay panel has no wired behavior, and the written spec
 // for Pay only requires the amount field. `category` trails as a defaulted param
 // (not inserted before `input`) so every existing call site stays valid unchanged.
+// No longer capped at Outstanding (2026-08-20 pivot) — see createOrReplacePaymentIntent.
 export async function createDeposit(
   payerId: string,
   flatId: string,
@@ -442,10 +430,7 @@ export async function createDeposit(
   input: CreateDepositInput,
   category: LedgerCategory = 'MAINTENANCE',
 ) {
-  const balances = await computeFlatBalances(flatId, undefined, category);
-  if (!(input.amount > 0) || input.amount > balances.outstanding) {
-    throw new InvalidDepositAmountError(balances.outstanding);
-  }
+  if (!(input.amount > 0)) throw new InvalidAmountError();
 
   let fileUrl: string | undefined;
   let mimeType: string | undefined;
@@ -464,7 +449,6 @@ export async function createDeposit(
       data: {
         flatId,
         payerId,
-        type: 'DEPOSIT',
         status: 'PENDING',
         amount: input.amount,
         note: 'UPI payment - awaiting review',
@@ -482,68 +466,6 @@ export async function createDeposit(
         entityType: 'LedgerEntry',
         entityId: entry.id,
         note: `Deposit of ${input.amount}`,
-      },
-    });
-    return entry;
-  });
-}
-
-export interface CreateCreditInput {
-  amount: number;
-  note: string;
-  file: ProofFileInput;
-}
-
-// Credit re-introduced (2026-08-07) — a committee-approved adjustment (e.g. a repair
-// cost the owner wants settled against maintenance), resident-submitted like a
-// Deposit but validated differently: `amount > 0` only, **not** capped at Outstanding
-// (a resident can request more credit than they currently owe — the excess becomes
-// availableCredit once approved, see balancesFromRows). `note` is required — unlike a
-// Deposit's amount+screenshot (self-explanatory), an arbitrary discretionary
-// adjustment needs a reason for the committee to actually evaluate it. **`file` is
-// also required** (2026-08-07, later same day) — unlike a Deposit's optional
-// screenshot, a Credit's proof (receipt, invoice, photo of the repair) is the
-// committee's only independent evidence for an amount that isn't otherwise
-// verifiable the way a UPI payment is. Starts PENDING, with zero effect on any
-// balance until an admin approves it (rule: a pending credit request never moves
-// Outstanding/availableCredit).
-export async function createCredit(
-  payerId: string,
-  flatId: string,
-  societyId: string,
-  role: 'OWNER' | 'TENANT',
-  input: CreateCreditInput,
-) {
-  if (!(input.amount > 0)) throw new InvalidAmountError();
-
-  const saved = await getStorageAdapter().save({
-    buffer: input.file.buffer,
-    societyId,
-    extension: input.file.extension,
-  });
-
-  return prisma.$transaction(async (tx) => {
-    const entry = await tx.ledgerEntry.create({
-      data: {
-        flatId,
-        payerId,
-        type: 'CREDIT',
-        status: 'PENDING',
-        amount: input.amount,
-        note: input.note,
-        fileUrl: saved.key,
-        mimeType: input.file.mimeType,
-        createdById: payerId,
-        createdByType: role,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorId: payerId,
-        action: 'SUBMIT_CREDIT',
-        entityType: 'LedgerEntry',
-        entityId: entry.id,
-        note: input.note,
       },
     });
     return entry;

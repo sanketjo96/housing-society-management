@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream';
-import type { LedgerCategory, LedgerType, Role } from '../../infrastructure/prisma/generated/client';
+import type { LedgerCategory, Role } from '../../infrastructure/prisma/generated/client';
 import { prisma } from '../../infrastructure/prisma/client';
 import {
   ForbiddenLedgerEntryAccessError,
@@ -40,7 +40,6 @@ interface ReceiptSociety {
 
 interface ReceiptEntry {
   id: string;
-  type: LedgerType;
   amount: unknown; // Prisma Decimal — always passed through Number() before use
   note: string | null;
   payerId: string;
@@ -67,15 +66,13 @@ export function buildReceiptNumber(
   return `${prefix}-${flat.wing}${flat.flatNumber}-${shortId}`;
 }
 
-// Purpose text is a generic label per type, not an itemized per-month breakdown
-// (confirmed scope decision) — Deposit is never tied to specific MaintenanceRecords
-// under the ledger pivot, and Credit already carries its own required reason in
-// `note`.
+// Purpose text is a generic label per category, not an itemized per-month breakdown
+// (confirmed scope decision) — a Deposit is never tied to specific MaintenanceRecords
+// under the ledger pivot. Credit (a separate, resident-requested adjustment type) was
+// removed for good 2026-08-20 — every LedgerEntry is a Deposit now, so there's no
+// longer a second branch here.
 function buildPurposeLabel(entry: ReceiptEntry): string {
-  if (entry.type === 'DEPOSIT') {
-    return entry.category === 'OTHER_CHARGE' ? 'Other charges payment' : 'Maintenance dues payment';
-  }
-  return entry.note ?? 'Committee-approved credit adjustment';
+  return entry.category === 'OTHER_CHARGE' ? 'Other charges payment' : 'Maintenance dues payment';
 }
 
 export function buildReceiptData(
@@ -92,7 +89,7 @@ export function buildReceiptData(
     residentName: payer.name,
     flatLabel: `${flat.wing}-${flat.flatNumber}`,
     date: opts.date,
-    transactionType: entry.type,
+    transactionType: 'DEPOSIT',
     purpose: buildPurposeLabel(entry),
     // Rule: always the amount already stored on the entry at creation time, never
     // recomputed from current billing settings — see CLAUDE.md's "RATE CALCULATION

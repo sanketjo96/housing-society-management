@@ -6,7 +6,6 @@ import { randomUUID } from 'node:crypto';
 import type {
   CreatedByType,
   LedgerCategory,
-  LedgerType,
   ProofStatus,
 } from '../../../infrastructure/prisma/generated/client';
 import { prisma } from '../../../infrastructure/prisma/client';
@@ -18,14 +17,14 @@ import { InvalidAmountError } from '../ledger-shared';
 
 export { InvalidAmountError, LedgerEntryAlreadyReviewedError };
 
-// DEPOSIT_PAYMENT_APPROVED / CREDIT_PAYMENT_APPROVED (docs/notification/) — fired
-// once the approval (or manual mark-paid) transaction has actually committed, so a
-// notification is never sent for a payment that ends up rolled back. Never lets a
-// notification failure fail the payment approval itself (requirements.md §4) —
-// notify() only ever writes a PENDING row, but a stray DB error here still shouldn't
-// take a financial approval down with it.
+// DEPOSIT_PAYMENT_APPROVED (docs/notification/) — fired once the approval (or
+// manual mark-paid) transaction has actually committed, so a notification is never
+// sent for a payment that ends up rolled back. Never lets a notification failure
+// fail the payment approval itself (requirements.md §4) — notify() only ever writes
+// a PENDING row, but a stray DB error here still shouldn't take a financial
+// approval down with it.
 async function notifyLedgerPaymentApproved(
-  entry: { id: string; type: LedgerType; flatId: string; payerId: string; amount: unknown },
+  entry: { id: string; flatId: string; payerId: string; amount: unknown },
   receiptId: string,
   societyId: string,
   paymentDate: Date,
@@ -33,7 +32,7 @@ async function notifyLedgerPaymentApproved(
   try {
     await notify({
       eventId: randomUUID(),
-      eventType: entry.type === 'DEPOSIT' ? 'DEPOSIT_PAYMENT_APPROVED' : 'CREDIT_PAYMENT_APPROVED',
+      eventType: 'DEPOSIT_PAYMENT_APPROVED',
       occurredAt: new Date().toISOString(),
       recipient: { userId: entry.payerId },
       data: {
@@ -61,14 +60,13 @@ export const LEDGER_ENTRY_LIST_INCLUDE = {
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;
 
-// Admin review queue — optionally filtered by status and/or type (defaults to every
-// entry; the frontend queue asks for PENDING, optionally further narrowed by type
-// now that there's something to distinguish again post-Credit-reintroduction).
+// Admin review queue — optionally filtered by status (defaults to every entry; the
+// frontend queue asks for PENDING). No `type` filter anymore — every LedgerEntry is
+// a Deposit (Credit removed for good 2026-08-20).
 export async function listPendingLedgerEntries(
   societyId: string,
   filters: {
     status?: ProofStatus;
-    type?: LedgerType;
     category?: LedgerCategory;
     createdByType?: CreatedByType;
   } = {},
@@ -77,7 +75,6 @@ export async function listPendingLedgerEntries(
     where: {
       flat: { societyId },
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.type ? { type: filters.type } : {}),
       ...(filters.category ? { category: filters.category } : {}),
       ...(filters.createdByType ? { createdByType: filters.createdByType } : {}),
     },
@@ -133,7 +130,7 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: entry.type === 'DEPOSIT' ? 'APPROVE_DEPOSIT' : 'APPROVE_CREDIT',
+        action: 'APPROVE_DEPOSIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: `Amount ${entry.amount}; Receipt ${receiptNumber}`,
@@ -171,7 +168,7 @@ export async function rejectLedgerEntry(
     await tx.auditLog.create({
       data: {
         actorId: adminId,
-        action: entry.type === 'DEPOSIT' ? 'REJECT_DEPOSIT' : 'REJECT_CREDIT',
+        action: 'REJECT_DEPOSIT',
         entityType: 'LedgerEntry',
         entityId: id,
         note: reason ?? `Amount ${entry.amount} rejected`,
@@ -223,7 +220,7 @@ export async function manualDeposit(
   const issuedAt = new Date();
   const note = 'Manual deposit (cash/bank transfer)';
   const { receiptNumber, fileKey } = await prepareReceiptForEntry(
-    { id: entryId, type: 'DEPOSIT', amount, note, payerId, category },
+    { id: entryId, amount, note, payerId, category },
     { wing: flat.wing, flatNumber: flat.flatNumber },
     payer,
     society,
@@ -236,7 +233,6 @@ export async function manualDeposit(
         id: entryId,
         flatId,
         payerId,
-        type: 'DEPOSIT',
         status: 'APPROVED',
         amount,
         note,

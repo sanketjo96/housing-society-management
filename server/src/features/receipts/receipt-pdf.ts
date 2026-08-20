@@ -8,7 +8,7 @@ export interface ReceiptData {
   residentName: string;
   flatLabel: string;
   date: Date;
-  transactionType: 'DEPOSIT' | 'CREDIT';
+  transactionType: 'DEPOSIT';
   purpose: string;
   amount: number;
   // Chairman/secretary signatories (2026-08-17: replaced the single treasurer
@@ -82,7 +82,6 @@ function formatDate(date: Date): string {
 
 const TRANSACTION_TYPE_LABEL: Record<ReceiptData['transactionType'], string> = {
   DEPOSIT: 'Deposit',
-  CREDIT: 'Credit Adjustment',
 };
 
 // Mirrors client/src/index.css's `@theme` tokens, so the issued PDF reads as
