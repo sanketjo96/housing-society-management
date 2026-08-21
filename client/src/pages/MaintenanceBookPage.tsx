@@ -192,11 +192,13 @@ const BOOK_TABS: { value: BookTab; label: string }[] = [
 // "Maintenance Book" page, now the home for Maintenance's own Pay control too
 // (previously on the Dashboard, moved here so the Dashboard can be a pure 4-card
 // navigation hub — see ResidentDashboardOverview.tsx). Split into two tabs —
-// "Payment History" (past Deposits, shown first and the default) and "Bills"
-// (charges + the Pay control + date filters) — same role="tablist" pattern as
-// admin/PaymentProofsPage.tsx's status tabs, rather than stacking both tables on one
-// page. Same tab structure as OtherChargesBookPage.tsx. "Status" on the Bills table
-// is a real,
+// "Payment History" (shown first and the default: the Pay control, sitting right
+// above the Deposit history it feeds, then the past Deposits themselves) and
+// "Bills" (just the charges table + date filters, no Pay control — paying is a
+// payment-history-tab action, not a bills-browsing one) — same role="tablist"
+// pattern as admin/PaymentProofsPage.tsx's status tabs, rather than stacking both
+// tables on one page. Same tab structure as OtherChargesBookPage.tsx. "Status" on
+// the Bills table is a real,
 // per-record Unpaid/Partially settled/Paid badge — derived server-side by
 // FIFO-filling the flat's approved deposits+credits across its records oldest-first
 // (see CLAUDE.md's settlement-tracking addendum; ledger.service.ts's
@@ -343,6 +345,50 @@ export function MaintenanceBookPage() {
 
           {activeTab === 'BILLS' && (
             <>
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <label className="text-xs font-semibold text-muted">
+                  From
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-muted">
+                  To
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                {(fromDate || toDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromDate('');
+                      setToDate('');
+                    }}
+                    className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <DataTable
+                data={rows}
+                columns={columns}
+                getRowId={(r) => r.id}
+                emptyMessage="No maintenance records yet."
+              />
+            </>
+          )}
+
+          {activeTab === 'PAYMENTS' && (
+            <>
               <div className="mb-5 rounded-2xl border border-line bg-white p-5">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
                   <div>
@@ -415,61 +461,20 @@ export function MaintenanceBookPage() {
                 )}
               </div>
 
-              <div className="mb-4 flex flex-wrap items-end gap-3">
-                <label className="text-xs font-semibold text-muted">
-                  From
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-                  />
-                </label>
-                <label className="text-xs font-semibold text-muted">
-                  To
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-                  />
-                </label>
-                {(fromDate || toDate) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFromDate('');
-                      setToDate('');
-                    }}
-                    className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              <DataTable
-                data={rows}
-                columns={columns}
-                getRowId={(r) => r.id}
-                emptyMessage="No maintenance records yet."
-              />
+              {data.depositRows.length === 0 ? (
+                <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
+                  <Check size={14} /> No payments yet
+                </p>
+              ) : (
+                <DataTable
+                  data={data.depositRows}
+                  columns={depositColumns}
+                  getRowId={(r) => r.id}
+                  emptyMessage="No payments yet."
+                />
+              )}
             </>
           )}
-
-          {activeTab === 'PAYMENTS' &&
-            (data.depositRows.length === 0 ? (
-              <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
-                <Check size={14} /> No payments yet
-              </p>
-            ) : (
-              <DataTable
-                data={data.depositRows}
-                columns={depositColumns}
-                getRowId={(r) => r.id}
-                emptyMessage="No payments yet."
-              />
-            ))}
         </>
       )}
     </div>

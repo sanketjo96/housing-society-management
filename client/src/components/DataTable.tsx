@@ -60,7 +60,7 @@ export function DataTable<T>({
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-      <table className="w-full min-w-max border-collapse text-sm">
+      <table className="w-full table-auto border-collapse text-sm">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr
@@ -101,7 +101,7 @@ export function DataTable<T>({
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 ${cell.column.columnDef.meta?.align === 'right' ? 'text-right' : ''} ${cell.column.columnDef.meta?.cellClassName ?? ''}`}
+                  className={`break-words px-4 py-3 ${cell.column.columnDef.meta?.align === 'right' ? 'text-right' : ''} ${cell.column.columnDef.meta?.cellClassName ?? ''}`}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>

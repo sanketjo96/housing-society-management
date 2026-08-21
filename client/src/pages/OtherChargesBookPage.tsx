@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, QrCode } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable } from '../components/DataTable';
 import { ErrorBanner } from '../components/FormField';
@@ -183,17 +183,21 @@ const BOOK_TABS: { value: BookTab; label: string }[] = [
   { value: 'BILLS', label: 'Bills' },
 ];
 
-// OTHER_CHARGE-and-Deposit-history view — the exact structural mirror of
+// OTHER_CHARGE-and-Deposit-history view — the structural mirror of
 // MaintenanceBookPage.tsx for the Other Charges pool (docs/other-charges/): the same
-// two summary cards, the same "Payment History" (default)/"Bills" tabs, the same Pay
-// control, the same sortable/date-filterable charges table with a derived
-// settlement-status badge, and the same Payment History table with receipt
+// two summary cards, the same "Payment History" (default, home of the Pay
+// control)/"Bills" tabs, the same sortable/date-filterable charges table with a
+// derived settlement-status badge, and the same Payment History table with receipt
 // downloads. Reached only via the Dashboard's "Other Outstanding" card, not a
 // sidebar item.
+//
+// One deliberate difference from Maintenance: Other Charges can never be settled
+// partially. The Pay widget always locks the flat's full `outstanding` total —
+// shown read-only, not as an editable field — rather than letting a resident type
+// a smaller amount and leave a charge half-paid.
 export function OtherChargesBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [amountInput, setAmountInput] = useState('');
   const [activeTab, setActiveTab] = useState<BookTab>('PAYMENTS');
 
   const { data, isLoading, isError } = useQuery({
@@ -211,14 +215,10 @@ export function OtherChargesBookPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  useEffect(() => {
-    if (data) setAmountInput(String(data.outstanding));
-  }, [data]);
-
+  // Other Charges can never be settled partially — there's no amount to validate,
+  // the Pay button always locks the full `outstanding` total (see the Payments-tab
+  // widget below).
   const outstanding = data?.outstanding ?? 0;
-  const parsedAmount = Number(amountInput);
-  const isAmountValid =
-    amountInput.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= outstanding;
 
   const lockMutation = useMutation<{ intent: unknown }, Error, number>({
     mutationFn: async (amount: number) => {
@@ -334,75 +334,6 @@ export function OtherChargesBookPage() {
 
           {activeTab === 'BILLS' && (
             <>
-              <div className="mb-5 rounded-2xl border border-line bg-white p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
-                  <div>
-                    {outstanding > 0 ? (
-                      <span className="text-sm text-ink">
-                        You owe <strong className="font-mono-brand">₹{outstanding.toLocaleString('en-IN')}</strong>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-sm font-semibold text-teal">
-                        <CheckCircle2 size={16} /> Nothing outstanding right now
-                      </span>
-                    )}
-                  </div>
-                  {outstanding > 0 && !intentQuery.data && (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <label className="flex flex-col text-xs font-semibold text-muted">
-                        Amount to pay
-                        <input
-                          type="number"
-                          aria-label="Amount to pay"
-                          value={amountInput}
-                          onChange={(e) => setAmountInput(e.target.value)}
-                          min={0.01}
-                          max={outstanding}
-                          step="0.01"
-                          className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => lockMutation.mutate(parsedAmount)}
-                        disabled={lockMutation.isPending || !isAmountValid}
-                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
-                      >
-                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
-                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">
-                    Enter an amount between ₹1 and ₹{outstanding.toLocaleString('en-IN')}.
-                  </p>
-                )}
-
-                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
-
-                {intentOpenForThisPool && intentQuery.data && (
-                  <PayIntentPanel
-                    intent={intentQuery.data}
-                    isMobile={isMobile}
-                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
-                  />
-                )}
-                {/* docs/other-charges/ — at most one open intent at a time, across both
-                    pools. If it's for Maintenance, this page can't start a new one
-                    (server-blocked) — point at where to finish it instead. */}
-                {intentOpenForOtherPool && (
-                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
-                    You have a pending payment for Maintenance — finish or cancel it on the{' '}
-                    <Link to="/maintenance-book" className="font-semibold text-teal">
-                      Maintenance Book
-                    </Link>{' '}
-                    page before paying here.
-                  </div>
-                )}
-              </div>
-
               <div className="mb-4 flex flex-wrap items-end gap-3">
                 <label className="text-xs font-semibold text-muted">
                   From
@@ -440,19 +371,82 @@ export function OtherChargesBookPage() {
             </>
           )}
 
-          {activeTab === 'PAYMENTS' &&
-            (data.depositRows.length === 0 ? (
-              <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
-                <Check size={14} /> No payments yet
-              </p>
-            ) : (
-              <DataTable
-                data={data.depositRows}
-                columns={depositColumns}
-                getRowId={(r) => r.id}
-                emptyMessage="No payments yet."
-              />
-            ))}
+          {activeTab === 'PAYMENTS' && (
+            <>
+              <div className="mb-5 rounded-2xl border border-line bg-white p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+                  <div>
+                    {outstanding > 0 ? (
+                      <span className="text-sm text-ink">
+                        You owe <strong className="font-mono-brand">₹{outstanding.toLocaleString('en-IN')}</strong>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-teal">
+                        <CheckCircle2 size={16} /> Nothing outstanding right now
+                      </span>
+                    )}
+                  </div>
+                  {outstanding > 0 && !intentQuery.data && (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex flex-col text-xs font-semibold text-muted">
+                        Amount to pay
+                        <span className="mt-1 w-32 rounded-lg border border-line bg-paper px-3 py-1.5 font-mono-brand text-sm text-ink">
+                          ₹{outstanding.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => lockMutation.mutate(outstanding)}
+                        disabled={lockMutation.isPending}
+                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+                      >
+                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Other Charges can't be settled partially (unlike Maintenance) — the
+                    amount is always the full outstanding total, shown read-only above
+                    rather than as an editable field, so there's nothing to validate here. */}
+
+                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
+
+                {intentOpenForThisPool && intentQuery.data && (
+                  <PayIntentPanel
+                    intent={intentQuery.data}
+                    isMobile={isMobile}
+                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
+                  />
+                )}
+                {/* docs/other-charges/ — at most one open intent at a time, across both
+                    pools. If it's for Maintenance, this page can't start a new one
+                    (server-blocked) — point at where to finish it instead. */}
+                {intentOpenForOtherPool && (
+                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                    You have a pending payment for Maintenance — finish or cancel it on the{' '}
+                    <Link to="/maintenance-book" className="font-semibold text-teal">
+                      Maintenance Book
+                    </Link>{' '}
+                    page before paying here.
+                  </div>
+                )}
+              </div>
+
+              {data.depositRows.length === 0 ? (
+                <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
+                  <Check size={14} /> No payments yet
+                </p>
+              ) : (
+                <DataTable
+                  data={data.depositRows}
+                  columns={depositColumns}
+                  getRowId={(r) => r.id}
+                  emptyMessage="No payments yet."
+                />
+              )}
+            </>
+          )}
         </>
       )}
     </div>
