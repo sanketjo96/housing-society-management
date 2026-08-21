@@ -247,12 +247,11 @@ describe('MaintenanceBookPage', () => {
     expect(screen.queryByLabelText('Year')).not.toBeInTheDocument();
   });
 
-  it('shows the Pay control on the Bills tab: pre-fills Outstanding, locks the amount, and requires a screenshot before submitting', async () => {
+  it('shows the Pay control on the Payment History tab (default): pre-fills Outstanding, locks the amount, and requires a screenshot before submitting', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
     const amountInput = await screen.findByLabelText('Amount to pay');
     await waitFor(() => expect(amountInput).toHaveValue(1100));
 
@@ -278,7 +277,6 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
     const amountInput = await screen.findByLabelText('Amount to pay');
     await waitFor(() => expect(amountInput).toHaveValue(1100));
 
@@ -300,7 +298,7 @@ describe('MaintenanceBookPage', () => {
     });
   });
 
-  it('shows a notice instead of the Pay button on the Bills tab when the open intent is for Other Charges', async () => {
+  it('shows a notice instead of the Pay button on the Payment History tab when the open intent is for Other Charges', async () => {
     mockFetch(ledger, {
       id: 'intent-2',
       amount: 300,
@@ -310,19 +308,15 @@ describe('MaintenanceBookPage', () => {
       category: 'OTHER_CHARGE',
     });
     renderPage();
-    const user = userEvent.setup();
 
-    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText(/pending payment for other charges/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });
 
-  it('hides the Pay controls and shows "Nothing outstanding right now" on the Bills tab when outstanding is 0', async () => {
+  it('hides the Pay controls and shows "Nothing outstanding right now" on the Payment History tab when outstanding is 0', async () => {
     mockFetch({ ...ledger, totals: { ...ledger.totals, outstanding: 0 } });
     renderPage();
-    const user = userEvent.setup();
 
-    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });

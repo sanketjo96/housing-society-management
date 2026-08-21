@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { recordSocietyLedgerEntrySchema } from './society-ledger.schemas';
+import { bulkImportSocietyLedgerSchema, recordSocietyLedgerEntrySchema } from './society-ledger.schemas';
 import {
   CategoryDirectionMismatchError,
   FinanceCategoryNotUsableError,
@@ -10,6 +10,7 @@ import {
   listSocietyLedgerEntries,
   recordSocietyLedgerEntry,
 } from './society-ledger.service';
+import { bulkImportSocietyLedgerEntries } from './society-ledger-bulk-import-service';
 
 export async function listSocietyLedgerEntriesHandler(req: Request, res: Response) {
   if (!req.user) {
@@ -59,6 +60,22 @@ export async function recordSocietyLedgerEntryHandler(req: Request, res: Respons
     }
     throw err;
   }
+}
+
+export async function bulkImportSocietyLedgerEntriesHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const parsed = bulkImportSocietyLedgerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
+  const result = await bulkImportSocietyLedgerEntries(req.user.societyId, req.user.id, parsed.data.csv);
+  res.status(200).json(result);
 }
 
 export async function getSocietyLedgerEntryFileHandler(req: Request, res: Response) {

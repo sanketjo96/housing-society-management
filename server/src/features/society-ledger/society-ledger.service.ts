@@ -79,6 +79,29 @@ export interface RecordSocietyLedgerEntryInput {
   file: { buffer: Buffer; mimeType: string; extension: string };
 }
 
+// Shared between recordSocietyLedgerEntry (below) and
+// society-ledger-bulk-import-service.ts's bulkImportSocietyLedgerEntries — the two
+// checks that don't depend on how the category was looked up (by id vs. by name) or
+// whether a file is involved. Extracted (2026-08-21, docs/society-onboarding/ Phase
+// E) rather than duplicated, so the bulk path can never silently drift from the
+// single-row path's validation rules.
+export function assertValidSocietyLedgerEntry<T extends { direction: SocietyLedgerDirection }>(
+  category: T | null,
+  input: {
+    amount: number;
+    direction: SocietyLedgerDirection;
+    paymentMethod: SocietyLedgerPaymentMethod;
+    bankReference?: string;
+  },
+): asserts category is T {
+  if (!(input.amount > 0)) throw new InvalidAmountError();
+  if (!category) throw new FinanceCategoryNotUsableError();
+  if (category.direction !== input.direction) throw new CategoryDirectionMismatchError();
+  if (input.paymentMethod !== 'CASH' && !input.bankReference?.trim()) {
+    throw new MissingBankReferenceError();
+  }
+}
+
 // The one write path. categoryId is revalidated server-side against societyId +
 // isActive (never trusted from the client beyond existence, same contract as
 // billOtherCharge's feeTypeId lookup). direction-matches-category and
@@ -90,17 +113,10 @@ export async function recordSocietyLedgerEntry(
   adminId: string,
   input: RecordSocietyLedgerEntryInput,
 ) {
-  if (!(input.amount > 0)) throw new InvalidAmountError();
-
   const category = await prisma.societyLedgerCategory.findFirst({
     where: { id: input.categoryId, societyId, isActive: true },
   });
-  if (!category) throw new FinanceCategoryNotUsableError();
-  if (category.direction !== input.direction) throw new CategoryDirectionMismatchError();
-
-  if (input.paymentMethod !== 'CASH' && !input.bankReference?.trim()) {
-    throw new MissingBankReferenceError();
-  }
+  assertValidSocietyLedgerEntry(category, input);
 
   const saved = await getStorageAdapter().save({
     buffer: input.file.buffer,

@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Upload, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DashboardShell, type NavEntry } from './DashboardShell';
@@ -53,6 +53,24 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/manage-finance', label: 'Record', icon: PlusCircle },
       { to: '/mark-as-paid', label: 'Mark Paid', icon: Banknote },
       { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
+    ],
+  },
+  // A submenu group, not a standalone item — it's neither a day-to-day money
+  // action nor an admin-configuration screen, it's a data-loading utility with one
+  // child per import type (docs/society-onboarding/, all three built 2026-08-21):
+  // "Resident" (Flats/Owners/Tenants roster, moved out of FlatsListPage.tsx),
+  // "Charges" (Opening Balance arrears + Other Charges, Phase C), and "Finance"
+  // (historical Manage Finance income/expense, Phase E — a dedicated page here
+  // rather than an inline panel on ManageFinancePage.tsx, so every onboarding
+  // import lives in one place). Phase A (society bootstrap) has no UI by design —
+  // see docs/society-onboarding/02-architecture.md.
+  {
+    label: 'Imports',
+    icon: Upload,
+    children: [
+      { to: '/imports/residents', label: 'Resident', icon: Users },
+      { to: '/imports/charges', label: 'Charges', icon: BadgeIndianRupee },
+      { to: '/imports/finance', label: 'Finance', icon: Banknote },
     ],
   },
   {

@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, Check, FileSpreadsheet, Home, Plus, Save, Upload } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, Home, Plus, Save } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { DataTable } from '../../components/DataTable';
@@ -19,11 +19,6 @@ interface FlatSummary {
   baseRate: string;
   owner: ResidentSummary;
   currentTenant: ResidentSummary | null;
-}
-
-interface ImportResult {
-  created: unknown[];
-  errors: { row: number; message: string }[];
 }
 
 async function fetchFlats(): Promise<FlatSummary[]> {
@@ -210,106 +205,6 @@ function FlatForm({
   );
 }
 
-// Header + one worked example row — used both as the downloadable template's content
-// and as the source of the column list shown in the panel's description.
-const CSV_TEMPLATE =
-  'wing,flatNumber,ownerName,ownerPhone,ownerEmail,occupancy,tenantName,tenantPhone,tenantEmail\n' +
-  'A,101,Priya Nair,9876543210,priya@example.com,owner,,,\n';
-
-function downloadCsvTemplate() {
-  const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'flats-import-template.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function CsvImportPanel() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const queryClient = useQueryClient();
-
-  // Takes the file's raw text as the mutation variable (not component state) — no
-  // textarea to hold it in; the backend still parses CSV text server-side
-  // (src/services/flats.service.ts's bulkImportFlats), only how that text reaches the
-  // request body changed, from "typed into a textarea" to "read from an uploaded file".
-  const mutation = useMutation<ImportResult, Error, string>({
-    mutationFn: async (csv) => {
-      const res = await authedFetch('/api/admin/flats/import', {
-        method: 'POST',
-        body: JSON.stringify({ csv }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Import failed.');
-      return body;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-flats'] }),
-  });
-
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-selecting the same file (e.g. re-import after fixing errors)
-    if (!file) return;
-    mutation.mutate(await file.text());
-  }
-
-  return (
-    <div className="mb-6 rounded-2xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="m-0 mb-1.5 font-display text-base text-ink">Bulk import (CSV)</h2>
-          <p className="m-0 text-xs text-muted">
-            Required columns: wing, flatNumber, ownerName, ownerPhone, ownerEmail. Optional:
-            occupancy (owner/tenant), tenantName, tenantPhone, tenantEmail, effectiveFrom. Every
-            imported flat takes the Billing plan page's default base rate — edit a flat afterward to
-            set a different rate.
-          </p>
-        </div>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
-          <button
-            type="button"
-            onClick={downloadCsvTemplate}
-            className="flex items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink"
-          >
-            <FileSpreadsheet size={13} /> Download template
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            aria-label="Upload CSV file"
-            onChange={(e) => void handleFileSelected(e)}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={mutation.isPending}
-            className="flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
-          >
-            <Upload size={13} /> {mutation.isPending ? 'Importing…' : 'Import CSV'}
-          </button>
-        </div>
-      </div>
-
-      {mutation.isSuccess && mutation.data && (
-        <p className="mt-3 text-xs text-teal">{mutation.data.created.length} flat(s) created.</p>
-      )}
-      {mutation.isSuccess && mutation.data && mutation.data.errors.length > 0 && (
-        <ul className="mt-1 list-disc pl-4 text-xs text-coral">
-          {mutation.data.errors.map((e) => (
-            <li key={e.row}>
-              Row {e.row}: {e.message}
-            </li>
-          ))}
-        </ul>
-      )}
-      {mutation.error && <p className="mt-2 text-xs text-coral">{mutation.error.message}</p>}
-    </div>
-  );
-}
-
 function occupancyLabel(flat: FlatSummary) {
   return flat.currentTenant ? 'Tenant' : 'Owner';
 }
@@ -409,8 +304,6 @@ export function FlatsListPage() {
           <Plus size={14} /> Onboard a flat
         </button>
       </div>
-
-      <CsvImportPanel />
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && (

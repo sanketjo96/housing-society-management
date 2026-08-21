@@ -245,14 +245,19 @@ describe('OtherChargesBookPage', () => {
     expect(screen.getAllByText('₹1,100').length).toBeGreaterThan(0);
   });
 
-  it('shows the Pay control on the Bills tab: pre-fills Outstanding, locks the amount, and requires a screenshot before submitting', async () => {
+  it('shows the Pay control on the Payment History tab (default): the amount is fixed at the full Outstanding, not editable, and requires a screenshot before submitting', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
-    const amountInput = await screen.findByLabelText('Amount to pay');
-    await waitFor(() => expect(amountInput).toHaveValue(1100));
+    await waitFor(() => expect(screen.getByText('Amount to pay')).toBeInTheDocument());
+    // Read-only display of the fixed amount — no input to find/edit, unlike
+    // Maintenance's Pay control (Other Charges can never be settled partially).
+    // Scoped to the label's own sibling (not a bare text query), since "₹1,100"
+    // also appears in the Outstanding summary card and the "You owe" line.
+    expect(screen.queryByLabelText('Amount to pay')).not.toBeInTheDocument();
+    const amountLabel = screen.getByText('Amount to pay');
+    expect(amountLabel.parentElement).toHaveTextContent('₹1,100');
 
     await user.click(screen.getByRole('button', { name: /^pay$/i }));
 
@@ -269,7 +274,7 @@ describe('OtherChargesBookPage', () => {
     expect(await screen.findByText(/locked/i)).toBeInTheDocument();
   });
 
-  it('shows a notice instead of the Pay button on the Bills tab when the open intent is for Maintenance', async () => {
+  it('shows a notice instead of the Pay button on the Payment History tab when the open intent is for Maintenance', async () => {
     mockFetch(ledger, {
       id: 'intent-2',
       amount: 300,
@@ -279,19 +284,15 @@ describe('OtherChargesBookPage', () => {
       category: 'MAINTENANCE',
     });
     renderPage();
-    const user = userEvent.setup();
 
-    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText(/pending payment for maintenance/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });
 
-  it('hides the Pay controls and shows "Nothing outstanding right now" on the Bills tab when outstanding is 0', async () => {
+  it('hides the Pay controls and shows "Nothing outstanding right now" on the Payment History tab when outstanding is 0', async () => {
     mockFetch({ ...ledger, totals: { ...ledger.totals, outstanding: 0 } });
     renderPage();
-    const user = userEvent.setup();
 
-    await goToBillsTab(user);
     await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });

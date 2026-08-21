@@ -26,6 +26,7 @@ written (2026-08-20) — re-check against those sources if this file looks stale
 | Notifications — WhatsApp | [`notification/`](../notification/) | 🟡 Code complete, external step pending | 3 events wired end-to-end; blocked on Meta template approval |
 | Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
+| Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | — (no doc yet) | ⬜ Not started | Phase 10, both tasks unchecked |
 | Society-Level Income/Expense | — (no doc yet) | ⬜ Idea only | Surfaced during the bank-reference audit review; not designed |
 
@@ -157,6 +158,35 @@ admin-visible (not re-typed) at approval.
 **Pending**: all 7 epics — schema, OCR engine, resident submission flow, admin
 paths, resident/admin frontend surfaces, tests (~14 hours estimated, see
 [`bank-reference/03-scope-and-task-breakdown.md`](../bank-reference/03-scope-and-task-breakdown.md)).
+
+## Society Onboarding — Bootstrap & Bulk Import
+**Status**: ✅ Implemented (2026-08-21, all three phases from the original
+design). Not to be confused with "Flat & Society Onboarding" above (Phase 3) —
+that's per-flat onboarding within an already-existing society; this is
+platform-level, for standing up a brand-new society (a new client) at all.
+**Scope implemented**: Phase A — `POST /api/platform/societies`, gated by a
+shared secret (`requirePlatformSecret`, no admin JWT can exist yet for a
+society that doesn't), creates a `Society` + its first `ADMIN` in one
+transaction and triggers a real password-reset link; no admin UI by design
+(concierge/operator action). Phase C — `POST /api/admin/bulk-charges/import`,
+bulk-imports one-time per-flat charges from CSV: a sentinel-period
+(`"0000-01"`) Opening Balance `MaintenanceRecord` that always settles before
+every real month (zero changes to `computeRecordSettlements`), or an
+`OTHER_CHARGE` row reusing `billOtherCharge`'s exact validation. Phase E —
+`POST /api/admin/society-ledger/import`, bulk-imports historical
+income/expense into Manage Finance, skipping the mandatory-proof-file rule
+(each row auto-flagged as historical/unverified in its note) via a validator
+(`assertValidSocietyLedgerEntry`) extracted from `recordSocietyLedgerEntry` so
+the bulk and single-row paths can't drift apart. All three importers (plus the
+already-shipped Resident roster import, relocated here from
+`FlatsListPage.tsx`) live under one admin-only **Imports** sidebar submenu —
+`/imports/residents`, `/imports/charges`, `/imports/finance` — sharing one
+frontend component (`CsvImportPanel.tsx`).
+**Pending**: none of the original scope — see
+[`society-onboarding/01-requirements.md`](../society-onboarding/01-requirements.md)'s
+"Explicitly Out of Scope (v1)" for what was deliberately deferred (a self-serve
+wizard, a real `SinkingFund` model, bulk import of catalog rows, multi-society
+admin UX).
 
 ## Production Deployment
 **Status**: ⬜ Not started (Phase 10, tasks 10.1–10.2, both unchecked).

@@ -28,6 +28,8 @@ import { feeTypesRouter } from './features/fee-types/fee-types.route';
 import { otherChargesRouter } from './features/other-charges/other-charges.route';
 import { financeCategoriesRouter } from './features/finance-categories/finance-categories.route';
 import { societyLedgerRouter } from './features/society-ledger/society-ledger.route';
+import { platformBootstrapRouter } from './features/platform-bootstrap/platform-bootstrap.route';
+import { bulkChargesRouter } from './features/bulk-charges/bulk-charges.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 
 export const app = express();
@@ -92,6 +94,8 @@ app.use(feeTypesRouter);
 app.use(otherChargesRouter);
 app.use(financeCategoriesRouter);
 app.use(societyLedgerRouter);
+app.use(platformBootstrapRouter);
+app.use(bulkChargesRouter);
 
 // Must be registered last (Express's 4-arg-signature error-middleware convention).
 app.use(errorHandler);

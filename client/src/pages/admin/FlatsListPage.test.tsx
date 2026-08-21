@@ -176,51 +176,17 @@ describe('FlatsListPage', () => {
     expect(screen.getByDisplayValue('Bob Tenant')).toBeInTheDocument();
   });
 
-  it('uploads a CSV file and shows per-row results', async () => {
-    const fetchMock = fetch as unknown as FetchMock;
-    let sentBody: string | undefined;
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      if (url.includes('/import')) {
-        sentBody = init?.body as string;
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ created: [{ id: 'x' }], errors: [{ row: 3, message: 'Missing required value(s)' }] }),
-        });
-      }
-      if (url.includes('/api/admin/flats')) {
-        return Promise.resolve({ ok: true, json: async () => [] });
-      }
-      if (url.includes('/api/admin/settings')) {
-        return Promise.resolve({ ok: true, json: async () => ({ tenantRateFactor: 1.5, defaultBaseRate: 1500 }) });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-
-    renderPage();
-    const user = userEvent.setup();
-
-    await waitFor(() => expect(screen.getByText(/bulk import/i)).toBeInTheDocument());
-
-    const csvText = 'wing,flatNumber,ownerName,ownerPhone,ownerEmail\nA,101,Test Owner,9876543210,test-owner@example.com';
-    const file = new File([csvText], 'flats.csv', { type: 'text/csv' });
-    await user.upload(screen.getByLabelText(/upload csv file/i), file);
-
-    await waitFor(() => {
-      expect(screen.getByText(/1 flat\(s\) created/i)).toBeInTheDocument();
-    });
-    expect(screen.getByText(/missing required value/i)).toBeInTheDocument();
-    expect(JSON.parse(sentBody!).csv).toBe(csvText);
-  });
-
-  it('has a template download button, distinct from the upload button', async () => {
+  // Bulk CSV import moved off this page entirely (2026-08-21) — it lives on
+  // ImportsPage.tsx ("Resident" child of the Imports nav submenu) now. Coverage for
+  // the upload/template-download flow lives in ImportsPage.test.tsx instead.
+  it('has no bulk-import controls on this page', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/bulk import/i)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /download template/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /import csv/i })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /onboard a flat/i })).toBeInTheDocument());
+    expect(screen.queryByLabelText(/upload csv file/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /download template/i })).not.toBeInTheDocument();
   });
 });

@@ -43,6 +43,36 @@ export {};
  *       400: { description: Invalid input, non-positive amount, missing/inactive category, direction mismatch, missing bank reference, or missing file. }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
+ * /api/admin/society-ledger/import:
+ *   post:
+ *     tags: [Manage Finance (Admin)]
+ *     summary: Bulk-import historical society income/expense transactions via CSV
+ *     description: >
+ *       Phase E of docs/society-onboarding/. Reuses the same
+ *       direction-matches-category and bank-reference-required-unless-cash checks
+ *       recordSocietyLedgerEntry enforces, but skips the mandatory-proof-file rule
+ *       (legacy rows have no scanned receipt) — each imported row's note is
+ *       auto-appended with a marker flagging it as historical/unverified. Per-row
+ *       errors are collected without aborting the batch.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [csv]
+ *             properties:
+ *               csv:
+ *                 type: string
+ *                 description: >
+ *                   Columns: direction (INCOME|EXPENSE), categoryname, amount,
+ *                   transactiondate, paymentmethod, bankreference (required unless
+ *                   CASH), note (optional).
+ *     responses:
+ *       200: { description: "OK. Body has imported (count) and errors (row/message pairs)." }
+ *       400: { description: Empty csv field. }
+ *       401: { description: Unauthenticated }
+ *       403: { description: Caller is not an ADMIN. }
  * /api/admin/society-ledger/{id}/file:
  *   get:
  *     tags: [Manage Finance (Admin)]

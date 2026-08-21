@@ -3,8 +3,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DashboardLayout } from './components/DashboardLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
+import { BulkChargesImportPage } from './pages/admin/BulkChargesImportPage'
+import { FinanceHistoryImportPage } from './pages/admin/FinanceHistoryImportPage'
 import { FlatsListPage } from './pages/admin/FlatsListPage'
 import { FlatWiseDuesPage } from './pages/admin/FlatWiseDuesPage'
+import { ImportsPage } from './pages/admin/ImportsPage'
 import { ManageFinancePage } from './pages/admin/ManageFinancePage'
 import { MarkAsPaidPage } from './pages/admin/MarkAsPaidPage'
 import { OtherChargesFlatDuesPage } from './pages/admin/OtherChargesFlatDuesPage'
@@ -56,6 +59,29 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
 
               <Route path="/flats" element={<ProtectedRoute allowedRoles={['ADMIN']}><FlatsListPage /></ProtectedRoute>} />
+              {/* "Resident" child under the "Imports" submenu (DashboardLayout.tsx)
+                  — the Flats/Owners/Tenants roster CSV import (moved out of
+                  FlatsListPage.tsx 2026-08-21). */}
+              <Route
+                path="/imports/residents"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><ImportsPage /></ProtectedRoute>}
+              />
+              {/* "Charges" child under the "Imports" submenu — Phase C of
+                  docs/society-onboarding/ (Opening Balance arrears + Other Charges
+                  bulk import, 2026-08-21). */}
+              <Route
+                path="/imports/charges"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><BulkChargesImportPage /></ProtectedRoute>}
+              />
+              {/* "Finance" child under the "Imports" submenu — Phase E of
+                  docs/society-onboarding/ (historical Manage Finance bulk import,
+                  2026-08-21) — a dedicated page under Imports rather than an inline
+                  panel on ManageFinancePage.tsx, so every onboarding import lives in
+                  one place. */}
+              <Route
+                path="/imports/finance"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><FinanceHistoryImportPage /></ProtectedRoute>}
+              />
               {/* Not a sidebar item (DashboardLayout.tsx) — reached only via the
                   "N payment proofs pending review" tile on AdminDashboardPage, same
                   drill-down convention as /flats, /tenants, /flat-dues, and

@@ -13,3 +13,8 @@ process.env.LOCAL_STORAGE_DIR = './test-uploads';
 // instance in tests/middleware/auth-rate-limit.test.ts instead, which doesn't
 // honor this flag.
 process.env.DISABLE_RATE_LIMIT = 'true';
+
+// Fixed test value for requirePlatformSecret (platform-bootstrap route tests) — the
+// "unset entirely" (503) case is tested separately by deleting/restoring this var
+// around that one assertion, not by leaving it unset for the whole suite.
+process.env.PLATFORM_BOOTSTRAP_SECRET = 'test-platform-bootstrap-secret';
