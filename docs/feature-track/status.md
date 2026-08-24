@@ -23,7 +23,7 @@ last updated (2026-08-24) — re-check against those sources if this file looks 
 | Other Charges | [`other-charges/`](../other-charges/) | ✅ Implemented | 2026-08-19, updated 2026-08-21 (partial payment disallowed); 9 items explicitly deferred, see its own future-scope doc |
 | Manage Finance | [`manage-finance/`](../manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
 | Observability | [`observablity/`](../observablity/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
-| Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Send mechanism live; most individual triggers unbuilt (superseded by WhatsApp for 3 of them) |
+| Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Real send confirmed live 2026-08-24 (verified `smi.techsanket.in` on Resend, out of sandbox mode); most individual triggers still unbuilt (superseded by WhatsApp for 3 of them) |
 | Notifications — WhatsApp | [`notification/`](../notification/) | 🟡 Code complete, external step pending | 3 events wired end-to-end; blocked on Meta template approval |
 | Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
@@ -156,18 +156,33 @@ Tempo), dashboards & on-call alerting, multi-tenant observability. No stage has
 a confirmed trigger yet.
 
 ## Notifications — Email
-**Status**: 🟡 Partially implemented.
+**Status**: 🟡 Partially implemented — but the real-send path is now actually
+live for the pilot (2026-08-24), not just theoretically wired.
 **Scope implemented**: `EmailProvider` interface (`console`/`resend`), wired
 into password reset — every caller (Task 2.4's flow, 2026-08-06 self-service
 tenant creation, admin flat onboarding) sends a real email automatically.
+`EMAIL_PROVIDER=resend` was configured but, until 2026-08-24, was still on
+Resend's sandbox sender — which only delivers to the Resend account owner's
+own inbox, meaning real residents never actually received a password-reset
+email despite the code path being "done." Fixed by verifying a dedicated
+sending subdomain, `smi.techsanket.in` (a subdomain of the operator's own
+`techsanket.in`, kept separate from the domain's existing SPF/DMARC used by an
+unrelated portfolio site — subdomain SPF/DKIM/MX are independent per hostname,
+so this can't collide) — DNS hosted at Hostinger, verified via a CNAME
+(`send.smi.techsanket.in` → `send.forge.rmta.net`, Resend's newer combined
+MX+SPF record) plus a DKIM TXT (`resend._domainkey.smi.techsanket.in`).
+`EMAIL_FROM=notifications@smi.techsanket.in`. Confirmed working end-to-end —
+a direct Resend API send returned 200 with a real message id, and the
+recipient (an external Gmail address, not the Resend account owner) confirmed
+actual receipt.
 **Pending** (`task-status.md` Phase 7, tasks 7.2–7.6, unchecked): the original
 per-event email triggers (maintenance-record-generated, proof-submitted,
 proof approved/rejected, an escalation job) were never built as *email* —
 three of the equivalent business events (bill generated, deposit approved,
-credit approved) are instead now covered by WhatsApp (below). The escalation
-job (7.6) specifically has no automated notification path at all — the
-Admin Dashboard's flagged-flats widget only prepares a message for the admin
-to manually share, by design (rule 8).
+other-charge billed) are instead now covered by WhatsApp (below). The
+escalation job (7.6) specifically has no automated notification path at all —
+the Admin Dashboard's flagged-flats widget only prepares a message for the
+admin to manually share, by design (rule 8).
 
 ## Notifications — WhatsApp
 **Status**: 🟡 Code complete, blocked on an external step (commit `a99f40d`).
