@@ -24,6 +24,24 @@ body {
   margin: 0;
 }
 
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #4a564d transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #4a564d;
+  border-radius: 9999px;
+}
+
 button:not(:disabled),
 [role='button']:not([aria-disabled='true']),
 a[href],

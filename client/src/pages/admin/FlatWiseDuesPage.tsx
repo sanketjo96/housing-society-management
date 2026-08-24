@@ -25,18 +25,15 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
 // Admin-only page (App.tsx: /flat-dues, allowedRoles ADMIN) — reached only via the
 // "Maintenance Outstanding Total" tile on AdminDashboardPage, not a sidebar nav item,
 // since it's a drill-down of that one figure rather than a destination of its own.
-// Filtered to only flats with an outstanding maintenance balance — a flat that's
-// fully settled isn't a "due" worth listing here (unlike the comprehensive
-// per-flat overview at /resident-ledger, which lists every flat regardless of
-// balance). Owner/Credit weren't dropped from FlatDues itself, just this page's
-// column set — Owner stays, Credit doesn't apply to this "what's still owed" view.
+// Shows every owner, not just those with an outstanding balance — a flat that's
+// fully settled (and has no credit either) still gets a row, explicitly marked as
+// settled, rather than silently disappearing from the list (2026-08-24 change; was
+// previously filtered to outstandingTotal > 0 only). Credit is shown alongside
+// Outstanding so a fully-paid-or-ahead flat's state is visible at a glance too.
 export function FlatWiseDuesPage() {
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
 
-  const outstandingRows = useMemo(
-    () => duesQuery.data?.filter((d) => d.outstandingTotal > 0) ?? [],
-    [duesQuery.data],
-  );
+  const rows = duesQuery.data ?? [];
 
   const duesColumns = useMemo<ColumnDef<FlatDues, unknown>[]>(
     () => [
@@ -68,11 +65,35 @@ export function FlatWiseDuesPage() {
         header: 'Outstanding Maintenance',
         accessorFn: (row) => row.outstandingTotal,
         meta: { align: 'right' },
-        cell: ({ row }) => (
-          <span className="font-mono-brand text-coral">
-            ₹{row.original.outstandingTotal.toLocaleString('en-IN')}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.outstandingTotal > 0 ? (
+            <span className="font-mono-brand text-coral">
+              ₹{row.original.outstandingTotal.toLocaleString('en-IN')}
+            </span>
+          ) : (
+            <span className="font-mono-brand text-muted">₹0</span>
+          ),
+      },
+      {
+        id: 'credit',
+        header: 'Credit',
+        accessorFn: (row) => row.creditTotal,
+        meta: { align: 'right' },
+        cell: ({ row }) =>
+          row.original.creditTotal > 0 ? (
+            <span className="font-mono-brand text-teal">₹{row.original.creditTotal.toLocaleString('en-IN')}</span>
+          ) : (
+            <span className="font-mono-brand text-muted">₹0</span>
+          ),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        accessorFn: (row) => (row.outstandingTotal === 0 && row.creditTotal === 0 ? 'Settled' : ''),
+        cell: ({ row }) =>
+          row.original.outstandingTotal === 0 && row.original.creditTotal === 0 ? (
+            <span className="text-xs font-semibold text-muted">Settled — no outstanding, no credit</span>
+          ) : null,
       },
     ],
     [],
@@ -86,7 +107,7 @@ export function FlatWiseDuesPage() {
 
       <div className="mb-6">
         <h1 className="m-0 font-display text-xl text-ink">Flat-wise dues</h1>
-        <p className="m-0 mt-0.5 text-xs text-muted">{outstandingRows.length} flats with outstanding maintenance</p>
+        <p className="m-0 mt-0.5 text-xs text-muted">{rows.length} owners — maintenance outstanding and credit</p>
       </div>
 
       {duesQuery.isLoading && <p className="text-sm text-muted">Loading…</p>}
@@ -98,10 +119,10 @@ export function FlatWiseDuesPage() {
 
       {duesQuery.data && (
         <DataTable
-          data={outstandingRows}
+          data={rows}
           columns={duesColumns}
           getRowId={(d) => d.flat.id}
-          emptyMessage="Nothing outstanding — every flat's maintenance is fully settled."
+          emptyMessage="No flats onboarded yet."
         />
       )}
     </div>

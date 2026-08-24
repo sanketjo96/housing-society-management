@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { BadgeIndianRupee, Building2, IndianRupee, ReceiptText, Wrench } from 'lucide-react';
+import { AlertTriangle, Building2, IndianRupee, ReceiptText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -93,9 +93,14 @@ function SummaryCard({
 }
 
 // A titled, bordered container grouping one kind of card together (Society,
-// Finance, Maintenance, Other Charges) — each SummaryCard is still its own white
-// card, but now sits inside a paper-toned panel so a related group visually reads
-// as one unit rather than an unbroken 8-card grid with no structure.
+// Finance, Outstanding) — each SummaryCard is still its own white card, but now
+// sits inside a paper-toned panel so a related group visually reads as one unit
+// rather than an unbroken 8-card grid with no structure. "Outstanding" holds the
+// combined Total Outstanding figure plus its two constituent pools, Maintenance
+// and Other Charges (previously Total Outstanding sat in Finance, and Maintenance/
+// Other Charges were their own separate groups) — all three are the same kind of
+// figure (what's still owed), so they now read as one container instead of being
+// split across Finance plus two near-single-card groups.
 function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
   return (
     <div className="mb-5 rounded-2xl border border-line bg-paper p-4">
@@ -121,10 +126,6 @@ export function AdminDashboardPage() {
 
   const isLoading = summaryQuery.isLoading || duesQuery.isLoading || pendingProofsQuery.isLoading;
   const isError = summaryQuery.isError || duesQuery.isError || pendingProofsQuery.isError;
-
-  // Society-wide available credit — the same per-flat `creditTotal` the flat-wise
-  // dues table's "Credit" column shows, just summed across every flat.
-  const totalCredits = duesQuery.data?.reduce((sum, row) => sum + row.creditTotal, 0) ?? 0;
 
   // Occupancy headcounts, derived from the same flat-dues fetch — a flat always has
   // exactly one owner, and at most one current tenant.
@@ -162,11 +163,6 @@ export function AdminDashboardPage() {
         <>
           <CardGroup icon={IndianRupee} title="Finance">
             <SummaryCard
-              label="Total Outstanding"
-              value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
-              accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
-            />
-            <SummaryCard
               label="Total Income"
               value={`₹${summaryQuery.data.societyTotalIncome.toLocaleString('en-IN')}`}
               accent="teal"
@@ -185,7 +181,12 @@ export function AdminDashboardPage() {
             />
           </CardGroup>
 
-          <CardGroup icon={Wrench} title="Maintenance">
+          <CardGroup icon={AlertTriangle} title="Outstanding">
+            <SummaryCard
+              label="Total Outstanding"
+              value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
+              accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
+            />
             <SummaryCard
               label="Maintenance Outstanding Total"
               value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
@@ -193,14 +194,6 @@ export function AdminDashboardPage() {
               note="View flat-wise dues →"
               to="/flat-dues"
             />
-            <SummaryCard
-              label="Total Maintenance Credit"
-              value={`₹${totalCredits.toLocaleString('en-IN')}`}
-              accent={totalCredits > 0 ? 'teal' : undefined}
-            />
-          </CardGroup>
-
-          <CardGroup icon={BadgeIndianRupee} title="Other Charges">
             <SummaryCard
               label="Other Charges Outstanding Total"
               value={`₹${summaryQuery.data.otherChargesOutstandingTotal.toLocaleString('en-IN')}`}

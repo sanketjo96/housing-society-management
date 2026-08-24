@@ -102,7 +102,10 @@ export function DashboardShell({ navItems, user, onLogout, children }: Dashboard
           </button>
         </div>
 
-        <nav aria-label="Dashboard sections" className="flex flex-1 flex-col gap-1">
+        <nav
+          aria-label="Dashboard sections"
+          className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
+        >
           {navItems.map((item) => {
             if (isNavGroup(item)) {
               const Icon = item.icon;

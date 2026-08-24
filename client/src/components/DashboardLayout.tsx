@@ -77,10 +77,10 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
     label: 'Settings',
     icon: Settings,
     children: [
-      { to: '/settings/society', label: 'Society details', icon: Building2 },
-      { to: '/settings/billing', label: 'Billing plan', icon: Wallet },
-      { to: '/settings/fee-types', label: 'Fee types', icon: Tag },
-      { to: '/settings/finance-categories', label: 'Finance categories', icon: ListTree },
+      { to: '/settings/society', label: 'Society Details', icon: Building2 },
+      { to: '/settings/billing', label: 'Billing Plan', icon: Wallet },
+      { to: '/settings/fee-types', label: 'Fee Types', icon: Tag },
+      { to: '/settings/finance-categories', label: 'Finance Categories', icon: ListTree },
     ],
   },
 ];
@@ -94,7 +94,7 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
 const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },
-  { to: '/my-details', label: 'My details', icon: User },
+  { to: '/my-details', label: 'My Details', icon: User },
 ];
 
 export function DashboardLayout() {

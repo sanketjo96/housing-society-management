@@ -199,35 +199,38 @@ describe('AdminDashboardPage', () => {
     expect(link).toHaveAttribute('href', '/tenants');
   });
 
-  it('shows a Total Maintenance Credit card summing every flat\'s available credit', async () => {
+  it('no longer shows a Total Maintenance Credit card', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Total Maintenance Credit')).toBeInTheDocument());
-    const card = screen.getByText('Total Maintenance Credit').closest('a,div') as HTMLElement;
-    expect(card).toHaveTextContent('₹300');
+    await waitFor(() => expect(screen.getByText('Maintenance Outstanding Total')).toBeInTheDocument());
+    expect(screen.queryByText('Total Maintenance Credit')).not.toBeInTheDocument();
   });
 
-  it('groups the cards into Finance, Maintenance, Other Charges, and Society containers', async () => {
+  it('groups the cards into Finance, Outstanding, and Society containers', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Finance')).toBeInTheDocument());
-    expect(screen.getByText('Maintenance')).toBeInTheDocument();
-    expect(screen.getByText('Other Charges')).toBeInTheDocument();
+    expect(screen.getByText('Outstanding')).toBeInTheDocument();
     expect(screen.getByText('Society')).toBeInTheDocument();
     // "Society Finance" was merged into "Finance" — no separate heading remains.
     expect(screen.queryByText('Society Finance')).not.toBeInTheDocument();
+    // Maintenance and Other Charges are no longer separate group headings — both
+    // outstanding-total cards live inside the merged "Outstanding" group instead.
+    expect(screen.queryByText('Maintenance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Other Charges')).not.toBeInTheDocument();
     // Maintenance Collection Rate was dropped entirely, not just relocated.
     expect(screen.queryByText('Maintenance Collection Rate')).not.toBeInTheDocument();
 
-    // Finance's heading and its 4 cards (dues Outstanding + the former Society
-    // Finance income/expense/net cards) live in the same container.
+    // Finance's heading and its 3 cards (the former Society Finance income/expense/
+    // net cards) live in the same container — Total Outstanding moved out to the
+    // Outstanding group.
     const financeGroup = screen.getByText('Finance').closest('div')!.parentElement!;
-    expect(within(financeGroup).getByText('Total Outstanding')).toBeInTheDocument();
     expect(within(financeGroup).getByText('Total Income')).toBeInTheDocument();
     expect(within(financeGroup).getByText('Total Expense')).toBeInTheDocument();
     expect(within(financeGroup).getByText('Net')).toBeInTheDocument();
+    expect(within(financeGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
 
     // Society's heading and its 3 cards live in the same container.
     const societyGroup = screen.getByText('Society').closest('div')!.parentElement!;
@@ -236,27 +239,28 @@ describe('AdminDashboardPage', () => {
     expect(within(societyGroup).getByText('Total Tenants')).toBeInTheDocument();
     expect(within(societyGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
 
-    // Maintenance's heading and its 2 cards (Outstanding + Credit only) live in the
-    // same container, separate from Other Charges' single card.
-    const maintenanceGroup = screen.getByText('Maintenance').closest('div')!.parentElement!;
-    expect(within(maintenanceGroup).getByText('Maintenance Outstanding Total')).toBeInTheDocument();
-    expect(within(maintenanceGroup).getByText('Total Maintenance Credit')).toBeInTheDocument();
-    expect(within(maintenanceGroup).queryByText('Other Charges Outstanding Total')).not.toBeInTheDocument();
+    // Outstanding's heading and all three of its cards (the combined Total
+    // Outstanding plus its Maintenance and Other Charges pools) live in the same
+    // container — no separate Credit card, per the 2026-08-24 change.
+    const outstandingGroup = screen.getByText('Outstanding').closest('div')!.parentElement!;
+    expect(within(outstandingGroup).getByText('Total Outstanding')).toBeInTheDocument();
+    expect(within(outstandingGroup).getByText('Maintenance Outstanding Total')).toBeInTheDocument();
+    expect(within(outstandingGroup).getByText('Other Charges Outstanding Total')).toBeInTheDocument();
+    expect(within(outstandingGroup).queryByText('Total Maintenance Credit')).not.toBeInTheDocument();
   });
 
-  it('orders the cards: pending-proofs widget, Finance (incl. society income/expense), Maintenance, Other Charges, Society', async () => {
+  it('orders the cards: pending-proofs widget, Finance, Outstanding (incl. combined total), Society', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Total Outstanding')).toBeInTheDocument());
     const labels = [
       'payment proof', // the pending-proofs widget, at the very top of the dashboard
-      'Total Outstanding',
       'Total Income',
       'Total Expense',
       'Net',
+      'Total Outstanding',
       'Maintenance Outstanding Total',
-      'Total Maintenance Credit',
       'Other Charges Outstanding Total',
       'Total Owners',
       'Total Flats',
