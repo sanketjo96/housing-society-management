@@ -96,11 +96,12 @@ signatory block (name, title, and the uploaded signature image if one exists,
 else a blank line).
 
 **Purpose text is a generic label per category, not an itemized per-month
-breakdown** (confirmed scope decision, made explicitly before implementing): a
-Deposit's purpose is `"Maintenance dues payment"` or `"Other charges payment"`
-depending on which pool it settles. This matches the ledger model directly: a
-Deposit is never tied to specific `MaintenanceRecord`s under the 2026-08-06
-pivot, so there's nothing itemizable to list.
+breakdown, for Maintenance** (confirmed scope decision, made explicitly before
+implementing): a Maintenance Deposit's purpose is always `"Maintenance dues
+payment"` — it's never tied to specific `MaintenanceRecord`s under the
+2026-08-06 pivot, so there's nothing itemizable to list. An Other Charges
+Deposit's purpose line is different since 2026-08-24 — see that addendum below
+for why the fee type actually *is* knowable there, unlike Maintenance.
 
 ## Template customization — `GET`/`PATCH /api/admin/settings`
 
@@ -400,3 +401,54 @@ separate decision, not something this removal silently blocked.
 one existing PATCH-body assertion updated, two new tests for the field itself),
 `settings-api.ts` (comments only — the `SocietySettings` type itself is unchanged,
 since both fields already lived there).
+
+## Addendum (2026-08-24): Other Charges receipts name the real fee type
+
+Confirmed gap: an Other Charges receipt's purpose line always read the generic
+`"Other charges payment"`, same as every other one — no record anywhere of
+which fee type (Transfer Fee, Parking Fine, ...) it actually was. Fixed, but
+only for Other Charges — Maintenance's purpose line is unchanged and stays
+generic, for the reason explained above (a Maintenance Deposit genuinely isn't
+tied to specific records).
+
+**Why Other Charges is different, and why this is safe to add now**: an Other
+Charges Deposit is always **full settlement** — partial payment was disallowed
+on 2026-08-20 (`docs/other-charges/`). That means at the moment a Deposit is
+approved, every `OtherCharge` row currently open for that flat is, by
+definition, exactly what this Deposit just paid off. That determinism is what
+makes a real link possible without reintroducing the pre-pivot
+`PaymentProof`-style "which records did this cover" bookkeeping Maintenance
+deliberately dropped.
+
+**Schema**: `OtherCharge.settledByLedgerEntryId` — a single nullable FK to
+`LedgerEntry`, not a join table. A join table would model a many-to-many
+relationship this feature can never actually produce: one Deposit can settle
+several charges, but a charge, once settled, is never split across two
+different Deposits. `NULL` means "still outstanding" — no separate boolean
+column. This is a pure display breadcrumb; it is never read by the
+Outstanding/balance calculation, which stays exactly the same sum of
+`OtherCharge.amount` vs. approved `LedgerEntry.amount` it always was.
+
+**Where it's set**: both `approveLedgerEntry` and `manualDeposit`
+(`admin-ledger-service.ts`) — the currently-open `OtherCharge` rows for the
+flat are read once (`receipt.service.ts`'s new `getOpenOtherCharges`), used to
+build the receipt's purpose text, and then stamped with the entry's id inside
+the same `$transaction` as the approval itself. In `manualDeposit` the stamp
+has to come *after* the `LedgerEntry` is created (not before) — the FK target
+has to exist first.
+
+**Where it's read**: `buildPurposeLabel` folds the distinct fee type name(s)
+into the line — `"Transfer Fee payment"` for one, `"Transfer Fee, Parking Fine
+payment"` for several — falling back to the original generic line when none
+are supplied. That fallback is also what happens automatically for a legacy
+Other Charges receipt approved before this shipped: nothing was ever stamped
+for it, and it is **never backfilled**, same "don't fabricate certainty for
+old data" convention as the 2026-08-11 legacy-entry rule above. Receipt
+Book's list (`admin-receipts-service.ts`'s `listReceipts`) gained a
+`ledgerEntry.otherChargeFeeTypeNames` field reading the same link, and its
+frontend page gained a searchable Fee Type column.
+
+**Verified against the live deployment**, not just the test suite: billed a
+real Other Charge, manually marked it paid, and read the actual issued PDF's
+extracted text — it reads `"Towards Membership fee payment"`, not the old
+generic line.
