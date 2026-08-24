@@ -1,22 +1,37 @@
 // Public API for the notification feature. Business features call notify() only —
 // they never see NotificationLog, cron, WhatsApp, or email types (architecture.md
 // §4). deliverPending() is called by src/jobs/notification-delivery.job.ts's cron
-// sweep. Every event fans out to every channel in CHANNELS independently (2026-08-24
-// addition — Phase 1 shipped WhatsApp-only; architecture.md §3 always anticipated
-// "a channel-keyed dispatcher is the natural place to add a second channel (Email)
-// later" and the schema's NotificationChannel enum has carried an unused EMAIL value
-// since before WhatsApp was even added) — one NotificationLog row per channel, each
-// with its own idempotency key, so one channel's failure/retry never blocks another.
+// sweep. Every event fans out to every channel in activeChannels() independently
+// (2026-08-24 addition — Phase 1 shipped WhatsApp-only; architecture.md §3 always
+// anticipated "a channel-keyed dispatcher is the natural place to add a second
+// channel (Email) later" and the schema's NotificationChannel enum has carried an
+// unused EMAIL value since before WhatsApp was even added) — one NotificationLog row
+// per channel, each with its own idempotency key, so one channel's failure/retry
+// never blocks another.
 import { prisma } from '../../infrastructure/prisma/client';
 import type { NotificationChannel } from '../../infrastructure/prisma/generated/client';
 import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
+import { env } from '../../config/env';
 import type { NotificationEvent } from './notification.types';
 import { sendWhatsAppForNotification } from './whatsapp/whatsapp.service';
 import { WhatsAppTransientError } from './whatsapp/whatsapp.types';
 import { sendEmailForNotification } from './email/email.service';
 import { EmailTransientError } from './email/email.types';
 
-const CHANNELS: NotificationChannel[] = ['WHATSAPP', 'EMAIL'];
+// 2026-08-24: an operational kill switch for the WHATSAPP channel specifically —
+// added when the configured WHATSAPP_ACCESS_TOKEN turned out to be a short-lived
+// test/dev token that had already expired (a permanent System User token is the
+// real fix, tracked separately; this flag exists so the channel can be turned off
+// cleanly in the meantime rather than left silently failing every send). Default
+// 'true' (unset behaves exactly as before this flag existed) — EMAIL has no
+// equivalent flag; nothing has asked for one.
+function isWhatsAppEnabled(): boolean {
+  return env('WHATSAPP_ENABLED', 'true') !== 'false';
+}
+
+function activeChannels(): NotificationChannel[] {
+  return isWhatsAppEnabled() ? ['WHATSAPP', 'EMAIL'] : ['EMAIL'];
+}
 
 // Exported for tests (Task 9's retry/backoff assertions) — not configuration a
 // deployment is expected to tune, so plain constants rather than env vars.
@@ -58,7 +73,7 @@ function relatedEntityFor(event: NotificationEvent): { type: string; id: string 
 export async function notify(event: NotificationEvent): Promise<void> {
   const related = relatedEntityFor(event);
 
-  for (const channel of CHANNELS) {
+  for (const channel of activeChannels()) {
     try {
       await prisma.notificationLog.create({
         data: {
@@ -118,6 +133,11 @@ export async function deliverPending(): Promise<DeliverPendingResult> {
       status: { in: ['PENDING', 'FAILED'] },
       attemptCount: { lt: MAX_ATTEMPTS },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+      // While disabled, also leave any already-queued WHATSAPP rows untouched
+      // (e.g. from before the flag was flipped off) rather than letting them keep
+      // failing against the same broken credential every sweep — a full disable,
+      // not just "stop creating new ones."
+      ...(isWhatsAppEnabled() ? {} : { channel: { not: 'WHATSAPP' } }),
     },
     orderBy: { createdAt: 'asc' },
     take: CLAIM_BATCH_SIZE,

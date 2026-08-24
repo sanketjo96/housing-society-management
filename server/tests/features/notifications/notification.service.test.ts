@@ -141,6 +141,60 @@ describe('notification.service', () => {
     expect(rows.every((r) => r.status === 'PENDING')).toBe(true);
   });
 
+  describe('WHATSAPP_ENABLED=false (operational kill switch)', () => {
+    const originalEnv = process.env.WHATSAPP_ENABLED;
+
+    beforeEach(() => {
+      process.env.WHATSAPP_ENABLED = 'false';
+    });
+
+    afterEach(() => {
+      if (originalEnv === undefined) delete process.env.WHATSAPP_ENABLED;
+      else process.env.WHATSAPP_ENABLED = originalEnv;
+    });
+
+    it('notify() only creates an EMAIL row — no WHATSAPP row at all', async () => {
+      const billId = randomUUID();
+      trackedBillIds.push(billId);
+
+      await notify(buildMaintenanceEvent(billId, randomUUID()));
+
+      const rows = await prisma.notificationLog.findMany({
+        where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].channel).toBe('EMAIL');
+    });
+
+    it("deliverPending() leaves a pre-existing WHATSAPP row untouched — doesn't keep failing it against a dead credential", async () => {
+      const billId = randomUUID();
+      trackedBillIds.push(billId);
+
+      // Create the WHATSAPP row directly (bypassing notify(), which wouldn't create
+      // one while disabled) to simulate a row that was already queued before the
+      // flag was flipped off.
+      const preExisting = await prisma.notificationLog.create({
+        data: {
+          idempotencyKey: `MAINTENANCE_BILL_GENERATED:${billId}:WHATSAPP`,
+          eventType: 'MAINTENANCE_BILL_GENERATED',
+          channel: 'WHATSAPP',
+          recipientUserId: randomUUID(),
+          payload: { billId },
+          status: 'PENDING',
+          relatedEntityType: 'MaintenanceRecord',
+          relatedEntityId: billId,
+        },
+      });
+
+      await deliverPending();
+      expect(sendWhatsAppForNotification).not.toHaveBeenCalled();
+
+      const after = await prisma.notificationLog.findUniqueOrThrow({ where: { id: preExisting.id } });
+      expect(after.status).toBe('PENDING');
+      expect(after.attemptCount).toBe(0);
+    });
+  });
+
   it('is idempotent per channel — the same business event twice still creates only one row per channel', async () => {
     const billId = randomUUID();
     trackedBillIds.push(billId);

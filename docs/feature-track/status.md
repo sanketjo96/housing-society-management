@@ -24,7 +24,7 @@ last updated (2026-08-24) — re-check against those sources if this file looks 
 | Manage Finance | [`manage-finance/`](../manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
 | Observability | [`observablity/`](../observablity/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
 | Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Password-reset send confirmed live 2026-08-24 (`smi.techsanket.in` verified on Resend); the 3 per-event triggers now live in the shared pipeline below, not built separately here |
-| Notifications — Event-Driven (WhatsApp + Email) | [`notification/`](../notification/) | 🟡 Email live, WhatsApp blocked | 3 events × 2 channels; Email fully working since 2026-08-24, WhatsApp blocked on Meta template approval |
+| Notifications — Event-Driven (WhatsApp + Email) | [`notification/`](../notification/) | 🟡 Email live, WhatsApp switched off | 3 events × 2 channels; Email fully working since 2026-08-24; WhatsApp disabled via `WHATSAPP_ENABLED=false` (its access token expired — needs a permanent System User token, then Meta template approval) |
 | Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
@@ -206,12 +206,16 @@ since before `WHATSAPP` was even added. Business features (Billing/Ledger/
 Maintenance) needed zero changes to gain the Email channel — they still only
 ever call `notify(event)`. Full mechanism: `docs/notification/architecture.md`'s
 2026-08-24 note.
-**Pending**: WhatsApp real sends still don't work — each event's Meta message
-template needs Meta's approval, an external step this environment can't
-perform (`notification/requirements.md` §5); until approved, the delivery
-sweep marks WhatsApp-channel notifications `FAILED` with that reason, which
-does not block the Email channel's rows for the same event from sending
-normally.
+**Pending**: WhatsApp is currently switched off entirely via
+`WHATSAPP_ENABLED=false` (2026-08-24, same day) — checking template approval
+status surfaced a more urgent problem first: `WHATSAPP_ACCESS_TOKEN` turned
+out to be a short-lived test/dev token that had already expired days earlier,
+not a permanent System User token, so every send was failing on auth before
+template approval even mattered. The flag stops both new WHATSAPP-channel
+rows being queued and the sweep from retrying already-queued ones, without
+affecting Email. Re-enable once a real System User token is generated and set
+in `.env`/`docker-compose.yml` — at that point Meta template approval
+(`notification/requirements.md` §5) becomes the next thing to verify.
 **Pending**: real sends do not work yet — each event's Meta message template
 needs to be submitted and approved by Meta, an account-specific external step
 this environment can't perform (`notification/requirements.md` §5). Until

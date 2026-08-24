@@ -31,6 +31,21 @@
 > consumer). Full rundown of what stayed the same: business features
 > (Billing/Ledger/Maintenance) needed **zero changes** — they still call only
 > `notify(event)`, unaware there are now two channels underneath it.
+>
+> **Same day, same session: `WHATSAPP_ENABLED` kill switch added.** Checking
+> whether Meta had approved the WhatsApp templates surfaced a different, more
+> urgent problem instead — `WHATSAPP_ACCESS_TOKEN` was a short-lived test/dev
+> token that had already expired days earlier (a permanent System User token
+> is the real fix, not done yet). Rather than leave WhatsApp sends failing
+> against a dead credential every sweep, `notification.service.ts` gained
+> `isWhatsAppEnabled()`/`activeChannels()`: `WHATSAPP_ENABLED=false` (env var,
+> default `'true'`) stops `notify()` from creating new WHATSAPP-channel rows
+> *and* stops `deliverPending()`'s claim query from touching any
+> already-queued ones — a full disable, not just "stop making it worse."
+> Email is completely unaffected either way. Must be added to
+> `docker-compose.yml`'s backend `environment:` block explicitly (that block
+> whitelists each var individually — no `.env` passthrough), not just the
+> root `.env` — set in both, live as of 2026-08-24.
 
 > **2026-08-18 revision.** The original draft of this doc specified a Redis + BullMQ
 > queue with a dedicated worker process. That was reconsidered before implementation

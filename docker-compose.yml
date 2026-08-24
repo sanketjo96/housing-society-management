@@ -59,6 +59,12 @@ services:
       # pipeline can be proven with a real delivery before those are approved. Leave
       # unset/false otherwise (see whatsapp.service.ts).
       WHATSAPP_TEST_MODE: ${WHATSAPP_TEST_MODE:-false}
+      # 2026-08-24: operational kill switch for the WHATSAPP channel specifically —
+      # set to 'false' to stop notify() from creating new WHATSAPP-channel rows and
+      # stop deliverPending() from touching any already-queued ones (e.g. while
+      # WHATSAPP_ACCESS_TOKEN is a dead/expired credential). Email is unaffected
+      # either way — see notification.service.ts.
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-true}
     volumes:
       - uploads_data:/app/uploads
     ports:
