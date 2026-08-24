@@ -1,5 +1,37 @@
 # Notification Feature — Architecture (Phase 1: simplified, no Redis/BullMQ)
 
+> **2026-08-24 addition: Email channel.** Phase 1 shipped WhatsApp-only
+> (`claude-instructions.md` rule 7 explicitly deferred email at that time) —
+> this section's §3 always named the trigger for when to build it: "add
+> [Email] later — add it *when* that channel exists, not speculatively now."
+> That channel now exists: real Resend delivery was verified working
+> end-to-end (a dedicated sending subdomain, `smi.techsanket.in`, verified
+> with Resend on Hostinger DNS) the same day this was implemented. Every
+> `notify()` call now fans out to **both** WHATSAPP and EMAIL, one
+> `NotificationLog` row per channel, each with its own idempotency key
+> (`<eventType>:<businessId>:<channel>`) — so one channel's failure/retry
+> never blocks the other. No schema migration was needed: `NotificationChannel`
+> has carried an unused `EMAIL` value since the model's very first migration,
+> before `WHATSAPP` was even added. `deliverPending()` branches per row's
+> `channel` to either `sendWhatsAppForNotification` or the new
+> `sendEmailForNotification` (`email/email.service.ts`, mirroring
+> `whatsapp/whatsapp.service.ts`'s shape exactly — resolve the recipient fresh
+> at delivery time via `recipientUserId`, build the event's content, hand off
+> to the existing swappable `EmailProvider`). Unlike WhatsApp, email needs no
+> Meta-style template pre-approval, so there's no analogue to
+> `WHATSAPP_TEST_MODE` — real content sends immediately once
+> `EMAIL_PROVIDER=resend` is configured. `EmailTransientError`/
+> `EmailPermanentError` (`email/email.types.ts`) mirror the WhatsApp error
+> pair exactly, so `deliverPending()`'s existing retry/backoff logic needed
+> zero changes — only the `isTransient` check now also matches the email
+> error type. The shared `formatInr`/`formatDateForTemplate` helpers moved
+> from `whatsapp/templates/format.ts` up to `templates/format.ts` (this
+> folder's own comment already named "nothing outside these three files needs
+> it yet" as the reason it hadn't been promoted before — it now has a second
+> consumer). Full rundown of what stayed the same: business features
+> (Billing/Ledger/Maintenance) needed **zero changes** — they still call only
+> `notify(event)`, unaware there are now two channels underneath it.
+
 > **2026-08-18 revision.** The original draft of this doc specified a Redis + BullMQ
 > queue with a dedicated worker process. That was reconsidered before implementation
 > started: this app runs on a single 7.6GB VPS for a 24-flat society (CLAUDE.md's
@@ -78,15 +110,29 @@ server/src/features/notifications/
 ├── notification.service.ts       — public API: notify(event), deliverPending()
 ├── notification.types.ts         — typed event payloads (discriminated union)
 │
-└── whatsapp/
-    ├── whatsapp.service.ts
-    ├── whatsapp.client.ts
-    ├── whatsapp.types.ts
-    ├── whatsapp.config.ts
+├── templates/
+│   └── format.ts                 — formatInr/formatDateForTemplate, shared by
+│                                    both channels' templates (2026-08-24: moved
+│                                    up from whatsapp/templates/ once email's
+│                                    templates needed it too)
+│
+├── whatsapp/
+│   ├── whatsapp.service.ts
+│   ├── whatsapp.client.ts
+│   ├── whatsapp.types.ts
+│   ├── whatsapp.config.ts
+│   └── templates/
+│       ├── maintenance-bill-generated.ts
+│       ├── deposit-payment-approved.ts
+│       └── other-charge-billed.ts
+│
+└── email/                        — 2026-08-24 addition, see the note at the
+    ├── email.service.ts            top of this doc
+    ├── email.types.ts
     └── templates/
         ├── maintenance-bill-generated.ts
         ├── deposit-payment-approved.ts
-        └── credit-payment-approved.ts
+        └── other-charge-billed.ts
 
 server/src/jobs/
 └── notification-delivery.job.ts  — node-cron entry point, same shape as
@@ -94,13 +140,14 @@ server/src/jobs/
                                      registered in server.ts
 ```
 
-No `queue/` subfolder, no `worker/` subfolder. There is deliberately no
-`notification.dispatcher.ts` yet either: Phase 1 has exactly one channel
-(WhatsApp), so `notification.service.ts` calls the WhatsApp service directly. A
-`channel`-keyed dispatcher is the natural place to add a second channel (Email)
-later — add it *when* that channel exists, not speculatively now (see
-`future-scope.md` and CLAUDE.md's "don't design for hypothetical future
-requirements").
+No `queue/` subfolder, no `worker/` subfolder. There is still no separate
+`notification.dispatcher.ts` file even now that there are two channels — the
+`channel`-keyed branch (2026-08-24) lives directly inside
+`deliverPending()`'s claim loop, a few lines, not its own module. A real
+dispatcher layer remains the natural place to grow into if a third channel
+ever arrives and the branch stops being a few lines (see `future-scope.md` and
+CLAUDE.md's "don't design for hypothetical future requirements") — not
+warranted for two.
 
 ## 4. Responsibilities
 

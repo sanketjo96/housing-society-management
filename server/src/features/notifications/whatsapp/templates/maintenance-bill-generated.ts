@@ -1,6 +1,6 @@
 import type { MaintenanceBillGeneratedEvent } from '../../notification.types';
 import type { WhatsAppTemplate } from '../whatsapp.types';
-import { formatInr, formatDateForTemplate } from './format';
+import { formatInr, formatDateForTemplate } from '../../templates/format';
 
 // Meta-approved template name (requirements.md §5) — confirm approval before Task 7
 // runs against production; the Cloud API rejects an unapproved/unknown template name

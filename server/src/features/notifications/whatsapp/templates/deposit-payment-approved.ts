@@ -1,6 +1,6 @@
 import type { DepositPaymentApprovedEvent } from '../../notification.types';
 import type { WhatsAppTemplate } from '../whatsapp.types';
-import { formatInr, formatDateForTemplate } from './format';
+import { formatInr, formatDateForTemplate } from '../../templates/format';
 
 export const DEPOSIT_PAYMENT_APPROVED_TEMPLATE_NAME = 'deposit_payment_approved';
 

@@ -23,8 +23,8 @@ last updated (2026-08-24) — re-check against those sources if this file looks 
 | Other Charges | [`other-charges/`](../other-charges/) | ✅ Implemented | 2026-08-19, updated 2026-08-21 (partial payment disallowed); 9 items explicitly deferred, see its own future-scope doc |
 | Manage Finance | [`manage-finance/`](../manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
 | Observability | [`observablity/`](../observablity/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
-| Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Real send confirmed live 2026-08-24 (verified `smi.techsanket.in` on Resend, out of sandbox mode); most individual triggers still unbuilt (superseded by WhatsApp for 3 of them) |
-| Notifications — WhatsApp | [`notification/`](../notification/) | 🟡 Code complete, external step pending | 3 events wired end-to-end; blocked on Meta template approval |
+| Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Password-reset send confirmed live 2026-08-24 (`smi.techsanket.in` verified on Resend); the 3 per-event triggers now live in the shared pipeline below, not built separately here |
+| Notifications — Event-Driven (WhatsApp + Email) | [`notification/`](../notification/) | 🟡 Email live, WhatsApp blocked | 3 events × 2 channels; Email fully working since 2026-08-24, WhatsApp blocked on Meta template approval |
 | Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
@@ -175,26 +175,43 @@ MX+SPF record) plus a DKIM TXT (`resend._domainkey.smi.techsanket.in`).
 a direct Resend API send returned 200 with a real message id, and the
 recipient (an external Gmail address, not the Resend account owner) confirmed
 actual receipt.
-**Pending** (`task-status.md` Phase 7, tasks 7.2–7.6, unchecked): the original
-per-event email triggers (maintenance-record-generated, proof-submitted,
-proof approved/rejected, an escalation job) were never built as *email* —
-three of the equivalent business events (bill generated, deposit approved,
-other-charge billed) are instead now covered by WhatsApp (below). The
-escalation job (7.6) specifically has no automated notification path at all —
-the Admin Dashboard's flagged-flats widget only prepares a message for the
-admin to manually share, by design (rule 8).
+**Pending**: the *password-reset* send path above is separate from, and
+unaffected by, the event-driven pipeline described in the next section — see
+that section for the three business events (bill generated, deposit approved,
+other-charge billed), which as of 2026-08-24 fire on email too, not just
+WhatsApp. The original Phase 7 per-event *email* triggers (7.2–7.5) are
+superseded by that shared pipeline rather than built as a separate email-only
+path. The escalation job (7.6) specifically still has no automated
+notification path at all on either channel — the Admin Dashboard's
+flagged-flats widget only prepares a message for the admin to manually share,
+by design (rule 8).
 
-## Notifications — WhatsApp
-**Status**: 🟡 Code complete, blocked on an external step (commit `a99f40d`).
+## Notifications — Event-Driven (WhatsApp + Email)
+**Status**: 🟡 WhatsApp blocked on an external step; Email fully live
+(commit `a99f40d` for WhatsApp, 2026-08-24 for the Email channel).
 **Scope implemented**: full pipeline — `NotificationLog`-as-queue, a 1-minute
-cron delivery sweep, Meta Cloud API client, idempotency (unique key, no
-duplicate sends), transient-vs-permanent failure handling — wired end-to-end
-for three events: `MAINTENANCE_BILL_GENERATED`, `DEPOSIT_PAYMENT_APPROVED`,
-`OTHER_CHARGE_BILLED`. The originally-listed third event,
+cron delivery sweep, idempotency (unique key, no duplicate sends per channel),
+transient-vs-permanent failure handling — wired end-to-end for three events:
+`MAINTENANCE_BILL_GENERATED`, `DEPOSIT_PAYMENT_APPROVED`,
+`OTHER_CHARGE_BILLED`. (The originally-listed third event,
 `CREDIT_PAYMENT_APPROVED`, no longer exists — it was replaced by
-`OTHER_CHARGE_BILLED` when Credit was removed for good (2026-08-20) and Other
-Charges shipped its own billed-event notification instead
-(`notification.types.ts`). Verified against a mocked WhatsApp client.
+`OTHER_CHARGE_BILLED` when Credit was removed for good on 2026-08-20.) Each
+event now fans out to **two channels** — WhatsApp (Meta Cloud API client,
+verified against a mocked client) and Email (2026-08-24 addition, reusing the
+already-verified `EmailProvider`/Resend path from the section above) — one
+`NotificationLog` row per channel, each with its own idempotency key, so one
+channel's retry/failure never blocks the other. No schema migration was
+needed for Email: `NotificationChannel`'s `EMAIL` value has existed, unused,
+since before `WHATSAPP` was even added. Business features (Billing/Ledger/
+Maintenance) needed zero changes to gain the Email channel — they still only
+ever call `notify(event)`. Full mechanism: `docs/notification/architecture.md`'s
+2026-08-24 note.
+**Pending**: WhatsApp real sends still don't work — each event's Meta message
+template needs Meta's approval, an external step this environment can't
+perform (`notification/requirements.md` §5); until approved, the delivery
+sweep marks WhatsApp-channel notifications `FAILED` with that reason, which
+does not block the Email channel's rows for the same event from sending
+normally.
 **Pending**: real sends do not work yet — each event's Meta message template
 needs to be submitted and approved by Meta, an account-specific external step
 this environment can't perform (`notification/requirements.md` §5). Until

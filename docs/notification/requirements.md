@@ -1,5 +1,11 @@
 # Notification Feature — Requirements
 
+> **2026-08-24: Email added.** "The design must allow Email and other
+> channels to be added later" (below) — it now has been. See
+> `architecture.md`'s note at the top for the full mechanism. Every event
+> below now fires on both WhatsApp and Email; nothing else in this
+> requirements doc changed.
+
 ## 1. Goal
 
 Provide an asynchronous notification capability for the existing Node.js application.

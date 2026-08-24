@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import type { MaintenanceBillGeneratedEvent } from '../../../src/features/notifications/notification.types';
 import { deliverPending, MAX_ATTEMPTS, notify } from '../../../src/features/notifications/notification.service';
@@ -7,10 +7,16 @@ import {
   WhatsAppPermanentError,
   WhatsAppTransientError,
 } from '../../../src/features/notifications/whatsapp/whatsapp.types';
+import { EmailPermanentError, EmailTransientError } from '../../../src/features/notifications/email/email.types';
 
 const sendWhatsAppForNotification = vi.fn();
 vi.mock('../../../src/features/notifications/whatsapp/whatsapp.service', () => ({
   sendWhatsAppForNotification: (...args: unknown[]) => sendWhatsAppForNotification(...args),
+}));
+
+const sendEmailForNotification = vi.fn();
+vi.mock('../../../src/features/notifications/email/email.service', () => ({
+  sendEmailForNotification: (...args: unknown[]) => sendEmailForNotification(...args),
 }));
 
 interface MockDeliveryRow {
@@ -41,13 +47,32 @@ type NotificationLogRow = Awaited<ReturnType<typeof prisma.notificationLog.findF
 // row isn't guaranteed to be in the very first batch. Sweeping repeatedly until the
 // row reaches the expected state (rather than asserting after exactly one sweep)
 // keeps these assertions correct under that contention instead of flaking on it.
+// Scoped to the WHATSAPP-channel row specifically — since notify() now creates one
+// row per channel (2026-08-24), an unscoped lookup could non-deterministically match
+// either this test's WHATSAPP row or its sibling EMAIL row.
 async function sweepUntil(
   billId: string,
   predicate: (row: NotificationLogRow) => boolean,
   maxSweeps = 20,
 ): Promise<NotificationLogRow> {
   let row = await prisma.notificationLog.findFirstOrThrow({
-    where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId },
+    where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId, channel: 'WHATSAPP' },
+  });
+  for (let i = 0; i < maxSweeps && !predicate(row); i++) {
+    await deliverPending();
+    row = await prisma.notificationLog.findFirstOrThrow({ where: { id: row.id } });
+  }
+  return row;
+}
+
+// Same idea, for the EMAIL-channel sibling row.
+async function sweepUntilEmail(
+  billId: string,
+  predicate: (row: NotificationLogRow) => boolean,
+  maxSweeps = 20,
+): Promise<NotificationLogRow> {
+  let row = await prisma.notificationLog.findFirstOrThrow({
+    where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId, channel: 'EMAIL' },
   });
   for (let i = 0; i < maxSweeps && !predicate(row); i++) {
     await deliverPending();
@@ -79,36 +104,66 @@ function buildMaintenanceEvent(billId: string, recipientUserId: string): Mainten
 describe('notification.service', () => {
   const trackedBillIds: string[] = [];
 
+  beforeEach(() => {
+    // Default every EMAIL-channel row to succeed immediately, so tests focused on
+    // WHATSAPP-channel behavior aren't affected by their sibling EMAIL row sitting in
+    // the same claim batch. Tests that care about EMAIL-specific behavior override
+    // this per-test.
+    sendEmailForNotification.mockResolvedValue({ providerMessageId: null });
+  });
+
   afterEach(async () => {
     sendWhatsAppForNotification.mockReset();
+    sendEmailForNotification.mockReset();
     await prisma.notificationLog.deleteMany({
       where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: { in: trackedBillIds } },
     });
     trackedBillIds.length = 0;
   });
 
-  it('is idempotent — the same business event twice creates only one row', async () => {
+  it('fans out to both the WHATSAPP and EMAIL channels, each with its own idempotency key', async () => {
+    const billId = randomUUID();
+    trackedBillIds.push(billId);
+    const recipientUserId = randomUUID();
+
+    await notify(buildMaintenanceEvent(billId, recipientUserId));
+
+    const rows = await prisma.notificationLog.findMany({
+      where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId },
+      orderBy: { channel: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.channel)).toEqual(['EMAIL', 'WHATSAPP']);
+    expect(rows.map((r) => r.idempotencyKey)).toEqual([
+      `MAINTENANCE_BILL_GENERATED:${billId}:EMAIL`,
+      `MAINTENANCE_BILL_GENERATED:${billId}:WHATSAPP`,
+    ]);
+    expect(rows.every((r) => r.status === 'PENDING')).toBe(true);
+  });
+
+  it('is idempotent per channel — the same business event twice still creates only one row per channel', async () => {
     const billId = randomUUID();
     trackedBillIds.push(billId);
     const recipientUserId = randomUUID();
 
     await notify(buildMaintenanceEvent(billId, recipientUserId));
     // A duplicate business event carries a different eventId (a fresh occurrence of
-    // the same fact) but the same billId — notify() must still dedupe on billId.
+    // the same fact) but the same billId — notify() must still dedupe on billId, per
+    // channel.
     await notify(buildMaintenanceEvent(billId, recipientUserId));
 
     const rows = await prisma.notificationLog.findMany({
       where: { relatedEntityType: 'MaintenanceRecord', relatedEntityId: billId },
     });
-    expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('PENDING');
+    expect(rows).toHaveLength(2);
   });
 
-  it('never calls the WhatsApp service from notify() itself — delivery is deferred to the sweep', async () => {
+  it('never calls the WhatsApp or email service from notify() itself — delivery is deferred to the sweep', async () => {
     const billId = randomUUID();
     trackedBillIds.push(billId);
     await notify(buildMaintenanceEvent(billId, randomUUID()));
     expect(sendWhatsAppForNotification).not.toHaveBeenCalled();
+    expect(sendEmailForNotification).not.toHaveBeenCalled();
   });
 
   it('deliverPending() marks a successful send as SENT and stores the providerMessageId', async () => {
@@ -186,5 +241,51 @@ describe('notification.service', () => {
     expect(after.attemptCount).toBe(MAX_ATTEMPTS);
     expect(after.status).toBe('FAILED');
     expect(after.updatedAt.getTime()).toBe(row.updatedAt.getTime());
+  });
+
+  // The EMAIL channel shares deliverPending()'s claim/retry/backoff logic entirely
+  // with WHATSAPP (already exercised in full above) — these three tests only need to
+  // prove the channel routing itself: EMAIL rows call sendEmailForNotification (not
+  // sendWhatsAppForNotification), and EmailTransientError/EmailPermanentError drive
+  // retry the same way their WhatsApp counterparts do.
+  it('deliverPending() delivers the EMAIL channel row via the email service', async () => {
+    const billId = randomUUID();
+    trackedBillIds.push(billId);
+    await notify(buildMaintenanceEvent(billId, randomUUID()));
+    mockDeliveryForBill(billId, async () => ({ providerMessageId: 'wamid.whatsapp-side' }));
+
+    const row = await sweepUntilEmail(billId, (r) => r.status === 'SENT');
+
+    expect(row.status).toBe('SENT');
+    expect(row.sentAt).not.toBeNull();
+    expect(sendEmailForNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'MAINTENANCE_BILL_GENERATED' }),
+    );
+  });
+
+  it('retries a transient email failure, and stops after a permanent one', async () => {
+    const billId = randomUUID();
+    trackedBillIds.push(billId);
+    await notify(buildMaintenanceEvent(billId, randomUUID()));
+    mockDeliveryForBill(billId, async () => ({ providerMessageId: 'wamid.whatsapp-side' }));
+
+    sendEmailForNotification.mockImplementation(async (row: MockDeliveryRow) => {
+      if (row.payload?.billId !== billId) return { providerMessageId: null };
+      throw new EmailTransientError('Resend API timeout');
+    });
+    let row = await sweepUntilEmail(billId, (r) => r.status === 'FAILED');
+    expect(row.attemptCount).toBe(1);
+    expect(row.nextAttemptAt).not.toBeNull();
+
+    sendEmailForNotification.mockImplementation(async (r: MockDeliveryRow) => {
+      if (r.payload?.billId !== billId) return { providerMessageId: null };
+      throw new EmailPermanentError('recipient not found');
+    });
+    await prisma.notificationLog.update({ where: { id: row.id }, data: { nextAttemptAt: new Date(Date.now() - 1000) } });
+    row = await sweepUntilEmail(billId, (r) => r.attemptCount === MAX_ATTEMPTS);
+
+    expect(row.status).toBe('FAILED');
+    expect(row.attemptCount).toBe(MAX_ATTEMPTS);
+    expect(row.nextAttemptAt).toBeNull();
   });
 });
