@@ -27,7 +27,7 @@ written (2026-08-20) — re-check against those sources if this file looks stale
 | Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
-| Production Deployment | — (no doc yet) | ⬜ Not started | Phase 10, both tasks unchecked |
+| Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
 | Society-Level Income/Expense | — (no doc yet) | ⬜ Idea only | Surfaced during the bank-reference audit review; not designed |
 
 ## Auth & Access Control
@@ -189,11 +189,20 @@ wizard, a real `SinkingFund` model, bulk import of catalog rows, multi-society
 admin UX).
 
 ## Production Deployment
-**Status**: ⬜ Not started (Phase 10, tasks 10.1–10.2, both unchecked).
-**Scope implemented**: none beyond the dev-oriented Docker Compose setup from
-Phase 0 (`docker-compose.md`).
-**Pending**: a production-ready Docker Compose (10.1), `DEPLOY.md` + Certbot SSL
-setup (10.2). No dedicated feature doc exists yet for this phase.
+**Status**: ✅ Implemented (Phase 10, tasks 10.1–10.2, 2026-08-21).
+**Scope implemented**: `nginx`'s config mount is now a directory
+(`./nginx/conf.d`), enabling a live config swap without rebuilding the image; a
+`certbot` service auto-renews a Let's Encrypt certificate; `scripts/enable-https.sh`
+requests the first cert and swaps in `nginx/https.conf.template`. Confirmed
+decision: no purchased domain for this pilot (pre-revenue) — HTTPS is obtained
+against a free dynamic-DNS hostname (DuckDNS or similar) instead, since Let's
+Encrypt only requires a resolvable FQDN, not a registrar-purchased one. Plain HTTP
+(no `DOMAIN` set) remains fully supported — nothing else in the stack requires TLS.
+Full sequence: [`DEPLOY.md`](../../DEPLOY.md).
+**Pending**: database backups — there is no backup/restore mechanism anywhere in
+this stack (`postgres_data` is a single Docker volume on one VPS, no copy
+elsewhere). Not in Task 10.1/10.2's original scope; flagged in `DEPLOY.md` as a
+follow-up, no confirmed trigger yet.
 
 ## Society-Level Income/Expense
 **Status**: ⬜ Idea only — surfaced during a financial-audit-readiness review

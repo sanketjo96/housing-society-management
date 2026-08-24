@@ -83,14 +83,39 @@ services:
     restart: unless-stopped
     volumes:
       - frontend_dist:/usr/share/nginx/html:ro
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Directory mount, not a single file — nginx loads every *.conf here. Ships
+      # HTTP-only (nginx/conf.d/default.conf) until scripts/enable-https.sh (Task
+      # 10.2) overwrites that file with nginx/https.conf.template once a real
+      # cert exists; a directory mount also sidesteps the stale-bind-mount-inode
+      # gotcha a single-file mount had (docs/docker-compose.md).
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - frontend
       - backend
+
+  # Task 10.2: obtains and auto-renews the Let's Encrypt cert for ${DOMAIN} (a free
+  # dynamic-DNS hostname is enough — Let's Encrypt just needs a real FQDN pointing at
+  # this VPS, not a purchased domain). Idle until scripts/enable-https.sh is run; the
+  # renew-loop is harmless to leave running even before a cert exists.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h; done'"
 
 volumes:
   postgres_data:
   frontend_dist:
   uploads_data:
+  certbot_certs:
+  certbot_www:

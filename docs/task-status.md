@@ -283,5 +283,17 @@ Full findings, fixes, and reasoning: `docs/security-audit.md`.
 
 ## Phase 10 — Production Deployment
 
-- [ ] 10.1 Production-ready Docker Compose
-- [ ] 10.2 DEPLOY.md and Certbot SSL
+- [x] 10.1 Production-ready Docker Compose — `nginx`'s single-file config mount
+      became a directory mount (`./nginx/conf.d`), a `certbot` service was added
+      (auto-renewing, `certbot/certbot`'s official image), plus `certbot_certs`/
+      `certbot_www` shared volumes and port 443 published.
+- [x] 10.2 DEPLOY.md and Certbot SSL (2026-08-21) — confirmed decision: this pilot
+      has no purchased domain (pre-revenue), so HTTPS is obtained against a free
+      dynamic-DNS hostname (e.g. DuckDNS) instead — Let's Encrypt only needs a real
+      resolvable FQDN, not a paid registrar. `scripts/enable-https.sh` requests the
+      cert directly against the already-running HTTP-only nginx config (no
+      dummy-certificate bootstrap dance needed, since the ACME challenge path is
+      served from day one, plain-HTTP or not) and swaps in
+      `nginx/https.conf.template`. Staying on plain HTTP (no `DOMAIN` set) remains a
+      fully supported mode — nothing else in the stack requires TLS. Full sequence:
+      `DEPLOY.md`.

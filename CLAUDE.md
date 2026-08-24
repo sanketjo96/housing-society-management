@@ -859,6 +859,70 @@ Full contract: `docs/payments.md`'s balance-formula and Deposit-submission
 sections, `docs/data-model.md`'s `LedgerEntry` section, `docs/admin-dashboard.md`'s
 `getDashboardSummary`/`getFlatWiseDues` sections.
 
+### Addition (2026-08-21): Phase 10 production deployment — HTTPS without a purchased domain
+
+Confirmed decision, raised when closing out the last two unbuilt tracker items
+(10.1/10.2): this pilot is pre-revenue and will not have a purchased domain. That
+does **not** mean shipping without HTTPS — Let's Encrypt's only real requirement is
+a resolvable FQDN pointing at the VPS, which a free dynamic-DNS hostname (DuckDNS,
+No-IP, etc.) satisfies identically to a paid one, at zero cost. Plain HTTP-on-bare-IP
+was considered and rejected as the default: this app carries login passwords,
+session cookies, and payment-proof screenshots (often showing UPI IDs/bank details),
+and transmitting those in cleartext over the public internet is a real exposure for
+a financial app, not a theoretical one — a self-signed cert was also considered and
+rejected (trains residents to click through a browser trust warning, no better than
+plaintext for a first impression). The free-hostname path was chosen specifically
+because it closes the actual gap (encrypted transport) rather than working around it.
+
+**What was built**: `nginx`'s config mount changed from a single-file bind mount to
+a directory mount (`./nginx/conf.d`), so `scripts/enable-https.sh` can swap in
+`nginx/https.conf.template` (rendered with the real `DOMAIN`) once a certificate
+exists, without an image rebuild. A `certbot` service (official `certbot/certbot`
+image) auto-renews in the background. The base HTTP-only config
+(`nginx/conf.d/default.conf`) always serves the ACME HTTP-01 challenge path, even
+before any domain is configured — this means the first certificate can be requested
+against the stack exactly as it's already running, with no dummy-self-signed-cert
+bootstrap dance (the usual complication in nginx+certbot Docker recipes, needed only
+when an SSL server block is already active and pointing at cert files that don't
+exist yet). Full operator sequence: `DEPLOY.md` (new, root of repo).
+
+**Staying on plain HTTP remains fully supported, deliberately.** Leaving
+`DOMAIN`/`CERTBOT_EMAIL` blank in `.env` means nothing changes from before this
+addition — `COOKIE_SECURE` stays `false`, nothing requires a cert to exist. This
+was a considered choice, not an oversight: given the free-hostname path costs
+~20 minutes and removes a real security exposure, it should be the default for this
+pilot, but nothing in the stack forces it.
+
+**What did NOT get built, and remains a real gap**: database backups. There is no
+backup/restore mechanism anywhere in this project — `postgres_data` is a single
+Docker volume on one VPS with no copy elsewhere. This was flagged explicitly (in
+`DEPLOY.md` and `docs/feature-track/status.md`) rather than silently left out,
+since losing that disk loses every flat's financial history. Not in Task 10.1/10.2's
+original scope; needs its own confirmed task before this is safe to run unattended.
+
+### Addition (2026-08-21, same day): `npm test`/`npm run dev` were pointed at the same database as the live pilot
+
+Found while verifying the HTTPS work above: `server/.env`'s `DATABASE_URL` (used only
+when running the backend directly on the host, outside Docker — the deployed app's
+own `DATABASE_URL` is set separately, directly in `docker-compose.yml`'s
+`environment:` block) used the same database name, `smi_dev`, as the one the now-live
+pilot VPS actually serves from on the same Postgres instance/port. Confirmed this was
+live risk, not theoretical: two stray `Society`/`User` rows were found in the live
+`smi_dev`, traced to a `flats-tenant.service.test.ts` run that had been killed
+mid-suite before its (correctly-ordered) `afterAll` cleanup could run. Checked all 45
+test files that clean up data — no unscoped `deleteMany()`/`TRUNCATE` exists anywhere,
+so this couldn't have wiped real data outright, but nothing structurally prevented a
+future, less-careful test from doing so.
+
+**Fix**: a second database, `smi_test`, created inside the same Postgres
+container/instance (no second container, no `docker-compose.yml` change — the
+deployed app never reads `server/.env` at all). `server/.env`/`.env.example` now
+default `DATABASE_URL` to `smi_test`. Verified the isolation actually holds: ran the
+full suite twice against `smi_test` and confirmed `smi_dev`'s row counts didn't move
+either time. Full setup steps: `docs/database-setup.md`'s "Addendum (2026-08-21)".
+The two pre-existing stray rows in `smi_dev` are a separate, one-time cleanup — this
+fix only stops new ones from accumulating.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under

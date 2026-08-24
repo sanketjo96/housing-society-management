@@ -21,13 +21,15 @@ container, which exits 0 by design — see below). Logs: `docker compose logs -f
 | `postgres` | `postgres:16-alpine` | The database. Data persists in the named volume `postgres_data`. Bound to `127.0.0.1:5432` only — never exposed publicly. |
 | `backend` | built from `server/Dockerfile` | The Express API. Multi-stage build: compiles TypeScript and generates the Prisma client in a build stage, ships only the compiled `dist/` + production `node_modules` in the final image. Bound to `127.0.0.1:3000` only — reached from outside only through nginx's `/api/*` proxy (Task 0.5). |
 | `frontend` | built from `client/Dockerfile` | **Build-only** — not a long-running server. It builds the React app, then its container `CMD` copies the built static files into the shared `frontend_dist` volume and exits (0). `docker compose ps` won't show it as "running" after startup; that's expected — check with `docker compose ps -a` and look for `Exited (0)`. |
-| `nginx` | `nginx:1.27-alpine` | The only service exposed publicly (port 80; port 443 gets added in Task 10.2 once Certbot/SSL is wired up). Single entry point: serves the frontend's static files at `/`, reverse-proxies `/api/*` to the backend. See "How requests flow through nginx" below. |
+| `nginx` | `nginx:1.27-alpine` | The only service exposed publicly (ports 80 and 443 — 443 only actually serves once `scripts/enable-https.sh` has run, see `DEPLOY.md`). Single entry point: serves the frontend's static files at `/`, reverse-proxies `/api/*` to the backend. See "How requests flow through nginx" below. |
+| `certbot` | `certbot/certbot` | Task 10.2. Idle (a no-op renew-check loop) until `DOMAIN`/`CERTBOT_EMAIL` are set and `scripts/enable-https.sh` has requested a first certificate. See `DEPLOY.md`. |
 
 ## How requests flow through nginx (Task 0.5)
 
-`nginx/default.conf` has two `location` blocks. nginx picks the most specific (longest)
-matching prefix, so `/api/*` requests hit the proxy block even though `/` would also
-technically match:
+`nginx/conf.d/default.conf` (renamed from the top-level `nginx/default.conf` in Task
+10.2, see the gotcha note below) has two `location` blocks. nginx picks the most
+specific (longest) matching prefix, so `/api/*` requests hit the proxy block even
+though `/` would also technically match:
 
 ```nginx
 location /api/ {
@@ -85,6 +87,15 @@ unique marker into the config file, checking it was missing from
 theory), then confirming it appeared after the force-recreate. Worth remembering for
 `nginx/default.conf` specifically (and any other single-file bind mount) going forward —
 a plain reload is not always enough.
+
+**Since Task 10.2**, this is a non-issue for this particular file: `nginx`'s config
+mount changed from a single-file bind mount to a directory mount
+(`./nginx/conf.d:/etc/nginx/conf.d`, holding `default.conf`), needed anyway so
+`scripts/enable-https.sh` can overwrite that file in place once a certificate exists.
+A directory bind mount isn't pinned to a specific file's inode the way a single-file
+mount is, so a plain `nginx -s reload` after editing `nginx/conf.d/default.conf` is
+reliable again — `--force-recreate` is kept as a documented fallback in the script
+regardless, in case some other tool in the chain still replaces-by-rename.
 
 ## Why the frontend container "exits" — and why rebuilds still work
 
