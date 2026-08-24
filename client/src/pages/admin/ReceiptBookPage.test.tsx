@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
@@ -32,6 +32,7 @@ const receipts = [
       note: null,
       payer: { id: 'p1', name: 'Alice Owner', email: 'alice@example.com' },
       flat: { id: 'f1', wing: 'A', flatNumber: '101' },
+      otherChargeFeeTypeNames: [],
     },
   },
   {
@@ -45,6 +46,7 @@ const receipts = [
       note: null,
       payer: { id: 'p2', name: 'Bob Tenant', email: 'bob@example.com' },
       flat: { id: 'f2', wing: 'B', flatNumber: '202' },
+      otherChargeFeeTypeNames: ['Transfer Fee'],
     },
   },
 ];
@@ -79,6 +81,29 @@ describe('ReceiptBookPage', () => {
 
     expect(screen.getByText('Maintenance')).toBeInTheDocument();
     expect(screen.getByText('Other Charge')).toBeInTheDocument();
+  });
+
+  it("shows the fee type for an Other Charges receipt, and a dash for a Maintenance one", async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
+    const maintenanceRow = screen.getByText('RCPT-A101-abc123').closest('tr') as HTMLElement;
+    expect(within(maintenanceRow).getByText('—')).toBeInTheDocument();
+  });
+
+  it('searches by fee type name', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('RCPT-A101-abc123')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Search'), 'Transfer Fee');
+
+    await waitFor(() => {
+      expect(screen.queryByText('RCPT-A101-abc123')).not.toBeInTheDocument();
+      expect(screen.getByText('RCPT-B202-def456')).toBeInTheDocument();
+    });
   });
 
   it('filters by date range', async () => {

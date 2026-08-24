@@ -67,12 +67,21 @@ export function buildReceiptNumber(
 }
 
 // Purpose text is a generic label per category, not an itemized per-month breakdown
-// (confirmed scope decision) — a Deposit is never tied to specific MaintenanceRecords
-// under the ledger pivot. Credit (a separate, resident-requested adjustment type) was
-// removed for good 2026-08-20 — every LedgerEntry is a Deposit now, so there's no
-// longer a second branch here.
-function buildPurposeLabel(entry: ReceiptEntry): string {
-  return entry.category === 'OTHER_CHARGE' ? 'Other charges payment' : 'Maintenance dues payment';
+// for Maintenance (confirmed scope decision) — a Deposit is never tied to specific
+// MaintenanceRecords under the ledger pivot. For OTHER_CHARGE, though, the fee
+// type(s) this Deposit actually settled ARE knowable (2026-08-24 addition — see
+// OtherCharge.settledByLedgerEntryId's schema comment) and are folded into the
+// purpose line when supplied: "Transfer Fee payment" (one), "Transfer Fee, Parking
+// Fine payment" (several), falling back to the original generic "Other charges
+// payment" when none are supplied — which is exactly what happens for a legacy
+// entry approved before this shipped (never backfilled, same convention as this
+// feature's 2026-08-11 legacy-entry handling). Credit (a separate,
+// resident-requested adjustment type) was removed for good 2026-08-20 — every
+// LedgerEntry is a Deposit now, so there's no separate Credit branch here.
+function buildPurposeLabel(entry: ReceiptEntry, otherChargeFeeTypeNames?: string[]): string {
+  if (entry.category !== 'OTHER_CHARGE') return 'Maintenance dues payment';
+  if (!otherChargeFeeTypeNames || otherChargeFeeTypeNames.length === 0) return 'Other charges payment';
+  return `${otherChargeFeeTypeNames.join(', ')} payment`;
 }
 
 export function buildReceiptData(
@@ -80,7 +89,7 @@ export function buildReceiptData(
   flat: ReceiptFlat,
   payer: ReceiptPayer,
   society: ReceiptSociety,
-  opts: { date: Date },
+  opts: { date: Date; otherChargeFeeTypeNames?: string[] },
 ): ReceiptData {
   return {
     receiptNumber: buildReceiptNumber(society.receiptNumberPrefix, flat, entry.id),
@@ -90,7 +99,7 @@ export function buildReceiptData(
     flatLabel: `${flat.wing}-${flat.flatNumber}`,
     date: opts.date,
     transactionType: 'DEPOSIT',
-    purpose: buildPurposeLabel(entry),
+    purpose: buildPurposeLabel(entry, opts.otherChargeFeeTypeNames),
     // Rule: always the amount already stored on the entry at creation time, never
     // recomputed from current billing settings — see CLAUDE.md's "RATE CALCULATION
     // RULE" for the receipt feature. LedgerEntry.amount is set once at creation and
@@ -150,12 +159,33 @@ const RECEIPT_ENTRY_INCLUDE = {
   payer: { select: { name: true } },
 } as const;
 
+// "Still outstanding" for an OtherCharge is exactly settledByLedgerEntryId IS NULL
+// (see the schema comment) — this is the one query both the read-only preview and
+// the real approve/manualDeposit paths use to find out which charges a soon-to-be-
+// approved Deposit is about to settle. Exported so admin-ledger-service.ts can
+// reuse the same `ids` list to actually stamp those rows inside its own
+// transaction, rather than this file doing that write itself (approveLedgerEntry/
+// manualDeposit own their transactions; this file only ever reads).
+export async function getOpenOtherCharges(
+  flatId: string,
+): Promise<{ ids: string[]; feeTypeNames: string[] }> {
+  const open = await prisma.otherCharge.findMany({
+    where: { flatId, settledByLedgerEntryId: null },
+    select: { id: true, feeType: { select: { name: true } } },
+  });
+  return {
+    ids: open.map((c) => c.id),
+    feeTypeNames: [...new Set(open.map((c) => c.feeType.name))],
+  };
+}
+
 // Preview for the admin's approval modal — the requirement is "showing the *exact*
 // receipt that will be issued," so this reuses the exact same buildReceiptData +
 // renderReceiptPdf path the real approval uses (see ledger.service.ts's
 // prepareReceiptForEntry), guaranteeing byte-for-byte WYSIWYG. Deliberately has no
 // side effects: no storage.save(), no DB write — nothing is "issued" until the
-// admin actually confirms approval.
+// admin actually confirms approval, and no OtherCharge row is stamped here either
+// (see getOpenOtherCharges above).
 export async function previewReceiptPdf(
   entryId: string,
   societyId: string,
@@ -171,7 +201,14 @@ export async function previewReceiptPdf(
     where: { id: societyId },
     include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
   });
-  const data = buildReceiptData(entry, entry.flat, entry.payer, society, { date: new Date() });
+  const otherChargeFeeTypeNames =
+    entry.category === 'OTHER_CHARGE'
+      ? (await getOpenOtherCharges(entry.flatId)).feeTypeNames
+      : undefined;
+  const data = buildReceiptData(entry, entry.flat, entry.payer, society, {
+    date: new Date(),
+    otherChargeFeeTypeNames,
+  });
   const signatures = await getCommitteeSignatures(society);
   return renderReceiptPdf(data, signatures);
 }
@@ -180,15 +217,19 @@ export async function previewReceiptPdf(
 // and manualDeposit, *before* their respective $transactions open (same
 // "write the file, then commit the row" ordering already used elsewhere in this
 // codebase for Deposit/Credit proof uploads). Returns just enough for the caller
-// to create the Receipt row itself inside its transaction.
+// to create the Receipt row itself inside its transaction. `otherChargeFeeTypeNames`
+// is optional and only meaningful for an OTHER_CHARGE entry — the caller already
+// ran getOpenOtherCharges (it needs the `ids` too, to stamp them), so this file
+// doesn't re-query.
 export async function prepareReceiptForEntry(
   entry: ReceiptEntry,
   flat: ReceiptFlat,
   payer: ReceiptPayer,
   society: ReceiptSociety,
   issuedAt: Date,
+  otherChargeFeeTypeNames?: string[],
 ): Promise<{ receiptNumber: string; fileKey: string }> {
-  const data = buildReceiptData(entry, flat, payer, society, { date: issuedAt });
+  const data = buildReceiptData(entry, flat, payer, society, { date: issuedAt, otherChargeFeeTypeNames });
   const signatures = await getCommitteeSignatures(society);
   const pdfBuffer = await renderReceiptPdf(data, signatures);
   const { key } = await getStorageAdapter().save({

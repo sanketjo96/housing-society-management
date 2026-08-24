@@ -375,6 +375,10 @@ model LedgerEntry {
 
   receipt Receipt?
 
+  // Back-relation for OtherCharge.settledByLedgerEntryId above — only ever
+  // populated for an OTHER_CHARGE-category entry.
+  settledOtherCharges OtherCharge[]
+
   @@index([flatId])
   @@index([status])
 }
@@ -579,9 +583,26 @@ model OtherCharge {
   billedById String
   billedBy   User   @relation("OtherChargeBilledBy", fields: [billedById], references: [id])
 
+  // 2026-08-24 addition: which Deposit settled this charge, set once at approval
+  // time (approveLedgerEntry/manualDeposit) — a pure display breadcrumb for the
+  // receipt's purpose line and Receipt Book's Fee Type column, NOT a new source
+  // of truth for the Outstanding/balance math, which stays exactly the same pure
+  // sum of OtherCharge.amount vs. approved LedgerEntry.amount it always was.
+  // Null means "still outstanding" — no separate boolean needed. A single nullable
+  // FK (not a join table) is correct here specifically because an Other Charges
+  // Deposit is always full settlement (partial payment disallowed 2026-08-21): one
+  // Deposit can cover many charges, but a charge, once settled, is settled for
+  // good — never split across two different Deposits, so the many-to-many
+  // generality a join table would provide is never actually exercised. Left null
+  // for anything approved before this shipped (never backfilled, same convention
+  // as the 2026-08-11 receipts addendum's legacy-entry handling).
+  settledByLedgerEntryId String?
+  settledByLedgerEntry   LedgerEntry? @relation(fields: [settledByLedgerEntryId], references: [id])
+
   @@index([flatId])
   @@index([payerId])
   @@index([feeTypeId])
+  @@index([settledByLedgerEntryId])
 }
 
 // channel/recipient/status describe the send attempt itself. relatedEntityType +

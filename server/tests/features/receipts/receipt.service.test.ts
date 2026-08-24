@@ -2,9 +2,11 @@ import { PDFParse } from 'pdf-parse';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../../src/infrastructure/prisma/client';
 import { getStorageAdapter } from '../../../src/infrastructure/storage';
-import { approveLedgerEntry } from '../../../src/features/ledger/admin/admin-ledger-service';
+import { approveLedgerEntry, manualDeposit } from '../../../src/features/ledger/admin/admin-ledger-service';
 import { createDeposit } from '../../../src/features/ledger/resident/resident-ledger-service';
 import { createFlat } from '../../../src/features/flats/admin/admin-flats-onboarding-service';
+import { createFeeType } from '../../../src/features/fee-types/fee-types.service';
+import { billOtherCharge } from '../../../src/features/other-charges/other-charges.service';
 import {
   buildReceiptData,
   buildReceiptNumber,
@@ -113,6 +115,8 @@ describe('receipt service', () => {
     await prisma.receipt.deleteMany({ where: { societyId } });
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.otherCharge.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.feeType.deleteMany({ where: { societyId } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     const userIds = await prisma.user
       .findMany({ where: { societyId }, select: { id: true } })
@@ -159,7 +163,7 @@ describe('receipt service', () => {
       expect(data.amount).toBe(1500);
     });
 
-    it('uses the "Other charges payment" purpose for an OTHER_CHARGE category entry', () => {
+    it('uses the "Other charges payment" purpose for an OTHER_CHARGE category entry with no fee type names supplied (legacy, never backfilled)', () => {
       const entry = {
         id: 'e2',
         amount: 800,
@@ -169,6 +173,52 @@ describe('receipt service', () => {
       };
       const data = buildReceiptData(entry, flat, payer, society, { date: new Date('2026-08-11') });
       expect(data.purpose).toBe('Other charges payment');
+    });
+
+    // 2026-08-24 addition — see OtherCharge.settledByLedgerEntryId's schema comment.
+    it('folds a single supplied fee type name into the purpose line', () => {
+      const entry = {
+        id: 'e3',
+        amount: 500,
+        note: null,
+        payerId: 'p1',
+        category: 'OTHER_CHARGE' as const,
+      };
+      const data = buildReceiptData(entry, flat, payer, society, {
+        date: new Date('2026-08-24'),
+        otherChargeFeeTypeNames: ['Transfer Fee'],
+      });
+      expect(data.purpose).toBe('Transfer Fee payment');
+    });
+
+    it('joins multiple supplied fee type names into one purpose line', () => {
+      const entry = {
+        id: 'e4',
+        amount: 900,
+        note: null,
+        payerId: 'p1',
+        category: 'OTHER_CHARGE' as const,
+      };
+      const data = buildReceiptData(entry, flat, payer, society, {
+        date: new Date('2026-08-24'),
+        otherChargeFeeTypeNames: ['Transfer Fee', 'Parking Fine'],
+      });
+      expect(data.purpose).toBe('Transfer Fee, Parking Fine payment');
+    });
+
+    it('a MAINTENANCE entry ignores otherChargeFeeTypeNames entirely, even if supplied', () => {
+      const entry = {
+        id: 'e5',
+        amount: 1200,
+        note: null,
+        payerId: 'p1',
+        category: 'MAINTENANCE' as const,
+      };
+      const data = buildReceiptData(entry, flat, payer, society, {
+        date: new Date('2026-08-24'),
+        otherChargeFeeTypeNames: ['Transfer Fee'],
+      });
+      expect(data.purpose).toBe('Maintenance dues payment');
     });
   });
 
@@ -229,6 +279,33 @@ describe('receipt service', () => {
       await expect(previewReceiptPdf(approved!.id, societyId)).rejects.toThrow(
         LedgerEntryAlreadyReviewedError,
       );
+    });
+
+    // 2026-08-24 addition — end-to-end: the actual rendered PDF text for an Other
+    // Charges receipt now names the real fee type, not the generic label, and the
+    // preview (before approval) and the issued receipt (after) agree exactly.
+    it('an OTHER_CHARGE receipt names the real fee type in the PDF, not the generic label', async () => {
+      const feeType = await createFeeType(societyId, adminId, { name: `Transfer Fee ${Date.now()}` });
+      await billOtherCharge(societyId, adminId, { flatId, feeTypeId: feeType.id, amount: 650 });
+      const deposit = await createDeposit(
+        ownerId,
+        flatId,
+        societyId,
+        'OWNER',
+        { amount: 650 },
+        'OTHER_CHARGE',
+      );
+      const entryId = (deposit as { id: string }).id;
+
+      const previewBuffer = await previewReceiptPdf(entryId, societyId);
+      const previewText = await extractText(previewBuffer!);
+      expect(previewText).toContain(`${feeType.name} payment`);
+      expect(previewText).not.toContain('Other charges payment');
+
+      await approveLedgerEntry(entryId, societyId, adminId);
+      const issued = await getIssuedReceiptForViewing(entryId, adminId, 'ADMIN', societyId);
+      const issuedText = await extractText(await streamToBuffer(issued!.stream));
+      expect(issuedText).toContain(`${feeType.name} payment`);
     });
 
     it('preview and the eventually-issued receipt number match exactly (determinism)', async () => {

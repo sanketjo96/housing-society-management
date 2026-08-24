@@ -376,6 +376,66 @@ describe('ledger service', () => {
       expect(result).toBeNull();
       await prisma.society.delete({ where: { id: otherSociety.id } });
     });
+
+    // 2026-08-24 addition — see OtherCharge.settledByLedgerEntryId's schema
+    // comment: approving an OTHER_CHARGE deposit must stamp every currently-open
+    // OtherCharge row for that flat with this entry's id, so Receipt Book/the
+    // receipt PDF can later show which fee type(s) it actually covered.
+    it('approving an OTHER_CHARGE deposit stamps every open OtherCharge row for the flat', async () => {
+      const feeType = await createFeeType(societyId, adminId, { name: `Approve Stamp Fee ${Date.now()}` });
+      const charge = await billOtherCharge(societyId, adminId, { flatId, feeTypeId: feeType.id, amount: 700 });
+      const deposit = await createDeposit(
+        ownerId,
+        flatId,
+        societyId,
+        'OWNER',
+        { amount: 700 },
+        'OTHER_CHARGE',
+      );
+
+      const approved = await approveLedgerEntry(deposit.id, societyId, adminId);
+
+      const stamped = await prisma.otherCharge.findUniqueOrThrow({ where: { id: charge.id } });
+      expect(stamped.settledByLedgerEntryId).toBe(approved!.id);
+    });
+
+    it('does not touch an already-settled OtherCharge row on a later, unrelated approval', async () => {
+      const feeType = await createFeeType(societyId, adminId, { name: `Later Approve Fee ${Date.now()}` });
+      const firstCharge = await billOtherCharge(societyId, adminId, {
+        flatId,
+        feeTypeId: feeType.id,
+        amount: 200,
+      });
+      const firstDeposit = await createDeposit(
+        ownerId,
+        flatId,
+        societyId,
+        'OWNER',
+        { amount: 200 },
+        'OTHER_CHARGE',
+      );
+      const firstApproved = await approveLedgerEntry(firstDeposit.id, societyId, adminId);
+
+      const secondCharge = await billOtherCharge(societyId, adminId, {
+        flatId,
+        feeTypeId: feeType.id,
+        amount: 300,
+      });
+      const secondDeposit = await createDeposit(
+        ownerId,
+        flatId,
+        societyId,
+        'OWNER',
+        { amount: 300 },
+        'OTHER_CHARGE',
+      );
+      const secondApproved = await approveLedgerEntry(secondDeposit.id, societyId, adminId);
+
+      const firstAfter = await prisma.otherCharge.findUniqueOrThrow({ where: { id: firstCharge.id } });
+      const secondAfter = await prisma.otherCharge.findUniqueOrThrow({ where: { id: secondCharge.id } });
+      expect(firstAfter.settledByLedgerEntryId).toBe(firstApproved!.id);
+      expect(secondAfter.settledByLedgerEntryId).toBe(secondApproved!.id);
+    });
   });
 
   describe('payment intents', () => {
@@ -630,6 +690,20 @@ describe('ledger service', () => {
       const result = await manualDeposit(otherSociety.id, adminId, flatId, 100);
       expect(result).toBeNull();
       await prisma.society.delete({ where: { id: otherSociety.id } });
+    });
+
+    // 2026-08-24 addition — same stamping rule as approveLedgerEntry above, for the
+    // cash/bank-transfer fallback. Also exercises the ordering fix this needed:
+    // the LedgerEntry must be created before OtherCharge rows can be stamped with
+    // its id (a real FK, not just a plain string column).
+    it('a manual OTHER_CHARGE deposit stamps every open OtherCharge row for the flat', async () => {
+      const feeType = await createFeeType(societyId, adminId, { name: `Manual Stamp Fee ${Date.now()}` });
+      const charge = await billOtherCharge(societyId, adminId, { flatId, feeTypeId: feeType.id, amount: 400 });
+
+      const entry = await manualDeposit(societyId, adminId, flatId, 400, 'OTHER_CHARGE');
+
+      const stamped = await prisma.otherCharge.findUniqueOrThrow({ where: { id: charge.id } });
+      expect(stamped.settledByLedgerEntryId).toBe(entry!.id);
     });
   });
 

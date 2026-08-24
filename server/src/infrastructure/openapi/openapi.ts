@@ -252,6 +252,12 @@ const definition: swaggerJsdoc.Options['definition'] = {
                   flatNumber: { type: 'string' },
                 },
               },
+              otherChargeFeeTypeNames: {
+                type: 'array',
+                items: { type: 'string' },
+                description:
+                  'Distinct fee type name(s) this receipt settled, only for category=OTHER_CHARGE (2026-08-24 addition). Empty for MAINTENANCE, and for a legacy OTHER_CHARGE receipt approved before this shipped (never backfilled).',
+              },
             },
           },
         },

@@ -11,7 +11,7 @@ import type {
 import { prisma } from '../../../infrastructure/prisma/client';
 import { logger } from '../../../infrastructure/observability';
 import { LedgerEntryAlreadyReviewedError } from '../../../shared/errors/errors';
-import { prepareReceiptForEntry } from '../../receipts/receipt.service';
+import { getOpenOtherCharges, prepareReceiptForEntry } from '../../receipts/receipt.service';
 import { notify } from '../../notifications/notification.service';
 import { InvalidAmountError } from '../ledger-shared';
 
@@ -109,6 +109,13 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     where: { id: societyId },
     include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
   });
+  // Which OtherCharge rows this Deposit is about to settle (2026-08-24 addition) —
+  // only meaningful for category=OTHER_CHARGE, always empty otherwise. Computed
+  // once here, both for the receipt's purpose line below and to actually stamp
+  // these rows inside the transaction — a single read reused for both, not two
+  // separate queries.
+  const openOtherCharges =
+    entry.category === 'OTHER_CHARGE' ? await getOpenOtherCharges(entry.flatId) : { ids: [], feeTypeNames: [] };
   const issuedAt = new Date();
   const { receiptNumber, fileKey } = await prepareReceiptForEntry(
     entry,
@@ -116,6 +123,7 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     entry.payer,
     society,
     issuedAt,
+    openOtherCharges.feeTypeNames,
   );
 
   const { updated, receiptId } = await prisma.$transaction(async (tx) => {
@@ -124,6 +132,12 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
       data: { status: 'APPROVED', reviewedById: adminId, reviewedAt: issuedAt },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });
+    if (openOtherCharges.ids.length > 0) {
+      await tx.otherCharge.updateMany({
+        where: { id: { in: openOtherCharges.ids } },
+        data: { settledByLedgerEntryId: id },
+      });
+    }
     const receipt = await tx.receipt.create({
       data: { receiptNumber, fileKey, ledgerEntryId: id, issuedById: adminId, societyId, issuedAt },
     });
@@ -216,6 +230,8 @@ export async function manualDeposit(
     }),
   ]);
 
+  const openOtherCharges =
+    category === 'OTHER_CHARGE' ? await getOpenOtherCharges(flatId) : { ids: [], feeTypeNames: [] };
   const entryId = randomUUID();
   const issuedAt = new Date();
   const note = 'Manual deposit (cash/bank transfer)';
@@ -225,6 +241,7 @@ export async function manualDeposit(
     payer,
     society,
     issuedAt,
+    openOtherCharges.feeTypeNames,
   );
 
   const { entry, receiptId } = await prisma.$transaction(async (tx) => {
@@ -248,6 +265,14 @@ export async function manualDeposit(
       },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });
+    // Must come after the LedgerEntry create above — settledByLedgerEntryId is a
+    // real FK to LedgerEntry.id, which doesn't exist yet until this point.
+    if (openOtherCharges.ids.length > 0) {
+      await tx.otherCharge.updateMany({
+        where: { id: { in: openOtherCharges.ids } },
+        data: { settledByLedgerEntryId: entryId },
+      });
+    }
     const receipt = await tx.receipt.create({
       data: {
         receiptNumber,
