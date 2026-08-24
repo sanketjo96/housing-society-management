@@ -8,7 +8,7 @@ checklist) rather than replacing it: that file answers "which of the original
 11 phases/tasks are done," this one answers "for a given capability, is it live,
 and what's left." Status here is derived from `docs/task-status.md`, each
 feature's own doc set, and `git log`, verified at the time this file was
-written (2026-08-20) — re-check against those sources if this file looks stale.
+last updated (2026-08-24) — re-check against those sources if this file looks stale.
 
 ## Summary
 
@@ -17,10 +17,11 @@ written (2026-08-20) — re-check against those sources if this file looks stale
 | Auth & Access Control | [`auth.md`](../auth.md) | ✅ Implemented | Phase 2, complete |
 | Flat & Society Onboarding | [`flats.md`](../flats.md) | ✅ Implemented | Phase 3, complete incl. 2026-08-06 resident self-service redesign |
 | Maintenance Records | [`maintenance-records.md`](../maintenance-records.md) | ✅ Implemented | Phase 4, complete incl. arrears-billing fix |
-| Payments — Ledger, QR, Bank Transfer | [`payments.md`](../payments.md) | ✅ Implemented | Phase 6, complete through the 2026-08-12 bank-transfer fallback |
-| Admin Dashboard | [`admin-dashboard.md`](../admin-dashboard.md) | ✅ Implemented | Phase 8, complete incl. 2026-08-09 collection-rate fix |
+| Payments — Ledger, QR, Bank Transfer | [`payments.md`](../payments.md) | ✅ Implemented | Phase 6, complete through the 2026-08-20 final Credit removal (Deposit cap on Outstanding lifted instead) |
+| Admin Dashboard | [`admin-dashboard.md`](../admin-dashboard.md) | ✅ Implemented | Phase 8, complete incl. 2026-08-24 Outstanding card-group consolidation |
 | Receipts — Generation & Approval | [`receipts.md`](../receipts.md) | ✅ Implemented | 2026-08-11 addition, complete incl. Chairman/Secretary signing + Receipt Book |
-| Other Charges | [`other-charges/`](../other-charges/) | ✅ Implemented | 2026-08-19; 9 items explicitly deferred, see its own future-scope doc |
+| Other Charges | [`other-charges/`](../other-charges/) | ✅ Implemented | 2026-08-19, updated 2026-08-21 (partial payment disallowed); 9 items explicitly deferred, see its own future-scope doc |
+| Manage Finance | [`manage-finance/`](../manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
 | Observability | [`observablity/`](../observablity/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
 | Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Send mechanism live; most individual triggers unbuilt (superseded by WhatsApp for 3 of them) |
 | Notifications — WhatsApp | [`notification/`](../notification/) | 🟡 Code complete, external step pending | 3 events wired end-to-end; blocked on Meta template approval |
@@ -28,7 +29,7 @@ written (2026-08-20) — re-check against those sources if this file looks stale
 | Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
-| Society-Level Income/Expense | — (no doc yet) | ⬜ Idea only | Surfaced during the bank-reference audit review; not designed |
+| Society-Level Income/Expense | [`manage-finance/`](../manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
 
 ## Auth & Access Control
 **Status**: ✅ Implemented (Phase 2, tasks 2.1–2.8, all complete).
@@ -58,11 +59,16 @@ for demo data.
 **Status**: ✅ Implemented (Phase 6, through multiple confirmed pivots — see
 `payments.md`'s own pivot notes for the full history: record-selection →
 balance-based ledger → Credit removed → Credit re-introduced (allocation-based)
-→ per-record settlement status derived via FIFO → UPI/bank-transfer fallback).
+→ per-record settlement status derived via FIFO → UPI/bank-transfer fallback →
+Credit removed a third and final time, 2026-08-20).
 **Scope implemented**: payment-intent lock → QR (UPI) or bank details (fallback)
-→ optional-proof Deposit submission → admin approve/reject → manual mark-paid
-fallback → Credit (mandatory-proof committee adjustment) → derived per-record
-settlement status for Maintenance Book/escalation.
+→ optional-proof Deposit submission (amount cap on Outstanding lifted 2026-08-20
+— a resident may now pay beyond Outstanding, the excess becoming Available
+Credit automatically, with no separate Credit request/review path anymore) →
+admin approve/reject → manual mark-paid fallback → derived per-record settlement
+status for Maintenance Book/escalation. The Pay control (amount/QR/bank-transfer
+intent) moved from the Bills tab to the Payment History tab (2026-08-21),
+directly above the deposit list it feeds.
 **Pending**: no bank/UPI transaction reference captured on a Deposit — this is
 exactly the gap `bank-reference/` (below) is designed to close, not yet built.
 
@@ -71,7 +77,18 @@ exactly the gap `bank-reference/` (below) is designed to close, not yet built.
 against the ledger model).
 **Scope implemented**: outstanding total + collection-rate widget (deposits-only
 formula since the 2026-08-09 fix), flat-wise dues table, pending-proofs widget,
-flagged-flats escalation widget (configurable grace period).
+flagged-flats escalation widget (configurable grace period). Cards are grouped
+into titled containers — Finance (income/expense/net, merged with the former
+"Society Finance" group 2026-08-20; Maintenance Collection Rate card dropped
+entirely the same day), Outstanding (Total Outstanding + the Maintenance and
+Other Charges pools it's made of, consolidated into one container 2026-08-24;
+the standalone Total Maintenance Credit card was dropped the same day), and
+Society (owners/flats/tenants counts). "Mark as Paid" is its own page/route
+(`createdByType=ADMIN` filter), delinked from Payment Proofs, which is now
+reached only via its dashboard tile, not the sidebar (2026-08-20). The
+flat-wise-dues drill-down (`/flat-dues`) lists every owner rather than only
+those with a balance, with a Credit column and an explicit "Settled" indicator
+when both Outstanding and Credit are zero (2026-08-24).
 **Pending**: none known.
 
 ## Receipts — Generation & Approval
@@ -86,15 +103,45 @@ dashboard-only, proof-filtered Payment Proofs tabs.
 deliberately never backfilled (a documented, permanent state, not a gap).
 
 ## Other Charges
-**Status**: ✅ Implemented (commit `d1af274`, 2026-08-19).
+**Status**: ✅ Implemented (commit `d1af274`, 2026-08-19; partial-payment
+behavior updated `fd84a3e`, 2026-08-21).
 **Scope implemented**: admin-configurable Fee Types catalog, one-off billing to a
 flat's owner, a fully separate Outstanding pool (own dashboard cards, own book
 page, own Pay flow), reusing the existing approval queue/receipts/notifications.
+Unlike Maintenance, an Other Charges payment can no longer be partial or exceed
+the balance — the Pay amount is a read-only display of the full outstanding
+total, not an editable field (2026-08-21; Maintenance is unaffected and still
+allows partial payment/overpayment per payments.md rule 6). The Pay control also
+moved from the Bills tab to the Payment History tab, same as Maintenance.
 **Pending** (all explicitly deferred, see
 [`other-charges/05-future-scope.md`](../other-charges/05-future-scope.md)):
 bulk/multi-flat billing, tenant-as-payer, editing/voiding a charge, Other-Charges
 Credit, escalation extended to this pool, per-charge due dates, CSV import,
 default fee amounts, hard delete of a fee type. None have a confirmed trigger.
+
+## Manage Finance
+**Status**: ✅ Implemented (commit `39a87ac`, 2026-08-20).
+**Scope implemented**: a new `SocietyLedgerEntry` model — deliberately separate
+from the resident-centric `LedgerEntry` — tracking money the society itself
+pays out (vendor bills, salaries) or receives from non-resident sources (bank
+interest, common-area rental), with no flat/settlement math involved. Backed by
+a `SocietyLedgerCategory` catalog (income/expense heads, direction-bound,
+soft-delete via `isActive`), single-admin entry immutable once created (no
+approval workflow, matching `OtherCharge`'s precedent), mandatory proof
+attachment, `transactionDate` distinct from `createdAt`, `bankReference`
+required unless payment method is Cash. Admin "Manage Finance" page (direction
+toggle, category select filtered by direction) and "Finance categories" catalog
+under Settings; admin dashboard's Finance card group (Total Income/Expense/Net)
+computed independently of the resident-billing figures. Bulk historical import
+via `POST /api/admin/society-ledger/import` (Society Onboarding's Phase E,
+2026-08-21) reuses the same row-validator so the bulk and single-row paths
+can't drift apart.
+**Pending** (all explicitly deferred, see
+[`manage-finance/05-future-scope.md`](../manage-finance/05-future-scope.md)):
+two-person approval workflow, category rename (currently `isActive`-toggle
+only), admin-configurable opening balance (so "Net" becomes a true running bank
+balance instead of "recorded since tracking began"), CSV export,
+recurring/scheduled expenses. None have a confirmed trigger.
 
 ## Observability
 **Status**: 🟡 Partially implemented — Stage 1 only (commit `7c445aa`,
@@ -128,7 +175,11 @@ to manually share, by design (rule 8).
 cron delivery sweep, Meta Cloud API client, idempotency (unique key, no
 duplicate sends), transient-vs-permanent failure handling — wired end-to-end
 for three events: `MAINTENANCE_BILL_GENERATED`, `DEPOSIT_PAYMENT_APPROVED`,
-`CREDIT_PAYMENT_APPROVED`. Verified against a mocked WhatsApp client.
+`OTHER_CHARGE_BILLED`. The originally-listed third event,
+`CREDIT_PAYMENT_APPROVED`, no longer exists — it was replaced by
+`OTHER_CHARGE_BILLED` when Credit was removed for good (2026-08-20) and Other
+Charges shipped its own billed-event notification instead
+(`notification.types.ts`). Verified against a mocked WhatsApp client.
 **Pending**: real sends do not work yet — each event's Meta message template
 needs to be submitted and approved by Meta, an account-specific external step
 this environment can't perform (`notification/requirements.md` §5). Until
@@ -205,13 +256,13 @@ elsewhere). Not in Task 10.1/10.2's original scope; flagged in `DEPLOY.md` as a
 follow-up, no confirmed trigger yet.
 
 ## Society-Level Income/Expense
-**Status**: ⬜ Idea only — surfaced during a financial-audit-readiness review
-(the same review that produced `bank-reference/`), not yet designed.
-**Scope implemented**: none.
-**Pending**: everything. Proposed shape (not confirmed): a new
-`SocietyLedgerEntry`/`SocietyTransaction` model, independent of `Flat`, for
-money the society itself pays out or receives (vendor payments, salaries, bank
-interest) — deliberately kept separate from `LedgerEntry`, which is always
-flat-scoped. No doc folder exists for this yet; see
-[`bank-reference/05-future-scope.md`](../bank-reference/05-future-scope.md)
-item 2 for the one place it's currently written down.
+**Status**: ✅ Implemented, via the Manage Finance feature above (2026-08-20).
+This entry originally tracked the idea before it had a name or a doc folder —
+surfaced during the same financial-audit-readiness review that produced
+`bank-reference/`. `bank-reference/05-future-scope.md` item 2 still describes it
+as a future, undesigned item; that reference is now stale — see
+[`manage-finance/`](../manage-finance/) for the real, built feature (a
+`SocietyLedgerEntry` model, independent of `Flat`, deliberately separate from
+the flat-scoped `LedgerEntry`). Row kept here for history rather than deleted.
+**Pending**: nothing under this name — see Manage Finance's own Pending list
+above for what's still deferred within that feature.
