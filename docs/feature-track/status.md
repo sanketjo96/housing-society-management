@@ -98,9 +98,20 @@ outside the original numbering; all sub-items complete).
 deterministic receipt numbering, `manualDeposit` also issues a receipt, admin
 Settings receipt-template fields + signature upload, Chairman/Secretary dual
 signatory (2026-08-17), admin Receipt Book register (2026-08-18) with
-dashboard-only, proof-filtered Payment Proofs tabs.
+dashboard-only, proof-filtered Payment Proofs tabs. An Other Charges receipt's
+purpose line now names the real fee type(s) it settled (2026-08-24) —
+`OtherCharge.settledByLedgerEntryId`, a single nullable FK stamped once at
+approval time (correct as a single FK, not a join table, because an Other
+Charges Deposit is always full settlement — one Deposit can cover many
+charges, but a charge is never split across two), instead of the old generic
+"Other charges payment" label. Receipt Book gained a searchable Fee Type
+column reading the same link. Verified against the live deployment: a real
+Other Charges receipt's actual PDF text reads "Towards Membership fee
+payment."
 **Pending**: none known — legacy pre-2026-08-11 entries have no receipt and are
-deliberately never backfilled (a documented, permanent state, not a gap).
+deliberately never backfilled (a documented, permanent state, not a gap); a
+legacy Other Charges receipt from before 2026-08-24 falls back to the
+original generic purpose line for the same reason (no retroactive backfill).
 
 ## Other Charges
 **Status**: ✅ Implemented (commit `d1af274`, 2026-08-19; partial-payment
