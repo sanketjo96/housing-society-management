@@ -1,0 +1,289 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Check, Download, Eye, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { DataTable } from '../../components/data-table/DataTable';
+import { LedgerCategoryBadge } from '../_shared/components/ledger-category-badge/LedgerCategoryBadge';
+import { ReceiptApprovalModal } from './components/receipt-approval-modal/ReceiptApprovalModal';
+import { authedFetch } from '../../lib/api';
+import { downloadAuthedFile } from '../../lib/download-file';
+import type { LedgerEntryStatus, CreatedByType, LedgerEntryListItem } from './types';
+
+// Who created the row, distinct from the payer it's for.
+const CREATED_BY_META: Record<CreatedByType, { className: string; label: string }> = {
+  OWNER: { className: 'border border-line text-ink', label: 'Owner' },
+  TENANT: { className: 'border border-line text-ink', label: 'Tenant' },
+  ADMIN: { className: 'border border-teal text-teal', label: 'Admin' },
+};
+
+function CreatedByBadge({ type }: { type: CreatedByType }) {
+  const meta = CREATED_BY_META[type];
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
+}
+
+const STATUS_TABS: { value: LedgerEntryStatus; label: string }[] = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
+async function fetchLedgerEntries(status: LedgerEntryStatus): Promise<LedgerEntryListItem[]> {
+  const res = await authedFetch(`/api/admin/ledger-entries?status=${status}`);
+  if (!res.ok) throw new Error('Could not load ledger entries.');
+  return res.json();
+}
+
+// Approved/Rejected rows can lack a file (e.g. a manually-marked-paid entry).
+function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean }) {
+  const [viewError, setViewError] = useState<string | null>(null);
+
+  if (!hasFile) return <span className="text-xs text-muted">No file attached</span>;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setViewError(null);
+          downloadAuthedFile(`/api/ledger-entries/${entryId}/file`, 'Could not load the proof file.').catch(
+            (e: Error) => setViewError(e.message),
+          );
+        }}
+        className="flex items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-teal"
+      >
+        <Eye size={13} /> View proof
+      </button>
+      {viewError && <p className="mt-1 text-xs text-coral">{viewError}</p>}
+    </>
+  );
+}
+
+// A legacy entry with no Receipt row 404s here — shown inline, not a bug.
+function ReceiptDownloadCell({ entryId }: { entryId: string }) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          downloadAuthedFile(`/api/ledger-entries/${entryId}/receipt`, 'No receipt was issued for this entry.').catch(
+            (e: Error) => setError(e.message),
+          );
+        }}
+        className="flex items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-teal"
+      >
+        <Download size={13} /> Download receipt
+      </button>
+      {error && <p className="mt-1 text-xs text-coral">{error}</p>}
+    </>
+  );
+}
+
+function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
+  const queryClient = useQueryClient();
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+
+  // Fired by ReceiptApprovalModal's "Confirm and approve", not the Approve button itself.
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not approve this entry.');
+      return body;
+    },
+    onSuccess: () => {
+      setShowApprovalModal(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason || undefined }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? 'Could not reject this entry.');
+      return body;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] }),
+  });
+
+  return (
+    <>
+      {!rejecting && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowApprovalModal(true)}
+            className="flex items-center gap-1 rounded-md bg-teal px-2.5 py-1.5 text-xs font-semibold text-white"
+          >
+            <Check size={12} /> Approve
+          </button>
+          <button
+            type="button"
+            onClick={() => setRejecting(true)}
+            className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-ink"
+          >
+            <X size={12} /> Reject
+          </button>
+        </div>
+      )}
+      {rejecting && (
+        <div className="flex flex-col gap-1.5">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)"
+            aria-label={`Rejection reason for ${entry.payer.name}'s entry`}
+            className="rounded-md border border-line px-2 py-1 text-xs"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => rejectMutation.mutate()}
+              disabled={rejectMutation.isPending}
+              className="rounded-md bg-coral px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+            >
+              Confirm reject
+            </button>
+            <button
+              type="button"
+              onClick={() => setRejecting(false)}
+              className="rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {rejectMutation.error && <p className="mt-1 text-xs text-coral">{(rejectMutation.error as Error).message}</p>}
+
+      {showApprovalModal && (
+        <ReceiptApprovalModal
+          entryId={entry.id}
+          residentName={entry.payer.name}
+          onCancel={() => setShowApprovalModal(false)}
+          onConfirm={() => approveMutation.mutate()}
+          isConfirming={approveMutation.isPending}
+          confirmError={(approveMutation.error as Error | null)?.message}
+        />
+      )}
+    </>
+  );
+}
+
+export function PaymentProofsPage() {
+  const [status, setStatus] = useState<LedgerEntryStatus>('PENDING');
+  const { data: fetched, isLoading, isError } = useQuery({
+    queryKey: ['admin-ledger-entries', status],
+    queryFn: () => fetchLedgerEntries(status),
+  });
+
+  // Pending/Approved only show entries with a proof attached. Rejected stays unfiltered.
+  const data = useMemo(
+    () => (status === 'REJECTED' ? fetched : fetched?.filter((e) => e.fileUrl)),
+    [fetched, status],
+  );
+
+  const columns = useMemo<ColumnDef<LedgerEntryListItem, unknown>[]>(
+    () => [
+      {
+        id: 'flat',
+        header: 'Flat',
+        meta: { headerClassName: 'w-36', cellClassName: 'w-36 max-w-36' },
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.flat.wing}-{row.original.flat.flatNumber}
+            <div className="text-xs text-muted">{row.original.payer.name}</div>
+          </span>
+        ),
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        cell: ({ row }) => <LedgerCategoryBadge category={row.original.category} />,
+      },
+      {
+        id: 'createdBy',
+        header: 'Created by',
+        cell: ({ row }) => <CreatedByBadge type={row.original.createdByType} />,
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span className="font-mono-brand text-ink">₹{Number(row.original.amount).toLocaleString('en-IN')}</span>
+        ),
+      },
+      {
+        id: 'proof',
+        header: 'Proof',
+        cell: ({ row }) => <ProofFileCell entryId={row.original.id} hasFile={!!row.original.fileUrl} />,
+      },
+      {
+        id: 'actions',
+        header: status === 'APPROVED' ? 'Receipt' : 'Actions',
+        cell: ({ row }) => {
+          if (row.original.status === 'PENDING') return <EntryActionsCell entry={row.original} />;
+          if (row.original.status === 'APPROVED') return <ReceiptDownloadCell entryId={row.original.id} />;
+          return <span className="text-xs text-muted">{row.original.note ?? '—'}</span>;
+        },
+      },
+    ],
+    [status],
+  );
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-6">
+        <h1 className="m-0 font-display text-xl text-ink">Payment proofs</h1>
+        <p className="m-0 mt-0.5 text-xs text-muted">{data?.length ?? 0} entries</p>
+      </div>
+
+      <div className="mb-4 flex gap-2" role="tablist">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={status === tab.value}
+            onClick={() => setStatus(tab.value)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+              status === tab.value ? 'bg-teal text-white' : 'border border-line text-ink'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading && <p className="text-sm text-muted">Loading…</p>}
+      {isError && (
+        <p role="alert" className="text-sm text-coral">
+          Could not load ledger entries.
+        </p>
+      )}
+
+      {data && (
+        <DataTable
+          data={data}
+          columns={columns}
+          getRowId={(e) => e.id}
+          emptyMessage={`No ${status.toLowerCase()} entries.`}
+        />
+      )}
+    </div>
+  );
+}
