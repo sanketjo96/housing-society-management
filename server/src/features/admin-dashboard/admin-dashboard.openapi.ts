@@ -16,10 +16,10 @@ export {};
  *               type: object
  *               properties:
  *                 totalBilled: { type: number, description: Sum of every MaintenanceRecord.amount ever generated. }
- *                 totalPaid: { type: number, description: Sum of approved Deposits + approved Credits, society-wide. }
+ *                 totalPaid: { type: number, description: Sum of approved Deposits, society-wide. }
  *                 outstandingTotal: { type: number, description: Sum of each flat's own Outstanding. }
  *                 pendingReviewTotal: { type: number, description: Sum of amounts on still-PENDING Deposits. }
- *                 collectionRatePercent: { type: number, description: 'round(approvedDeposits-only / totalBilled * 100) — Credit deliberately excluded, see CLAUDE.md.' }
+ *                 collectionRatePercent: { type: number, description: 'round(totalPaid / totalBilled * 100).' }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
@@ -50,7 +50,7 @@ export {};
  *                   currentTenant:
  *                     allOf: [{ $ref: '#/components/schemas/ContactSummary' }]
  *                     nullable: true
- *                   paidTotal: { type: number, description: This flat's approved Deposits + approved Credits, cumulative. }
+ *                   paidTotal: { type: number, description: This flat's approved Deposits, cumulative. }
  *                   outstandingTotal: { type: number }
  *                   creditTotal: { type: number, description: This flat's Available Credit. }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -89,7 +89,7 @@ export {};
  *                     allOf: [{ $ref: '#/components/schemas/ContactSummary' }]
  *                     nullable: true
  *                   outstandingMaintenance: { type: number }
- *                   paidMaintenance: { type: number, description: This flat's approved Deposits + approved Credits, cumulative, Maintenance pool only. }
+ *                   paidMaintenance: { type: number, description: This flat's approved Deposits, cumulative, Maintenance pool only. }
  *                   creditMaintenance: { type: number, description: This flat's Available Credit, Maintenance pool only. }
  *                   outstandingOtherCharges: { type: number }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
