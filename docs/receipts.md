@@ -51,6 +51,54 @@ to keep in sync by hand.
   text, the rate-calculation rule, `manualDeposit`'s receipt issuance, and the legacy
   no-backfill 404 — is unchanged.
 
+## Addendum (2026-08-26): approval blocked entirely when no signatures are configured
+
+Confirmed decision: an admin must never be able to approve a Deposit — via the
+Payment Proofs "Confirm and approve" flow *or* the "Mark as paid" manual
+cash/bank-transfer fallback — while the society has **neither** a Chairman nor a
+Secretary signature uploaded (Settings → Committee). Both approval paths issue a
+real `Receipt` (see below), and a receipt with a completely blank signatory block
+is not acceptable output for a financial document.
+
+This is a narrower, harder rule than the existing "broken signature file" handling
+described in the Signature upload section below — read the distinction carefully,
+because the two look similar but are not the same check:
+
+- **Nothing configured at all** (`chairmanSignatureFileKey` and
+  `secretarySignatureFileKey` both `null`) → **blocks the approval outright**, new
+  as of this addendum. `receipt.service.ts`'s `assertSignaturesConfigured` throws
+  `SignaturesNotConfiguredError` (`server/src/shared/errors/errors.ts`), mapped to
+  `409` by the controller — same status code family as
+  `PaymentMethodNotConfiguredError` (a society-configuration gap, not a bad
+  request). Called from `previewReceiptPdf` (so the admin sees this *before* even
+  reaching "Confirm and approve" — the preview modal's existing error rendering,
+  `ReceiptApprovalModal.tsx`, needed no changes since it already surfaces whatever
+  message the preview endpoint returns) and from `prepareReceiptForEntry` (the
+  single choke point both `approveLedgerEntry` and `manualDeposit`
+  (`admin-ledger-service.ts`) call before opening their `$transaction` — so a
+  block here has zero side effects: no status change, no `Receipt` row, no
+  `AuditLog` entry).
+- **Configured but unreadable at render time** (file deleted out-of-band, storage
+  adapter misconfigured) → still falls back to the blank-line rendering, silently,
+  exactly as before (`getSignatureBufferOrUndefined`'s existing behavior, unchanged
+  by this addendum). The rationale for *that* fallback — "a financial transaction
+  settling is never blocked by a broken decorative image" — was written for a
+  signature that *was* configured; it was never meant to justify approving with a
+  signatory block that was never set up in the first place, which is the gap this
+  addendum closes.
+
+**At least one role, not both.** Either Chairman or Secretary alone is enough to
+unblock approval — the per-role "may be unassigned, falls back to blank line"
+behavior from the 2026-08-17 addendum above is otherwise unchanged. Only the
+all-both-missing case is newly blocked.
+
+**Frontend**: no changes were needed. `ReceiptApprovalModal.tsx`'s preview fetch
+already renders any thrown error message inline (`previewError`) and already keeps
+"Confirm and approve" disabled while `previewUrl` is unset — since a blocked
+preview never resolves to a URL, the confirm button is never reachable. On the
+"Mark as paid" page, the same 409 message renders through the existing
+`ErrorBanner`/`submitMutation.error` plumbing (`MarkAsPaidPage.tsx`).
+
 ## Approval flow
 
 Clicking **Approve** on a pending Deposit no longer settles it directly (Credit,
@@ -153,7 +201,9 @@ the new file before deleting the old one" test.
 out-of-band, adapter misconfigured, etc.), `receipt.service.ts`'s
 `getSignatureBufferOrUndefined` catches the failure, logs a warning, and falls
 back to the blank-line rendering — a financial transaction settling is never
-blocked by a broken decorative image.
+blocked by a broken decorative image. This is distinct from **nothing being
+configured at all**, which — since the 2026-08-26 addendum above — blocks
+approval outright rather than falling back silently.
 
 ## Rate calculation rule — read the stored amount, never recompute
 
@@ -214,9 +264,9 @@ fields is stored separately; the PDF itself **is** the frozen snapshot.
 
 | Method & path | Access | Notes |
 |---|---|---|
-| `GET /api/admin/ledger-entries/:id/receipt-preview` | Admin only | Streams the unsaved preview PDF. `404` not found/wrong society, `409` if not `PENDING` (reuses `LedgerEntryAlreadyReviewedError`). No side effects. |
-| `POST /api/admin/ledger-entries/:id/approve` | Admin only | Unchanged request/response shape — now also issues the receipt as described above. |
-| `POST /api/admin/ledger-entries/manual-deposit` | Admin only | Unchanged — also issues a receipt (see "manualDeposit also issues a receipt" below). |
+| `GET /api/admin/ledger-entries/:id/receipt-preview` | Admin only | Streams the unsaved preview PDF. `404` not found/wrong society, `409` if not `PENDING` (reuses `LedgerEntryAlreadyReviewedError`) or if no signature is configured (`SignaturesNotConfiguredError`, 2026-08-26 addendum above). No side effects. |
+| `POST /api/admin/ledger-entries/:id/approve` | Admin only | Unchanged request/response shape — now also issues the receipt as described above. `409` if no signature is configured (2026-08-26 addendum above). |
+| `POST /api/admin/ledger-entries/manual-deposit` | Admin only | Unchanged — also issues a receipt (see "manualDeposit also issues a receipt" below). `409` if no signature is configured (2026-08-26 addendum above). |
 | `GET /api/ledger-entries/:id/receipt` | Admin or the entry's own payer | Shared with the resident Passbook (not under `/admin`) — same route family and auth shape as the existing `GET /api/ledger-entries/:id/file`. `404` if no `Receipt` row exists yet (still pending, or a legacy pre-2026-08-11 entry); `403` via `ForbiddenLedgerEntryAccessError` if the caller is neither an admin nor the payer. |
 | `POST`/`DELETE`/`GET /api/admin/settings/signature` | Admin only | Upload/remove/preview the treasurer's signature image. |
 
@@ -452,3 +502,10 @@ frontend page gained a searchable Fee Type column.
 real Other Charge, manually marked it paid, and read the actual issued PDF's
 extracted text — it reads `"Towards Membership fee payment"`, not the old
 generic line.
+
+**Display-label note (2026-08-26)**: "Fee Type" is renamed to "Custom Fee"
+everywhere it's shown to a user (Receipt Book's column header above, search
+placeholder, and every other admin/resident page) — copy only, the
+`FeeType` model, `feeTypeId` field, and `/api/admin/fee-types` route are
+unchanged. See `CLAUDE.md`'s "Addendum (2026-08-26)" for the full rename
+inventory and the related Other Charges billing-page warning-banner change.

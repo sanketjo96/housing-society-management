@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft, Download, Plus, Save } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DataTable } from '../../components/DataTable';
-import { ErrMsg, ErrorBanner, Field, inputClass } from '../../components/FormField';
+import { ErrMsg, ErrorBanner, Field, inputClass, WarningBanner } from '../../components/FormField';
 import { FileUploadField } from '../../components/FileUploadField';
 import { authedFetch } from '../../lib/api';
 
@@ -166,9 +167,23 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
         </div>
       </Field>
 
+      {/* Page/form stay reachable either way — a missing catalog for the currently
+          selected direction is a warning + link to go configure one, not a block,
+          same pattern as OtherChargesPage.tsx's Custom Fee warning. */}
+      {!categoriesLoading && categories?.length === 0 && (
+        <WarningBanner>
+          No {direction === 'INCOME' ? 'Income' : 'Expense'} categories are set up yet, so there's
+          nothing to record against. Add one on{' '}
+          <Link to="/settings/finance-categories" className="font-semibold text-brass underline">
+            Settings → Finance Categories
+          </Link>{' '}
+          first.
+        </WarningBanner>
+      )}
+
       <Field label="Category">
         <select
-          disabled={categoriesLoading}
+          disabled={categoriesLoading || categories?.length === 0}
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
           className={inputClass}

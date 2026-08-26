@@ -923,6 +923,113 @@ either time. Full setup steps: `docs/database-setup.md`'s "Addendum (2026-08-21)
 The two pre-existing stray rows in `smi_dev` are a separate, one-time cleanup — this
 fix only stops new ones from accumulating.
 
+### Addendum (2026-08-26): approving a Deposit is blocked outright with no committee signatures configured
+
+Confirmed decision: neither the Payment Proofs "Confirm and approve" flow nor the
+admin "Mark as paid" cash/bank-transfer fallback may approve a Deposit while the
+society has **neither** a Chairman nor a Secretary signature uploaded (Settings →
+Committee, § "Addendum (2026-08-17)" above). Both paths issue a real `Receipt`
+(§ "Addition (2026-08-11)" above) — a receipt with a fully blank signatory block
+was judged unacceptable output for a financial document, not a cosmetic gap.
+
+**Deliberately narrower than it might first look — read against the existing
+"never block a financial transaction over a missing/broken signature" rule
+(2026-08-11 section above) before assuming a conflict.** That rule was written for
+a signature that *is* configured but can't be read at render time (file deleted
+out-of-band, storage adapter misconfigured) — a genuinely different failure mode
+from *nothing ever being configured*, which is what this addendum blocks. The
+existing per-role fallback is also unchanged: either Chairman or Secretary alone
+is enough to unblock approval; a receipt with only one signatory block filled in
+still renders and issues normally, exactly as it did before this addendum — only
+the both-missing case is newly blocked.
+
+**Mechanism**: a new `SignaturesNotConfiguredError` (`server/src/shared/errors/
+errors.ts`), thrown by `receipt.service.ts`'s `assertSignaturesConfigured` —
+called from `previewReceiptPdf` (so an admin sees this before ever reaching
+"Confirm and approve") and from `prepareReceiptForEntry`, the single choke point
+both `approveLedgerEntry` and `manualDeposit` (`admin-ledger-service.ts`) call
+*before* opening their `$transaction` — so a block here has zero side effects: no
+status change, no `Receipt` row, no `AuditLog` entry. Mapped to `409` by the
+controller, same status-code family as `PaymentMethodNotConfiguredError` (a
+society-configuration gap, not a malformed request). No frontend changes were
+needed: `ReceiptApprovalModal.tsx` already renders any preview-fetch error inline
+and already keeps "Confirm and approve" disabled while no preview has loaded; the
+"Mark as paid" page already renders a `manualDeposit` error through its existing
+`ErrorBanner`. Full contract: `docs/receipts.md`'s "Addendum (2026-08-26)" section.
+
+### Addendum (2026-08-26, same day): Maintenance Book's Pay widget stays visible at ₹0 Outstanding
+
+Confirmed decision: `MaintenanceBookPage.tsx`'s Pay widget (amount field + Pay
+button) was previously gated behind `outstanding > 0` — at ₹0 Outstanding it
+disappeared entirely, showing only "Nothing outstanding right now" with no way to
+act. That blocked a real, intended use case: a resident who wants to deposit an
+advance amount now, to be settled against maintenance in a future month. This is
+not a new capability — the 2026-08-20 pivot above already made any Deposit amount
+land as `Available Credit` once it exceeds current Outstanding, auto-consumed by
+the next generated `MaintenanceRecord` via the existing FIFO settlement fill — the
+UI simply had no way to reach that path once Outstanding hit ₹0.
+
+**The fix is UI-only.** No backend change: `createOrReplacePaymentIntent` already
+only validated `amount > 0`, with no Outstanding-relative cap, since 2026-08-20.
+The widget's visibility gate (`outstanding > 0 && !intentQuery.data`) drops the
+`outstanding > 0` half — only an already-open payment intent still hides it. Two
+small UX adjustments that go with unhiding it: the amount field's pre-fill
+(previously always `String(outstanding)`) leaves the field **blank** at ₹0
+Outstanding instead of pre-filling `"0"` — a prefilled zero would otherwise
+immediately trip the existing "enter an amount greater than ₹0" validation message
+on load; and the field's label switches to **"Amount to deposit"** at ₹0
+Outstanding (**"Amount to pay"** otherwise, unchanged) so the advance-deposit
+intent is clear without adding a second, separate control. The existing "overpay →
+Available Credit" inline hint needed no change — at ₹0 Outstanding, any entered
+amount is by definition an overpayment, so the hint now does double duty as the
+advance-deposit confirmation. Full contract: `docs/payments.md`'s "Frontend —
+resident payment flow" section.
+
+### Addendum (2026-08-26, same day): "Fee Type" renamed to "Custom Fee"; empty-catalog pages warn instead of block
+
+Confirmed decisions, two related but independent changes to the Other Charges
+(Custom Bills) and Manage Finance features.
+
+**1. Display-copy rename, "Fee Type" → "Custom Fee".** User-facing text only —
+the `FeeType` Prisma model, `feeTypeId` field, `/api/admin/fee-types` /
+`/settings/fee-types` routes, React Query keys, and error class names
+(`FeeTypeNotFoundError`, `FeeTypeNotBillableError`) are all unchanged, since
+none of those are user-visible. Every string a user actually reads was
+renamed: the Settings nav item and page (`FeeTypesPage.tsx` — heading, "Add/
+Save custom fee" buttons, empty state), the Custom Bills billing form's field
+label/placeholder/table header (`OtherChargesPage.tsx`), Receipt Book's column
+header and search placeholder, the Other Charges Flat Dues and Other Charges
+Book table headers, the Charges CSV import page's help copy
+(`BulkChargesImportPage.tsx`), the public OpenAPI docs' tag/summary/
+description text (`fee-types.openapi.ts`, `other-charges.openapi.ts`), and
+every server-thrown message a user can actually see (`"Custom fee is
+required"`, `"This custom fee is not available for billing..."`, `"Custom fee
+not found"`, and the bulk-import row error `"Custom fee \"X\" not found or
+inactive"`). CSV column names (`feetypename`) are unchanged — a machine-
+readable header, not display copy.
+
+**2. The Custom Bills billing form and the Manage Finance record-entry form
+both stay reachable with an empty catalog — a warning + Settings link, not a
+block.** Originally floated as "shouldn't be accessible until configured,"
+then corrected mid-discussion to the pattern actually built: the page opens
+normally; if the relevant catalog is empty (all Custom Fees for
+`OtherChargesPage.tsx`, or the active Finance Categories for the currently
+selected Income/Expense direction on `ManageFinancePage.tsx`), a new shared
+`WarningBanner` (`client/src/components/FormField.tsx`, amber/`AlertTriangle`,
+sibling to the existing coral `ErrorBanner`) explains the gap and links
+straight to where to fix it (`/settings/fee-types` or
+`/settings/finance-categories`), and the relevant `<select>` plus the submit
+button are disabled (there's nothing valid to pick or submit anyway) — but the
+rest of the form, and the page itself, render exactly as before. On Manage
+Finance this is evaluated per selected direction, not once for the whole
+page, since Income and Expense draw from disjoint category lists
+(`fetchActiveFinanceCategories(direction)`) and one can be configured while
+the other isn't. No backend change either place — both catalogs were already
+enforced server-side via required-field validation
+(`other-charges.schemas.ts`'s `feeTypeId`, and `categoryId` client-side on
+Manage Finance); this only makes the empty-catalog case legible instead of a
+generic "required" error after the fact.
+
 ### Confirmed decisions (resolved during requirements intake, 2026-08-05)
 
 - **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under

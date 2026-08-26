@@ -37,7 +37,7 @@ export {};
  *               note: { type: string }
  *     responses:
  *       201: { description: Created. }
- *       400: { description: Invalid input, non-positive amount, or an inactive/missing fee type. }
+ *       400: { description: Invalid input, non-positive amount, or an inactive/missing custom fee. }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
  *       404: { description: Flat not found. }

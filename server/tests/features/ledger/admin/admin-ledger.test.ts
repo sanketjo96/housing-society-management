@@ -27,6 +27,14 @@ describe('/api/admin/ledger-entries*', () => {
     });
     societyId = society.id;
 
+    // approve/manual-deposit both issue a receipt, blocked unless at least one
+    // committee signature is configured (SignaturesNotConfiguredError) — see the
+    // dedicated 409 tests below for the unconfigured case.
+    await prisma.society.update({
+      where: { id: societyId },
+      data: { chairmanSignatureFileKey: 'fake-chairman-signature-key.png' },
+    });
+
     const adminPassword = 'admin-password-123';
     const admin = await createUser({
       name: 'Admin Ledger Admin',
@@ -158,6 +166,70 @@ describe('/api/admin/ledger-entries*', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('APPROVED');
+    });
+
+    it('returns 409 and never approves when the society has no signatures configured', async () => {
+      const unsignedSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const unsignedSociety = await prisma.society.create({
+        data: {
+          name: `Unsigned Admin Ledger Society ${unsignedSuffix}`,
+          address: '2 Test St',
+          upiVpa: `unsigned-admin-ledger-${unsignedSuffix}@okhdfcbank`,
+        },
+      });
+      const unsignedAdmin = await createUser({
+        name: 'Unsigned Admin',
+        email: `unsigned-admin-${unsignedSuffix}@example.com`,
+        password: 'admin-password-123',
+        role: 'ADMIN',
+        societyId: unsignedSociety.id,
+      });
+      const unsignedAdminToken = (
+        await login({ email: unsignedAdmin.email, password: 'admin-password-123' })
+      ).accessToken;
+      const unsignedOwnerPassword = 'owner-password-123';
+      const unsignedOwner = await createUser({
+        name: 'Unsigned Owner',
+        email: `unsigned-owner-${unsignedSuffix}@example.com`,
+        password: unsignedOwnerPassword,
+        role: 'OWNER',
+        societyId: unsignedSociety.id,
+      });
+      const unsignedOwnerToken = (
+        await login({ email: unsignedOwner.email, password: unsignedOwnerPassword })
+      ).accessToken;
+      const unsignedFlat = await createFlat({
+        societyId: unsignedSociety.id,
+        wing: 'U',
+        flatNumber: '1',
+        baseRate: 1000,
+        ownerName: 'Unsigned Owner',
+        ownerEmail: unsignedOwner.email,
+      });
+
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${unsignedOwnerToken}`)
+        .field('amount', '50')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(created.status).toBe(201);
+
+      const res = await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${unsignedAdminToken}`);
+      expect(res.status).toBe(409);
+
+      const entry = await prisma.ledgerEntry.findUnique({ where: { id: created.body.id } });
+      expect(entry!.status).toBe('PENDING');
+
+      await prisma.ledgerEntry.deleteMany({ where: { flatId: unsignedFlat!.id } });
+      await prisma.maintenanceRecord.deleteMany({ where: { flatId: unsignedFlat!.id } });
+      await prisma.flat.deleteMany({ where: { id: unsignedFlat!.id } });
+      const unsignedUserIds = [unsignedAdmin.id, unsignedOwner.id];
+      await prisma.refreshToken.deleteMany({ where: { userId: { in: unsignedUserIds } } });
+      await prisma.passwordResetToken.deleteMany({ where: { userId: { in: unsignedUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: unsignedUserIds } } });
+      await prisma.society.delete({ where: { id: unsignedSociety.id } });
     });
 
     it('returns 409 on a second approve of the same entry', async () => {
@@ -324,6 +396,53 @@ describe('/api/admin/ledger-entries*', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ flatId: 'does-not-exist', amount: 100 });
       expect(res.status).toBe(404);
+    });
+
+    it('returns 409 and creates nothing when the society has no signatures configured', async () => {
+      const unsignedSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const unsignedSociety = await prisma.society.create({
+        data: {
+          name: `Unsigned Manual Deposit Society ${unsignedSuffix}`,
+          address: '3 Test St',
+        },
+      });
+      const unsignedAdmin = await createUser({
+        name: 'Unsigned Manual Deposit Admin',
+        email: `unsigned-manual-admin-${unsignedSuffix}@example.com`,
+        password: 'admin-password-123',
+        role: 'ADMIN',
+        societyId: unsignedSociety.id,
+      });
+      const unsignedAdminToken = (
+        await login({ email: unsignedAdmin.email, password: 'admin-password-123' })
+      ).accessToken;
+      const unsignedFlat = await createFlat({
+        societyId: unsignedSociety.id,
+        wing: 'U',
+        flatNumber: '2',
+        baseRate: 1000,
+        ownerName: 'Unsigned Manual Deposit Owner',
+        ownerEmail: `unsigned-manual-owner-${unsignedSuffix}@example.com`,
+      });
+
+      const res = await request(app)
+        .post('/api/admin/ledger-entries/manual-deposit')
+        .set('Authorization', `Bearer ${unsignedAdminToken}`)
+        .send({ flatId: unsignedFlat!.id, amount: 100 });
+      expect(res.status).toBe(409);
+
+      const entryCount = await prisma.ledgerEntry.count({ where: { flatId: unsignedFlat!.id } });
+      expect(entryCount).toBe(0);
+
+      await prisma.maintenanceRecord.deleteMany({ where: { flatId: unsignedFlat!.id } });
+      await prisma.flat.deleteMany({ where: { id: unsignedFlat!.id } });
+      const unsignedUserIds = await prisma.user
+        .findMany({ where: { societyId: unsignedSociety.id }, select: { id: true } })
+        .then((rows) => rows.map((r) => r.id));
+      await prisma.refreshToken.deleteMany({ where: { userId: { in: unsignedUserIds } } });
+      await prisma.passwordResetToken.deleteMany({ where: { userId: { in: unsignedUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: unsignedUserIds } } });
+      await prisma.society.delete({ where: { id: unsignedSociety.id } });
     });
   });
 });

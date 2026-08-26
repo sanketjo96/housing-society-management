@@ -125,7 +125,7 @@ export function ReceiptBookPage() {
       },
       {
         id: 'feeType',
-        header: 'Fee Type',
+        header: 'Custom Fee',
         cell: ({ row }) => {
           const names = row.original.ledgerEntry.otherChargeFeeTypeNames;
           return names.length > 0 ? (
@@ -195,7 +195,7 @@ export function ReceiptBookPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Receipt #, flat, resident name, or fee type"
+                placeholder="Receipt #, flat, resident name, or custom fee"
                 className="mt-1 block w-full rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
               />
             </label>

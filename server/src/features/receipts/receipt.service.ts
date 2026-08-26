@@ -4,6 +4,7 @@ import { prisma } from '../../infrastructure/prisma/client';
 import {
   ForbiddenLedgerEntryAccessError,
   LedgerEntryAlreadyReviewedError,
+  SignaturesNotConfiguredError,
 } from '../../shared/errors/errors';
 import { renderReceiptPdf, type ReceiptData } from './receipt-pdf';
 import { getStorageAdapter } from '../../infrastructure/storage';
@@ -154,6 +155,20 @@ async function getCommitteeSignatures(
   return { chairman, secretary };
 }
 
+// A receipt with a completely blank signatory block (no Chairman signature, no
+// Secretary signature) is not acceptable — an admin must configure at least one
+// before any Deposit can be approved. Deliberately checked against the raw file
+// keys, not signature *bytes* — a broken/unreadable file at render time still
+// falls back to a blank line silently (getSignatureBufferOrUndefined, unchanged;
+// that's a different, narrower concern than "nothing was ever configured").
+function assertSignaturesConfigured(
+  society: Pick<ReceiptSociety, 'chairmanSignatureFileKey' | 'secretarySignatureFileKey'>,
+): void {
+  if (!society.chairmanSignatureFileKey && !society.secretarySignatureFileKey) {
+    throw new SignaturesNotConfiguredError();
+  }
+}
+
 const RECEIPT_ENTRY_INCLUDE = {
   flat: { select: { wing: true, flatNumber: true } },
   payer: { select: { name: true } },
@@ -201,6 +216,7 @@ export async function previewReceiptPdf(
     where: { id: societyId },
     include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
   });
+  assertSignaturesConfigured(society);
   const otherChargeFeeTypeNames =
     entry.category === 'OTHER_CHARGE'
       ? (await getOpenOtherCharges(entry.flatId)).feeTypeNames
@@ -229,6 +245,7 @@ export async function prepareReceiptForEntry(
   issuedAt: Date,
   otherChargeFeeTypeNames?: string[],
 ): Promise<{ receiptNumber: string; fileKey: string }> {
+  assertSignaturesConfigured(society);
   const data = buildReceiptData(entry, flat, payer, society, { date: issuedAt, otherChargeFeeTypeNames });
   const signatures = await getCommitteeSignatures(society);
   const pdfBuffer = await renderReceiptPdf(data, signatures);

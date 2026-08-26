@@ -38,10 +38,11 @@ import { DashboardShell, type NavEntry } from './DashboardShell';
 // per pool). Grouped together because all three are the admin's day-to-day money
 // actions (record income/expense, record a manual payment, look up a receipt), same
 // "collapsed group of related screens" pattern the Settings submenu already uses.
-// Society details lives inside the Settings submenu, alongside Billing plan and Fee
-// types — all three are admin-configuration screens, not primary/repeated actions.
-// Manage Finance's supporting category catalog, '/settings/finance-categories',
-// lives in the Settings submenu next to Fee types, same convention.
+// Society details lives inside the Settings submenu, alongside Billing plan and
+// Custom Fees — all three are admin-configuration screens, not primary/repeated
+// actions. Manage Finance's supporting category catalog,
+// '/settings/finance-categories', lives in the Settings submenu next to Custom
+// Fees, same convention.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Custom Bills', icon: BadgeIndianRupee },
@@ -79,7 +80,7 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
     children: [
       { to: '/settings/society', label: 'Society Details', icon: Building2 },
       { to: '/settings/billing', label: 'Billing Plan', icon: Wallet },
-      { to: '/settings/fee-types', label: 'Fee Types', icon: Tag },
+      { to: '/settings/fee-types', label: 'Custom Fees', icon: Tag },
       { to: '/settings/finance-categories', label: 'Finance Categories', icon: ListTree },
     ],
   },

@@ -17,6 +17,7 @@ import {
 import {
   LedgerEntryAlreadyReviewedError,
   ForbiddenLedgerEntryAccessError,
+  SignaturesNotConfiguredError,
 } from '../../../src/shared/errors/errors';
 
 async function extractText(buffer: Buffer): Promise<string> {
@@ -71,9 +72,19 @@ describe('receipt service', () => {
         societyId,
       },
     });
+    // A signature key must actually be set (not just the chairman/secretary
+    // relation) — approval/preview is blocked otherwise (SignaturesNotConfiguredError,
+    // see assertSignaturesConfigured). The key doesn't need to point at a real file:
+    // getSignatureBufferOrUndefined falls back to undefined for an unreadable key,
+    // independent of this "is anything configured at all" check.
     await prisma.society.update({
       where: { id: societyId },
-      data: { chairmanId: chairman.id, secretaryId: secretary.id },
+      data: {
+        chairmanId: chairman.id,
+        secretaryId: secretary.id,
+        chairmanSignatureFileKey: 'fake-chairman-signature-key.png',
+        secretarySignatureFileKey: 'fake-secretary-signature-key.png',
+      },
     });
 
     const flat = await createFlat({
@@ -306,6 +317,43 @@ describe('receipt service', () => {
       const issued = await getIssuedReceiptForViewing(entryId, adminId, 'ADMIN', societyId);
       const issuedText = await extractText(await streamToBuffer(issued!.stream));
       expect(issuedText).toContain(`${feeType.name} payment`);
+    });
+
+    // Guard: a receipt must never be issued with a fully blank signatory block —
+    // an admin has to configure at least one of Chairman/Secretary first.
+    it('throws SignaturesNotConfiguredError when neither Chairman nor Secretary has a signature configured', async () => {
+      const unsignedSociety = await prisma.society.create({
+        data: {
+          name: `Unsigned Receipt Society ${suffix}`,
+          address: '99 No Signature Rd, Pune',
+          upiVpa: `unsigned-${suffix}@okhdfcbank`,
+        },
+      });
+      const unsignedFlat = await createFlat({
+        societyId: unsignedSociety.id,
+        wing: 'U',
+        flatNumber: '1',
+        baseRate: 1000,
+        ownerName: 'Unsigned Owner',
+        ownerEmail: `unsigned-owner-${suffix}@example.com`,
+      });
+      const deposit = await createDeposit(unsignedFlat!.ownerId, unsignedFlat!.id, unsignedSociety.id, 'OWNER', {
+        amount: 400,
+      });
+
+      await expect(previewReceiptPdf((deposit as { id: string }).id, unsignedSociety.id)).rejects.toThrow(
+        SignaturesNotConfiguredError,
+      );
+
+      await prisma.ledgerEntry.deleteMany({ where: { flatId: unsignedFlat!.id } });
+      await prisma.maintenanceRecord.deleteMany({ where: { flatId: unsignedFlat!.id } });
+      await prisma.flat.deleteMany({ where: { id: unsignedFlat!.id } });
+      const unsignedUserIds = await prisma.user
+        .findMany({ where: { societyId: unsignedSociety.id }, select: { id: true } })
+        .then((rows) => rows.map((r) => r.id));
+      await prisma.passwordResetToken.deleteMany({ where: { userId: { in: unsignedUserIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: unsignedUserIds } } });
+      await prisma.society.delete({ where: { id: unsignedSociety.id } });
     });
 
     it('preview and the eventually-issued receipt number match exactly (determinism)', async () => {

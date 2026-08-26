@@ -246,22 +246,37 @@ flow off `ResidentDashboardOverview.tsx` (now a pure 4-card navigation hub) onto
 page some time before this doc was updated to match. Two summary cards —
 **Total maintenance amount** and **Maintenance Outstanding** — above the Bills tab's
 "You owe ₹X" row (or "Nothing outstanding right now"), an **amount field + Pay
-button** when Outstanding > 0 (see `docs/maintenance-records.md`'s intent-lock flow).
+button** (see `docs/maintenance-records.md`'s intent-lock flow).
 Below (Payments tab): the Deposit ledger as a `DataTable`
 (`client/src/components/DataTable.tsx`) — Date / Amount / Status, with
 `ApprovalBadge` (Approved/Pending/Rejected) pills. No Type column — every row is a
 Deposit (Credit removed for good, 2026-08-20 pivot).
 
-**Amount field**: a number input pre-filled with the full `outstanding`,
-re-defaulted whenever the ledger query result changes — e.g. after a prior payment is
-approved and the resident opens Pay again — but never clobbering an in-progress edit
-otherwise. Client-side validated as `amount > 0` only (Pay disabled + an inline error
-below that) — no longer capped at Outstanding (2026-08-20 pivot), purely for UX;
+**Amount field + Pay button are always visible, not gated behind `outstanding > 0`
+(2026-08-26).** Previously hidden entirely at ₹0 Outstanding, showing only "Nothing
+outstanding right now" with no way to act — this blocked a real, intended use case:
+a resident depositing an advance amount they want settled against maintenance in a
+future month, which lands as Available Credit once approved (rule 6's overpayment
+mechanism, unchanged) and is auto-consumed by the next generated
+`MaintenanceRecord` via the existing FIFO settlement fill (no new mechanism needed).
+Only an already-open payment intent (`!intentQuery.data`) still hides the field —
+same as before. The field's label switches to **"Amount to deposit"** at ₹0
+Outstanding (**"Amount to pay"** otherwise, unchanged) to make the advance-deposit
+intent clear without a separate control.
+
+**Amount field**: a number input pre-filled with the full `outstanding` when it's
+`> 0`; left **blank** (not pre-filled `"0"`) at ₹0 Outstanding, so the "greater than
+₹0" validation message doesn't flash immediately on load — re-defaulted the same way
+whenever the ledger query result changes (e.g. after a prior payment is approved and
+the resident opens Pay again), but never clobbering an in-progress edit otherwise.
+Client-side validated as `amount > 0` only (Pay disabled + an inline error below
+that) — no longer capped at Outstanding (2026-08-20 pivot), purely for UX;
 `createOrReplacePaymentIntent` enforces the exact same `> 0` rule server-side
-regardless of what the client sends. When the entered amount exceeds Outstanding, an
-inline hint shows the excess that will become Available Credit once approved. Once
-locked, the amount becomes read-only (`PayIntentPanel` only ever displays it, never
-edits it) — editability is only at the entry step, before locking.
+regardless of what the client sends. When the entered amount exceeds Outstanding
+(always true at ₹0 Outstanding, since any positive deposit is then a pure advance),
+an inline hint shows the excess that will become Available Credit once approved.
+Once locked, the amount becomes read-only (`PayIntentPanel` only ever displays it,
+never edits it) — editability is only at the entry step, before locking.
 
 **`PayIntentPanel` branches on `intent.paymentMethod` (added 2026-08-12)**: a
 `'UPI'` intent renders exactly as before (QR image on desktop, deep-link redirect on

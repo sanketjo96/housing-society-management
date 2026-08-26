@@ -44,7 +44,7 @@ export {};
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No such entry., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: Entry has already been reviewed (not PENDING)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Entry has already been reviewed (not PENDING), or the society has no Chairman/Secretary signature configured yet (SignaturesNotConfiguredError)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 
 /**
@@ -70,7 +70,7 @@ export {};
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No such entry., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: Entry has already been reviewed (not PENDING)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Entry has already been reviewed (not PENDING), or the society has no Chairman/Secretary signature configured yet (SignaturesNotConfiguredError)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 
 /**
@@ -135,4 +135,5 @@ export {};
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No such flat., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: The society has no Chairman/Secretary signature configured yet (SignaturesNotConfiguredError)., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */

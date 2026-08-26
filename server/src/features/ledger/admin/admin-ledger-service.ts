@@ -10,12 +10,15 @@ import type {
 } from '../../../infrastructure/prisma/generated/client';
 import { prisma } from '../../../infrastructure/prisma/client';
 import { logger } from '../../../infrastructure/observability';
-import { LedgerEntryAlreadyReviewedError } from '../../../shared/errors/errors';
+import {
+  LedgerEntryAlreadyReviewedError,
+  SignaturesNotConfiguredError,
+} from '../../../shared/errors/errors';
 import { getOpenOtherCharges, prepareReceiptForEntry } from '../../receipts/receipt.service';
 import { notify } from '../../notifications/notification.service';
 import { InvalidAmountError } from '../ledger-shared';
 
-export { InvalidAmountError, LedgerEntryAlreadyReviewedError };
+export { InvalidAmountError, LedgerEntryAlreadyReviewedError, SignaturesNotConfiguredError };
 
 // DEPOSIT_PAYMENT_APPROVED (docs/notification/) — fired once the approval (or
 // manual mark-paid) transaction has actually committed, so a notification is never

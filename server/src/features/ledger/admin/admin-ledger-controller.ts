@@ -11,6 +11,7 @@ import {
   listPendingLedgerEntries,
   manualDeposit,
   rejectLedgerEntry,
+  SignaturesNotConfiguredError,
 } from './admin-ledger-service';
 import { previewReceiptPdf } from '../../receipts/receipt.service';
 
@@ -48,6 +49,10 @@ export async function approveLedgerEntryHandler(req: Request, res: Response) {
       res.status(409).json({ error: err.message });
       return;
     }
+    if (err instanceof SignaturesNotConfiguredError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     throw err;
   }
 }
@@ -74,6 +79,10 @@ export async function previewReceiptHandler(req: Request, res: Response) {
     res.status(200).send(buffer);
   } catch (err) {
     if (err instanceof LedgerEntryAlreadyReviewedError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    if (err instanceof SignaturesNotConfiguredError) {
       res.status(409).json({ error: err.message });
       return;
     }
@@ -142,6 +151,10 @@ export async function manualDepositHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof InvalidAmountError) {
       res.status(400).json({ error: err.message });
+      return;
+    }
+    if (err instanceof SignaturesNotConfiguredError) {
+      res.status(409).json({ error: err.message });
       return;
     }
     throw err;

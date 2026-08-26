@@ -16,7 +16,7 @@ const DUE_DATE_DAYS = 15;
 
 export class FeeTypeNotBillableError extends Error {
   constructor() {
-    super('This fee type is not available for billing (missing, inactive, or wrong society)');
+    super('This custom fee is not available for billing (missing, inactive, or wrong society)');
     this.name = 'FeeTypeNotBillableError';
   }
 }

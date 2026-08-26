@@ -53,6 +53,15 @@ describe('ledger service', () => {
     });
     societyId = society.id;
 
+    // approveLedgerEntry/manualDeposit both issue a receipt, which is blocked
+    // unless at least one committee signature is configured
+    // (SignaturesNotConfiguredError) — set a signature key directly, no need for a
+    // real readable file (see receipt.service.test.ts's identical comment).
+    await prisma.society.update({
+      where: { id: societyId },
+      data: { chairmanSignatureFileKey: 'fake-chairman-signature-key.png' },
+    });
+
     const flat = await createFlat({
       societyId,
       wing: 'L',

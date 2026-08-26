@@ -93,7 +93,7 @@ async function importOtherCharge(
     where: { name: feeTypeName, societyId, isActive: true },
   });
   if (!feeType) {
-    return { error: `Fee type "${feeTypeName}" not found or inactive` };
+    return { error: `Custom fee "${feeTypeName}" not found or inactive` };
   }
 
   try {

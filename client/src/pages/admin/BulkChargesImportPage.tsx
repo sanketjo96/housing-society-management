@@ -15,7 +15,7 @@ const CHARGES_CSV_TEMPLATE =
 // wing+flatNumber (import on the "Resident" page first) and branches on `pool`:
 // MAINTENANCE_OPENING_BALANCE creates a one-time pre-go-live arrears charge that
 // always settles before every real month; OTHER_CHARGE bills an ad-hoc one-time fee
-// against an existing Fee type (set those up on Settings -> Fee types first).
+// against an existing Custom Fee (set those up on Settings -> Custom Fees first).
 export function BulkChargesImportPage() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -30,7 +30,7 @@ export function BulkChargesImportPage() {
           <>
             Required columns: wing, flatnumber, pool (MAINTENANCE_OPENING_BALANCE or
             OTHER_CHARGE), amount. feetypename is required when pool=OTHER_CHARGE (must
-            already exist under Settings → Fee types). note is optional. A flat can only
+            already exist under Settings → Custom Fees). note is optional. A flat can only
             have one Opening Balance ever imported — re-importing one is reported as a row
             error, not a duplicate charge.
           </>

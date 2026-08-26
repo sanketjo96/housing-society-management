@@ -172,7 +172,7 @@ describe('DashboardLayout', () => {
       );
     // Dashboard, Custom Bills, Resident Book are direct links; Manage Finance and
     // Settings are collapsed group toggles — their children (Record/Mark
-    // Paid/Receipt Book, and Society details/Billing plan/Fee types/Finance
+    // Paid/Receipt Book, and Society details/Billing plan/Custom Fees/Finance
     // categories respectively) aren't links yet.
     expect(labels[0]).toMatch(/dashboard/i);
     expect(labels[1]).toMatch(/custom bills/i);
@@ -185,7 +185,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /receipt book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /society details/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /billing plan/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /fee types/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /custom fees/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /maintenance book/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my details/i })).not.toBeInTheDocument();
     // Flats and residents, Tenants, Flat-wise/Other charges dues, and Payment
@@ -228,7 +228,7 @@ describe('DashboardLayout', () => {
     expect(screen.getByRole('link', { name: /resident book/i })).toHaveAttribute('href', '/resident-ledger');
   });
 
-  it('expands the Settings submenu on click, revealing Society details, Billing plan, and Fee types as real top-level URLs', async () => {
+  it('expands the Settings submenu on click, revealing Society details, Billing plan, and Custom Fees as real top-level URLs', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
     const user = userEvent.setup();
@@ -237,7 +237,7 @@ describe('DashboardLayout', () => {
 
     expect(screen.getByRole('link', { name: /society details/i })).toHaveAttribute('href', '/settings/society');
     expect(screen.getByRole('link', { name: /billing plan/i })).toHaveAttribute('href', '/settings/billing');
-    expect(screen.getByRole('link', { name: /fee types/i })).toHaveAttribute('href', '/settings/fee-types');
+    expect(screen.getByRole('link', { name: /custom fees/i })).toHaveAttribute('href', '/settings/fee-types');
 
     // Toggling again collapses it.
     await user.click(screen.getByRole('button', { name: /^settings$/i }));

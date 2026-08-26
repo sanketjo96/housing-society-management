@@ -30,7 +30,7 @@ describe('FeeTypesPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists fee types with their active/inactive status', async () => {
+  it('lists custom fees with their active/inactive status', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockResolvedValue({ ok: true, json: async () => [activeFeeType, inactiveFeeType] });
 
@@ -49,7 +49,7 @@ describe('FeeTypesPage', () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/no fee types yet/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/no custom fees yet/i)).toBeInTheDocument());
   });
 
   it('opens the add form, submits, and returns to the list', async () => {
@@ -66,16 +66,16 @@ describe('FeeTypesPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: /add fee type/i }));
+    await user.click(await screen.findByRole('button', { name: /add custom fee/i }));
     await user.type(screen.getByLabelText(/^name$/i), 'Fine');
-    await user.click(screen.getByRole('button', { name: /save fee type/i }));
+    await user.click(screen.getByRole('button', { name: /save custom fee/i }));
 
     await waitFor(() => expect(JSON.parse(createBody!)).toEqual({ name: 'Fine', description: '' }));
     // Back to the list view.
-    await waitFor(() => expect(screen.getByRole('button', { name: /add fee type/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /add custom fee/i })).toBeInTheDocument());
   });
 
-  it('toggling an active fee type deactivates it — never deletes', async () => {
+  it('toggling an active custom fee deactivates it — never deletes', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     let patchBody: string | undefined;
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {

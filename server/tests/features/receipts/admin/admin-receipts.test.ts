@@ -27,6 +27,13 @@ describe('GET /api/admin/receipts', () => {
     });
     societyId = society.id;
 
+    // Approval issues a receipt, blocked unless at least one committee signature is
+    // configured (SignaturesNotConfiguredError) — see receipt.service.test.ts.
+    await prisma.society.update({
+      where: { id: societyId },
+      data: { chairmanSignatureFileKey: 'fake-chairman-signature-key.png' },
+    });
+
     const adminPassword = 'admin-password-123';
     const admin = await createUser({
       name: 'Admin Receipts Admin',
@@ -139,6 +146,10 @@ describe('GET /api/admin/receipts', () => {
         address: '2 Test St',
         upiVpa: 'admin-receipts-other@okhdfcbank',
       },
+    });
+    await prisma.society.update({
+      where: { id: otherSociety.id },
+      data: { chairmanSignatureFileKey: 'fake-chairman-signature-key.png' },
     });
     const otherAdminPassword = 'other-admin-password-123';
     const otherAdmin = await createUser({

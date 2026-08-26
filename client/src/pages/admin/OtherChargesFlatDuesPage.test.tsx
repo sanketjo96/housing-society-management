@@ -76,7 +76,7 @@ describe('OtherChargesFlatDuesPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows only non-PAID charges, with Flat, Fee type, Outstanding, and Status — no Credit column ever', async () => {
+  it('shows only non-PAID charges, with Flat, Custom fee, Outstanding, and Status — no Credit column ever', async () => {
     mockFetch();
     renderPage();
 

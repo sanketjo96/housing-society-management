@@ -4,9 +4,10 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft, Plus, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { DataTable } from '../../components/DataTable';
-import { ErrMsg, ErrorBanner, Field, inputClass } from '../../components/FormField';
+import { ErrMsg, ErrorBanner, Field, inputClass, WarningBanner } from '../../components/FormField';
 import { authedFetch } from '../../lib/api';
 
 type SettlementStatus = 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID';
@@ -32,6 +33,8 @@ interface FlatOption {
   owner: { name: string };
 }
 
+// "Fee type" internally (model/route names, unchanged) — user-facing copy on this
+// page and everywhere else it's shown says "Custom fee" (2026-08-26 rename).
 interface FeeTypeOption {
   id: string;
   name: string;
@@ -51,7 +54,7 @@ async function fetchFlatOptions(): Promise<FlatOption[]> {
 
 async function fetchActiveFeeTypes(): Promise<FeeTypeOption[]> {
   const res = await authedFetch('/api/admin/fee-types');
-  if (!res.ok) throw new Error('Could not load fee types.');
+  if (!res.ok) throw new Error('Could not load custom fees.');
   return res.json();
 }
 
@@ -79,7 +82,7 @@ function SettlementBadge({ charge }: { charge: OtherChargeListItem }) {
 
 const billFormSchema = z.object({
   flatId: z.string().min(1, 'Flat is required'),
-  feeTypeId: z.string().min(1, 'Fee type is required'),
+  feeTypeId: z.string().min(1, 'Custom fee is required'),
   amount: z.coerce.number().positive('Amount must be greater than 0'),
   note: z.string().optional(),
 });
@@ -141,6 +144,18 @@ function BillChargeForm({ onDone }: { onDone: () => void }) {
 
       <h1 className="m-0 mb-4 font-display text-lg text-ink">Bill a charge</h1>
 
+      {/* Page/form stay reachable either way (2026-08-26) — a missing catalog is
+          surfaced as a warning + link to go configure one, not a block. */}
+      {!feeTypesLoading && feeTypes?.length === 0 && (
+        <WarningBanner>
+          No Custom Fees are set up yet, so there's nothing to bill against. Add one on{' '}
+          <Link to="/settings/fee-types" className="font-semibold text-brass underline">
+            Settings → Custom Fees
+          </Link>{' '}
+          first.
+        </WarningBanner>
+      )}
+
       <Field label="Flat">
         <select disabled={flatsLoading} className={inputClass} {...register('flatId')}>
           <option value="">Select a flat…</option>
@@ -153,9 +168,13 @@ function BillChargeForm({ onDone }: { onDone: () => void }) {
         {errors.flatId && <ErrMsg>{errors.flatId.message}</ErrMsg>}
       </Field>
 
-      <Field label="Fee type">
-        <select disabled={feeTypesLoading} className={inputClass} {...register('feeTypeId')}>
-          <option value="">Select a fee type…</option>
+      <Field label="Custom fee">
+        <select
+          disabled={feeTypesLoading || feeTypes?.length === 0}
+          className={inputClass}
+          {...register('feeTypeId')}
+        >
+          <option value="">Select a custom fee…</option>
           {feeTypes?.map((feeType) => (
             <option key={feeType.id} value={feeType.id}>
               {feeType.name}
@@ -178,7 +197,7 @@ function BillChargeForm({ onDone }: { onDone: () => void }) {
 
       <button
         type="submit"
-        disabled={mutation.isPending}
+        disabled={mutation.isPending || feeTypes?.length === 0}
         className="mt-2 flex items-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
       >
         <Save size={14} /> {mutation.isPending ? 'Billing…' : 'Bill this charge'}
@@ -208,7 +227,7 @@ export function OtherChargesPage() {
       },
       {
         id: 'feeType',
-        header: 'Fee type',
+        header: 'Custom fee',
         cell: ({ row }) => (
           <span className="text-ink">
             {row.original.feeType.name}

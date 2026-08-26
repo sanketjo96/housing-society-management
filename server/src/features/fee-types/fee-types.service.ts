@@ -9,7 +9,7 @@ import { scopedWhere } from '../../shared/security/tenant-scope';
 
 export class FeeTypeNotFoundError extends Error {
   constructor() {
-    super('Fee type not found');
+    super('Custom fee not found');
     this.name = 'FeeTypeNotFoundError';
   }
 }

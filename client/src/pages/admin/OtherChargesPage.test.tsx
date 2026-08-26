@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
 import { OtherChargesPage } from './OtherChargesPage';
@@ -11,7 +12,9 @@ function renderPage() {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <OtherChargesPage />
+      <MemoryRouter>
+        <OtherChargesPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -44,7 +47,7 @@ describe('OtherChargesPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists billed charges with flat, fee type, amount, and settlement status', async () => {
+  it('lists billed charges with flat, custom fee, amount, and settlement status', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     fetchMock.mockResolvedValue({ ok: true, json: async () => [billedCharge] });
 
@@ -81,7 +84,7 @@ describe('OtherChargesPage', () => {
     await waitFor(() => expect(screen.getByText(/A-101 — Alice Owner/)).toBeInTheDocument());
 
     await user.selectOptions(screen.getByLabelText(/flat/i), 'flat-1');
-    await user.selectOptions(screen.getByLabelText(/fee type/i), 'ft-1');
+    await user.selectOptions(screen.getByLabelText(/custom fee/i), 'ft-1');
     await user.type(screen.getByLabelText(/amount/i), '2500');
     await user.click(screen.getByRole('button', { name: /^bill this charge$/i }));
 
@@ -103,7 +106,7 @@ describe('OtherChargesPage', () => {
       if (init?.method === 'POST' && url.includes('/api/admin/other-charges')) {
         return Promise.resolve({
           ok: false,
-          json: async () => ({ error: 'This fee type is not available for billing' }),
+          json: async () => ({ error: 'This custom fee is not available for billing' }),
         });
       }
       return Promise.resolve({ ok: true, json: async () => [] });
@@ -115,10 +118,38 @@ describe('OtherChargesPage', () => {
     await user.click(await screen.findByRole('button', { name: /bill a charge/i }));
     await waitFor(() => expect(screen.getByText(/A-101 — Alice Owner/)).toBeInTheDocument());
     await user.selectOptions(screen.getByLabelText(/flat/i), 'flat-1');
-    await user.selectOptions(screen.getByLabelText(/fee type/i), 'ft-1');
+    await user.selectOptions(screen.getByLabelText(/custom fee/i), 'ft-1');
     await user.type(screen.getByLabelText(/amount/i), '100');
     await user.click(screen.getByRole('button', { name: /^bill this charge$/i }));
 
-    expect(await screen.findByText('This fee type is not available for billing')).toBeInTheDocument();
+    expect(await screen.findByText('This custom fee is not available for billing')).toBeInTheDocument();
+  });
+
+  // Page/form stay reachable when there's nothing to bill against (2026-08-26) —
+  // a warning + link to go configure one, not a block.
+  it('warns and disables the picker when no custom fees are configured, but still shows the form', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/admin/flats')) {
+        return Promise.resolve({ ok: true, json: async () => flatOptions });
+      }
+      if (url.includes('/api/admin/fee-types')) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: /bill a charge/i }));
+
+    expect(await screen.findByText(/no custom fees are set up yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /settings → custom fees/i })).toHaveAttribute(
+      'href',
+      '/settings/fee-types',
+    );
+    expect(screen.getByLabelText(/custom fee/i)).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^bill this charge$/i })).toBeDisabled();
   });
 });

@@ -264,7 +264,7 @@ export function OtherChargesBookPage() {
     () => [
       {
         id: 'feeType',
-        header: 'Fee type',
+        header: 'Custom fee',
         cell: ({ row }) => <span className="text-ink">{row.original.feeTypeName ?? '—'}</span>,
       },
       {

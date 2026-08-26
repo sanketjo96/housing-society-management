@@ -1,25 +1,28 @@
 // OpenAPI docs for fee-types.route.ts — see auth/auth.openapi.ts's header comment
 // for why these live in a sibling file rather than inline above each route.
+//
+// Displayed as "Custom Fee(s)" (2026-08-26 rename) — route paths, schema names, and
+// the underlying FeeType model are unchanged, this is display copy only.
 export {};
 
 /**
  * @openapi
  * /api/admin/fee-types:
  *   get:
- *     tags: [Fee Types (Admin)]
- *     summary: List the society's Other-Charges fee-type catalog
+ *     tags: [Custom Fees (Admin)]
+ *     summary: List the society's Other-Charges custom-fee catalog
  *     parameters:
  *       - in: query
  *         name: includeInactive
  *         schema: { type: boolean }
- *         description: Include deactivated fee types (default false — active only).
+ *         description: Include deactivated custom fees (default false — active only).
  *     responses:
  *       200: { description: OK. }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
  *   post:
- *     tags: [Fee Types (Admin)]
- *     summary: Create a fee type
+ *     tags: [Custom Fees (Admin)]
+ *     summary: Create a custom fee
  *     requestBody:
  *       required: true
  *       content:
@@ -35,13 +38,13 @@ export {};
  *       400: { description: Invalid input }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
- *       409: { description: A fee type with this name already exists for this society. }
+ *       409: { description: A custom fee with this name already exists for this society. }
  * /api/admin/fee-types/{id}:
  *   patch:
- *     tags: [Fee Types (Admin)]
- *     summary: Update a fee type (rename, edit description, or activate/deactivate)
+ *     tags: [Custom Fees (Admin)]
+ *     summary: Update a custom fee (rename, edit description, or activate/deactivate)
  *     description: >
- *       Every field optional. isActive is the only removal mechanism — a fee type
+ *       Every field optional. isActive is the only removal mechanism — a custom fee
  *       is never hard-deleted, since a billed OtherCharge must keep a valid, named
  *       reference forever.
  *     parameters:
@@ -63,6 +66,6 @@ export {};
  *       400: { description: Invalid input }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
- *       404: { description: Fee type not found. }
- *       409: { description: A fee type with this name already exists for this society. }
+ *       404: { description: Custom fee not found. }
+ *       409: { description: A custom fee with this name already exists for this society. }
  */

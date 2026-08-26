@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -49,6 +49,21 @@ export function ErrorBanner({ children }: { children: ReactNode }) {
       <p role="alert" className="m-0 text-[12.5px] text-[#5C1F14]">
         {children}
       </p>
+    </div>
+  );
+}
+
+// A non-blocking configuration gap, not a mutation failure — e.g. "add a Custom Fee
+// before billing" (OtherChargesPage.tsx) or "add a Finance Category before recording"
+// (ManageFinancePage.tsx). Amber, not coral, and never role="alert" — nothing failed,
+// there's just a prerequisite the admin should go configure. The page/form stays
+// reachable either way; this only explains why the picker below it is empty and links
+// straight to where to fix it.
+export function WarningBanner({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-3.5 flex items-start gap-2 rounded-lg bg-amber-light px-3 py-2.5">
+      <AlertTriangle size={14} className="mt-0.5 shrink-0 text-brass" />
+      <p className="m-0 text-[12.5px] text-ink">{children}</p>
     </div>
   );
 }

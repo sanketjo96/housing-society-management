@@ -9,6 +9,8 @@ import { DataTable } from '../../../components/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass } from '../../../components/FormField';
 import { authedFetch } from '../../../lib/api';
 
+// Route/model/endpoint names stay "fee type(s)" (unchanged) — every user-visible
+// string on this page says "Custom fee(s)" (2026-08-26 rename).
 interface FeeType {
   id: string;
   name: string;
@@ -18,7 +20,7 @@ interface FeeType {
 
 async function fetchFeeTypes(): Promise<FeeType[]> {
   const res = await authedFetch('/api/admin/fee-types?includeInactive=true');
-  if (!res.ok) throw new Error('Could not load fee types.');
+  if (!res.ok) throw new Error('Could not load custom fees.');
   return res.json();
 }
 
@@ -47,7 +49,7 @@ function FeeTypeForm({ onDone }: { onDone: () => void }) {
         body: JSON.stringify(values),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not create fee type.');
+      if (!res.ok) throw new Error(body?.error ?? 'Could not create custom fee.');
       return body;
     },
     onSuccess: () => {
@@ -70,7 +72,7 @@ function FeeTypeForm({ onDone }: { onDone: () => void }) {
         <ArrowLeft size={13} /> Back to list
       </button>
 
-      <h1 className="m-0 mb-4 font-display text-lg text-ink">Add fee type</h1>
+      <h1 className="m-0 mb-4 font-display text-lg text-ink">Add custom fee</h1>
 
       <Field label="Name">
         <input className={inputClass} {...register('name')} />
@@ -87,7 +89,7 @@ function FeeTypeForm({ onDone }: { onDone: () => void }) {
         disabled={mutation.isPending}
         className="mt-2 flex items-center gap-2 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
       >
-        <Save size={14} /> {mutation.isPending ? 'Saving…' : 'Save fee type'}
+        <Save size={14} /> {mutation.isPending ? 'Saving…' : 'Save custom fee'}
       </button>
     </form>
   );
@@ -102,7 +104,7 @@ function ToggleActiveButton({ feeType }: { feeType: FeeType }) {
         body: JSON.stringify({ isActive: !feeType.isActive }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? 'Could not update fee type.');
+      if (!res.ok) throw new Error(body?.error ?? 'Could not update custom fee.');
       return body;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-fee-types'] }),
@@ -176,10 +178,10 @@ export function FeeTypesPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="m-0 font-display text-xl text-ink">Fee types</h1>
+          <h1 className="m-0 font-display text-xl text-ink">Custom fees</h1>
           <p className="m-0 mt-0.5 text-xs text-muted">
-            The catalog of Other Charges fee types (joining fee, transfer fee, fine, ...) available when
-            billing a flat from the Other Charges page.
+            The catalog of Custom Fees (joining fee, transfer fee, fine, ...) available when billing a
+            flat from the Custom Bills page.
           </p>
         </div>
         <button
@@ -187,14 +189,14 @@ export function FeeTypesPage() {
           onClick={() => setShowForm(true)}
           className="flex shrink-0 items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white"
         >
-          <Plus size={14} /> Add fee type
+          <Plus size={14} /> Add custom fee
         </button>
       </div>
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && (
         <p role="alert" className="text-sm text-coral">
-          Could not load fee types.
+          Could not load custom fees.
         </p>
       )}
 
@@ -203,7 +205,7 @@ export function FeeTypesPage() {
           data={data}
           columns={columns}
           getRowId={(f) => f.id}
-          emptyMessage="No fee types yet — add one above."
+          emptyMessage="No custom fees yet — add one above."
         />
       )}
     </div>

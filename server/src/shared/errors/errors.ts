@@ -33,3 +33,22 @@ export class ForbiddenLedgerEntryAccessError extends Error {
     this.name = 'ForbiddenLedgerEntryAccessError';
   }
 }
+
+// Guards against issuing a receipt with a fully blank signatory block. Thrown by
+// receipt.service.ts's assertSignaturesConfigured, called from both the approval
+// preview and the real approve/manualDeposit paths — a society must have at least
+// one of the Chairman/Secretary committee signatures uploaded (Settings ->
+// Committee) before any Deposit can be approved. This is a deliberate exception to
+// this app's usual "never block a financial transaction over a decorative image"
+// rule (see getSignatureBufferOrUndefined) — that rule covers a signature file
+// that's missing/unreadable *at render time* despite being configured; this error
+// covers the case where nothing was ever configured at all, which the admin can
+// and must fix before approving anything.
+export class SignaturesNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'Add at least one signatory signature (Chairman or Secretary) in Settings before approving payments',
+    );
+    this.name = 'SignaturesNotConfiguredError';
+  }
+}

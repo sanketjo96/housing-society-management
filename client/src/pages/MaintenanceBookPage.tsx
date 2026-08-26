@@ -225,8 +225,13 @@ export function MaintenanceBookPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  // Pre-fills with the full Outstanding so the common case (pay what you owe) is a
+  // single tap — but only when something is actually owed. At ₹0 Outstanding this
+  // would otherwise pre-fill "0" and immediately show the "greater than ₹0" error;
+  // leaving it blank instead lets a resident type their own advance amount to
+  // deposit as Available Credit against a future month, with no false-error flash.
   useEffect(() => {
-    if (data) setAmountInput(String(data.outstanding));
+    if (data) setAmountInput(data.outstanding > 0 ? String(data.outstanding) : '');
   }, [data]);
 
   const outstanding = data?.outstanding ?? 0;
@@ -402,10 +407,15 @@ export function MaintenanceBookPage() {
                       </span>
                     )}
                   </div>
-                  {outstanding > 0 && !intentQuery.data && (
+                  {/* Always visible, even at ₹0 Outstanding (not gated behind
+                      outstanding > 0) — a resident may want to deposit an advance
+                      amount to settle against maintenance in a future month, which
+                      becomes Available Credit once approved (see the overpay hint
+                      below). Only an already-open payment intent hides this. */}
+                  {!intentQuery.data && (
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="flex flex-col text-xs font-semibold text-muted">
-                        Amount to pay
+                        {outstanding > 0 ? 'Amount to pay' : 'Amount to deposit'}
                         <input
                           type="number"
                           aria-label="Amount to pay"
@@ -428,11 +438,11 @@ export function MaintenanceBookPage() {
                   )}
                 </div>
 
-                {outstanding > 0 && !intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
+                {!intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
                   <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">Enter an amount greater than ₹0.</p>
                 )}
 
-                {outstanding > 0 && !intentQuery.data && overpayAmount > 0 && (
+                {!intentQuery.data && overpayAmount > 0 && (
                   <p className="mb-2.5 mt-[-0.5rem] text-xs text-teal">
                     ₹{overpayAmount.toLocaleString('en-IN')} will be applied as Available Credit.
                   </p>

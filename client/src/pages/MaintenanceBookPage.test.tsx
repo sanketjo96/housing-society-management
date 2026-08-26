@@ -313,11 +313,22 @@ describe('MaintenanceBookPage', () => {
     expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
   });
 
-  it('hides the Pay controls and shows "Nothing outstanding right now" on the Payment History tab when outstanding is 0', async () => {
+  // Widget stays visible at ₹0 Outstanding (2026-08-26) — a resident may want to
+  // deposit an advance amount to settle against maintenance in a future month, which
+  // becomes Available Credit once approved (see the overpay-hint test below).
+  it('shows "Nothing outstanding right now" but still lets the resident deposit an advance amount when outstanding is 0', async () => {
     mockFetch({ ...ledger, totals: { ...ledger.totals, outstanding: 0 } });
     renderPage();
+    const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
+    const amountInput = await screen.findByLabelText('Amount to deposit');
+    expect(amountInput).toHaveValue(null); // blank, not pre-filled with 0
+
+    await user.type(amountInput, '500');
+    expect(screen.getByRole('button', { name: /^pay$/i })).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByText(/₹500 will be applied as available credit/i)).toBeInTheDocument(),
+    );
   });
 });
