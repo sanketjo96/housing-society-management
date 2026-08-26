@@ -4,9 +4,8 @@ import type { DragEvent } from 'react';
 
 const DEFAULT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
-// Shared file-select control (file browser via click, or drag-and-drop). `required`
-// only changes the placeholder/label text; the actual required-ness is enforced by
-// the caller's form submit (server re-validates regardless, never trust the client).
+// File-select control via click or drag-and-drop. `required` only affects the
+// label text — actual enforcement is the caller's form submit + server validation.
 export function FileUploadField({
   file,
   onFileChange,

@@ -31,12 +31,7 @@ function money(value: number, accent?: 'coral' | 'teal') {
   );
 }
 
-// "Resident Book" — admin-only page (App.tsx: /resident-ledger,
-// allowedRoles ADMIN), a sidebar nav item (unlike /flat-dues and
-// /other-charges-dues, which are dashboard-card drill-downs filtered to only
-// what's still owed). Lists every flat, both pools (Maintenance + Other Charges)
-// combined in one row via GET /api/admin/dashboard/resident-ledger — a directory
-// to browse the whole society's balances, not an exception list.
+// Lists every flat with both Maintenance and Other Charges balances in one row.
 export function ResidentLedgerPage() {
   const ledgerQuery = useQuery({ queryKey: ['admin-resident-ledger'], queryFn: fetchResidentLedger });
 

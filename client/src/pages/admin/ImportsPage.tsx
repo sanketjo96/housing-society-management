@@ -11,15 +11,7 @@ const FLATS_CSV_TEMPLATE =
   'wing,flatNumber,ownerName,ownerPhone,ownerEmail,occupancy,tenantName,tenantPhone,tenantEmail\n' +
   'A,101,Priya Nair,9876543210,priya@example.com,owner,,,\n';
 
-// The "Resident" child page under the "Imports" submenu (DashboardLayout.tsx) —
-// currently just the Flats/Owners/Tenants roster import (previously embedded inline
-// on FlatsListPage.tsx, moved here 2026-08-21 so it reads as its own nav destination
-// rather than being buried inside the page whose table it happens to populate).
-// Named after what it imports (residents/flats), not generically "Imports" — that
-// label belongs to the submenu group. Sibling pages for the two other importers
-// sketched in docs/features/society-onboarding/ (Opening Balance/Other Charges, historical
-// Manage Finance) live alongside this one: BulkChargesImportPage.tsx and
-// FinanceHistoryImportPage.tsx.
+// Bulk CSV import of the Flats/Owners/Tenants roster.
 export function ImportsPage() {
   return (
     <div className="mx-auto max-w-4xl">

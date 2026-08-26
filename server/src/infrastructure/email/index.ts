@@ -5,12 +5,8 @@ import { env } from '../../config/env';
 
 export type { EmailProvider, SendEmailInput } from './types';
 
-// Same "one env var picks the implementation, factory is the only place that imports a
-// concrete class" shape as src/infrastructure/storage's getStorageAdapter. 'console' (default)
-// logs instead of sending — 'resend' is the first real provider, matching CLAUDE.md's
-// tech-stack table ("Resend or SendGrid, behind a swappable EmailProvider interface").
-// 'sendgrid' is named as the documented alternative but not implemented — implement
-// EmailProvider (./types.ts) and add a case here if this project ever needs it.
+// Picks the EmailProvider implementation from EMAIL_PROVIDER. 'sendgrid' is a
+// named extension point, not implemented.
 export function getEmailProvider(): EmailProvider {
   const provider = env('EMAIL_PROVIDER', 'console');
   switch (provider) {

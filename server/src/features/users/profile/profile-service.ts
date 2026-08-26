@@ -9,8 +9,7 @@ export interface UpdateOwnProfileInput {
 }
 
 // No role/societyId param needed — the caller can only ever update their own row,
-// identified by req.user.id (the verified JWT), never an arbitrary :id. See
-// CLAUDE.md's "Addition (2026-08-06)".
+// identified by req.user.id, never an arbitrary :id.
 export async function updateOwnProfile(userId: string, input: UpdateOwnProfileInput) {
   try {
     return await prisma.user.update({

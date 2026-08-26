@@ -29,9 +29,7 @@ export interface LoginInput {
 }
 
 const ACCESS_TOKEN_TTL = '15m';
-// Exported so the controller can set the httpOnly cookie's maxAge from the same
-// source of truth, rather than a second hardcoded 7 that could silently drift from
-// this one.
+// Exported so the controller derives the cookie's maxAge from this, not a second hardcoded value.
 export const REFRESH_TOKEN_TTL_DAYS = 7;
 
 function signAccessToken(user: { id: string; role: Role; societyId: string }): string {
@@ -44,11 +42,8 @@ function signAccessToken(user: { id: string; role: Role; societyId: string }): s
   });
 }
 
-// Refresh tokens are opaque random values, not JWTs — see the RefreshToken model's
-// schema comment for why. hashToken uses a fast cryptographic hash (not bcrypt):
-// appropriate because the token itself is already high-entropy (32 random bytes), not
-// a low-entropy user-chosen secret that needs deliberately slow hashing against
-// brute force.
+// Refresh tokens are opaque random values, not JWTs. SHA-256, not bcrypt, is fine
+// here since the input is already high-entropy (32 random bytes).
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -92,10 +87,8 @@ export async function login({ email, password }: LoginInput) {
   };
 }
 
-// "Who am I" for the frontend's silent-session-restore flow (Task 2.8): /api/auth/refresh
-// only returns a fresh access token, not the user — the frontend calls this
-// immediately afterward (with that new token) to get the full profile needed to
-// populate the auth context on page load, without asking the user to log in again.
+// Fetches the current user's profile — called after /refresh to populate the
+// frontend's auth context, since refresh itself only returns a token.
 export async function getCurrentUser(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
@@ -116,10 +109,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<{ access
   return { accessToken: signAccessToken(stored.user) };
 }
 
-// Idempotent by design: logging out an already-invalid (unknown, expired, or already
-// revoked) token is a no-op, not an error — the caller's intent ("I want to not be
-// logged in") is already satisfied either way, and there's no reason to leak whether
-// a given token was ever valid.
+// Logging out an already-invalid token is a no-op, not an error.
 export async function logout(refreshToken: string): Promise<void> {
   const tokenHash = hashToken(refreshToken);
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
@@ -145,10 +135,7 @@ export class InvalidResetTokenError extends Error {
 
 const RESET_TOKEN_TTL_MINUTES = 10;
 
-// Phase 7: real send, via the swappable EmailProvider (src/infrastructure/email) — defaults to
-// ConsoleEmailProvider (logs instead of sending) unless EMAIL_PROVIDER=resend is set,
-// so dev/test never need a real RESEND_API_KEY. Builds the link the resident actually
-// clicks: APP_BASE_URL + the client's /reset-password route (ResetPasswordPage.tsx),
+// Builds the reset link: APP_BASE_URL + the client's /reset-password route,
 // which reads ?token= off the query string.
 function buildResetUrl(token: string): string {
   const base = (process.env.APP_BASE_URL ?? 'http://localhost').replace(/\/$/, '');
@@ -171,8 +158,8 @@ async function sendResetEmail(email: string, token: string): Promise<void> {
   });
 }
 
-// Returns null (not an error) for an email that doesn't exist — the controller
-// responds identically either way, so the API can't be used to enumerate accounts.
+// Returns null for an unknown email — the controller responds identically either
+// way, so this can't be used to enumerate accounts.
 export async function requestPasswordReset(email: string): Promise<string | null> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
@@ -208,12 +195,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
       where: { id: stored.id },
       data: { usedAt: new Date() },
     }),
-    // A password reset is a reasonable signal the account may have been compromised
-    // (or the user simply forgot it and wants a clean slate) — revoke every existing
-    // session rather than leaving old refresh tokens usable with the new password.
-    // Not an explicit requirement of this task, but a natural extension of why
-    // RefreshToken exists at all (Task 2.3): revocation only matters if it's actually
-    // triggered when it should be.
+    // Revoke every existing session so old refresh tokens can't outlive the new password.
     prisma.refreshToken.updateMany({
       where: { userId: stored.userId, revokedAt: null },
       data: { revokedAt: new Date() },

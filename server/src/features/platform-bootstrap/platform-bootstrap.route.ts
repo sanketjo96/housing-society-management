@@ -4,9 +4,8 @@ import { bootstrapSocietyHandler } from './platform-bootstrap.controller';
 
 export const platformBootstrapRouter = Router();
 
-// Deliberately NOT under /api/admin/* — requireRole would need an ADMIN JWT, which
-// cannot exist before this endpoint has ever run for a given society. Gated instead
-// by requirePlatformSecret (docs/features/society-onboarding/02-architecture.md's Phase A).
+// Not under /api/admin/* — no ADMIN JWT can exist before this ever runs. Gated by
+// requirePlatformSecret instead.
 platformBootstrapRouter.post(
   '/api/platform/societies',
   requirePlatformSecret,

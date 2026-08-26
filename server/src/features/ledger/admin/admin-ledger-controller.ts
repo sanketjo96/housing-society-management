@@ -57,11 +57,8 @@ export async function approveLedgerEntryHandler(req: Request, res: Response) {
   }
 }
 
-// Streams the *exact* PDF that will be issued if this entry is approved right now
-// — reuses the same buildReceiptData/renderReceiptPdf path the real approval uses
-// (receipt.service.ts), so the admin's pre-approval preview modal and the
-// eventually-issued receipt are guaranteed byte-for-byte identical. Purely a read:
-// no storage.save(), no DB write, no Receipt row created here.
+// Streams the exact PDF that would be issued if this entry is approved right now.
+// Read-only: no storage write, no DB write, no Receipt row created.
 export async function previewReceiptHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

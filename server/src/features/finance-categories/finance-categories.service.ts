@@ -1,9 +1,7 @@
 // Admin-configurable catalog of society-level income/expense heads (Electricity,
-// Salaries, Bank Interest, ...) — docs/features/manage-finance/. A real table, not an enum,
-// so a category can be added without a code deploy. isActive is the only removal
-// mechanism — never hard-deleted, since a recorded SocietyLedgerEntry must keep a
-// valid, named categoryId reference forever. Deliberately separate from FeeType
-// (resident-billing-specific, no direction concept).
+// Salaries, Bank Interest, ...). isActive is the only removal mechanism — never
+// hard-deleted, since a recorded SocietyLedgerEntry must keep a valid categoryId.
+// Separate from FeeType (resident-billing, no direction concept).
 import { prisma } from '../../infrastructure/prisma/client';
 import { DuplicateFieldError } from '../../shared/errors/errors';
 import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
@@ -64,9 +62,7 @@ export async function createFinanceCategory(
   return category;
 }
 
-// Deliberately isActive-only — no rename in v1 (docs/features/manage-finance/05-future-scope.md).
-// Renaming a category after it's been used on real entries needs its own design
-// pass, same precedent as FeeType's rename question in docs/features/other-charges/.
+// isActive-only — no rename support yet.
 export async function updateFinanceCategory(
   id: string,
   societyId: string,

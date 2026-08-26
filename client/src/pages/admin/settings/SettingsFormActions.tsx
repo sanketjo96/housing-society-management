@@ -1,9 +1,7 @@
 import { Check } from 'lucide-react';
 import { ErrorBanner } from '../../../components/FormField';
 
-// The submit button + error/success footer was identical across all three settings
-// pages (only the fields above it differ) — shared here instead of copy-pasted
-// three times.
+// Shared submit button + error/success footer for the settings pages.
 export function SettingsFormActions({
   error,
   saved,

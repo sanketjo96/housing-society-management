@@ -18,17 +18,12 @@ const REFRESH_COOKIE_NAME = 'refreshToken';
 // whole site, so it's never accidentally sent on unrelated requests.
 const REFRESH_COOKIE_PATH = '/api/auth';
 
-// GOTCHA (found via a real end-to-end check against the live public IP, not assumed):
-// this must NOT be tied to NODE_ENV. NODE_ENV is already "production" in the deployed
-// Docker stack, but there's no HTTPS yet — Certbot SSL is Task 10.2, not built. A
-// `Secure` cookie is never sent back by a real browser over plain HTTP except for the
-// special `localhost` exception (which made this look fine when first tested against
-// `http://localhost/` — it silently broke `/api/auth/refresh` the moment the same
-// test ran against the real public IP instead). Driven by its own explicit env var
-// so it can't accidentally piggyback on NODE_ENV again. Task 10.2 must set
-// COOKIE_SECURE=true once real HTTPS exists — until then, this defaults to false.
+// `secure` must be driven by its own env var, not NODE_ENV — a Secure cookie is
+// silently dropped by browsers over plain HTTP (except for a `localhost` special
+// case, which can hide the bug in local testing). Set COOKIE_SECURE=true once
+// real HTTPS is in front of this.
 const refreshCookieOptions = {
-  httpOnly: true, // never readable by JS — the entire point (Task 2.7's "httpOnly cookie preferred")
+  httpOnly: true,
   secure: process.env.COOKIE_SECURE === 'true',
   sameSite: 'lax' as const,
   path: REFRESH_COOKIE_PATH,
@@ -86,12 +81,10 @@ export async function logoutHandler(req: Request, res: Response) {
 }
 
 export async function meHandler(req: Request, res: Response) {
-  // req.user is always set — requireRole runs first on this route (see auth.route.ts).
+  // req.user is always set — requireRole runs first on this route.
   const user = await getCurrentUser(req.user!.id);
   if (!user) {
-    // Token is valid but the user row is gone — theoretically possible, not reachable
-    // in this MVP (no user-deletion feature exists), but a real user account must
-    // never be assumed to still exist just because their token verified.
+    // Token valid but the user row is gone.
     res.status(404).json({ error: 'User not found' });
     return;
   }
@@ -107,8 +100,7 @@ export async function requestResetHandler(req: Request, res: Response) {
     return;
   }
 
-  // Deliberately identical response whether or not the email exists — same
-  // non-enumeration principle as login (Task 2.2).
+  // Identical response whether or not the email exists.
   await requestPasswordReset(parsed.data.email);
   res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
 }

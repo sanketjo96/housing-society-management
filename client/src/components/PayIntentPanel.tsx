@@ -18,10 +18,8 @@ export interface PaymentIntent {
   bankAccountNumber?: string;
   bankIfsc?: string;
   createdAt: string;
-  // docs/features/other-charges/ — which pool this intent is locked against. A resident has
-  // at most one open intent at a time, across BOTH pools — a page for the other
-  // pool must check this before rendering Pay/this panel (see
-  // ResidentDashboardOverview.tsx / OtherChargesBookPage.tsx).
+  // Which pool this intent is locked against — only one open intent at a time,
+  // across both pools.
   category: LedgerCategory;
 }
 
@@ -32,16 +30,10 @@ export async function fetchOpenIntent(): Promise<PaymentIntent | null> {
   return body.intent;
 }
 
-// Pay — tapping the header's Pay button locks the amount immediately, at exactly
-// the current Outstanding for that pool. This panel only ever renders once an
-// intent already exists — forking by device from that point on: mobile deep-links
-// straight into a UPI app and then prompts for the screenshot on return; desktop
-// shows a QR to scan with a phone and lets the resident attach the screenshot
-// whenever they're back, even in a later session (the intent is a real DB row, not
-// just component state). Shared by the Maintenance Dashboard and the Other Charges
-// Book page (docs/features/other-charges/) — there's only ever one intent, so both pages
-// query/render the same underlying row; `onSubmitted` lets each caller invalidate
-// its own ledger query on success without this component needing to know which one.
+// Renders once a payment intent already exists — mobile deep-links into a UPI
+// app then prompts for the screenshot; desktop shows a QR and lets the
+// resident attach the screenshot whenever they're back. `onSubmitted` lets
+// the caller invalidate its own query on success.
 export function PayIntentPanel({
   intent,
   isMobile,
@@ -54,9 +46,7 @@ export function PayIntentPanel({
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
 
-  // Re-check the open intent when the resident comes back to the tab (e.g. after
-  // the UPI app redirect on mobile) — the intent is server-persisted, so this just
-  // keeps the UI in sync rather than relying on the 30s query staleTime.
+  // Re-check the intent when the tab regains visibility (e.g. after a UPI app redirect).
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState === 'visible') {

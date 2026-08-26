@@ -1,6 +1,5 @@
-// Admin flat onboarding/CRUD: list, create, update, CSV bulk-import. Backs
-// admin/controller.ts's non-tenant-assignment endpoints (assignTenant/removeTenant,
-// the id-based lower-level alternative, live in ./tenancy.service.ts).
+// Admin flat onboarding/CRUD: list, create, update, CSV bulk-import.
+// assignTenant/removeTenant (id-based) live in ./admin-flats-tenancy-service.ts.
 import { prisma } from '../../../infrastructure/prisma/client';
 import { DuplicateFieldError } from '../../../shared/errors/errors';
 import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
@@ -41,9 +40,7 @@ export interface UpdateFlatInput {
   effectiveFrom?: Date;
 }
 
-// Includes owner/currentTenant contact summaries in one query — Task 3.3's list view
-// is exactly "flat list view with owner/tenant/status" (Epic 2), so the admin
-// shouldn't need N+1 follow-up requests per row.
+// Includes owner/currentTenant contact summaries in one query, avoiding N+1.
 export async function listFlats(societyId: string) {
   return prisma.flat.findMany({
     where: { societyId },
@@ -52,10 +49,8 @@ export async function listFlats(societyId: string) {
   });
 }
 
-// One atomic action: find-or-create the owner's account, create the flat, and (if
-// occupancy is 'tenant') find-or-create the tenant's account and open their
-// OccupancyChange — matching the admin UI's single flat-onboarding form (wing,
-// flatNumber, baseRate, owner contact, occupancy, tenant contact all saved together).
+// Finds-or-creates the owner's account, creates the flat, and (if occupancy is
+// 'tenant') finds-or-creates the tenant's account and opens their OccupancyChange.
 export async function createFlat(input: CreateFlatInput) {
   const owner = await findOrCreateUserByEmail(input.societyId, 'OWNER', {
     name: input.ownerName,
@@ -93,12 +88,8 @@ export async function createFlat(input: CreateFlatInput) {
   });
 }
 
-// Returns null if the flat doesn't exist, or exists but belongs to a different society
-// (Task 2.6 tenant scoping) — same "not found" outcome either way, so a caller can't
-// tell a wrong-society id apart from a nonexistent one. wing/flatNumber are
-// deliberately not editable here (matches the admin UI's disabled inputs — the
-// onboarding-time identity of a flat doesn't change; see CLAUDE.md's
-// "Addition (2026-08-06)").
+// Returns null for a nonexistent flat or one in a different society. wing/flatNumber
+// are not editable here — set once at onboarding.
 export async function updateFlat(id: string, societyId: string, input: UpdateFlatInput) {
   const existing = await prisma.flat.findFirst({ where: scopedWhere(societyId, { id }) });
   if (!existing) return null;
@@ -158,15 +149,8 @@ const IMPORT_OPTIONAL_COLUMNS = [
   'effectivefrom',
 ] as const;
 
-// Hand-rolled CSV parsing (no library) — deliberately, since the expected fields never
-// contain commas or quotes, so a dependency for RFC 4180 edge cases (quoted fields,
-// embedded commas) isn't needed for this MVP's actual data (CLAUDE.md: "correctness
-// over scale, don't over-engineer"). Column-name-based (not fixed-order) so a
-// spreadsheet export with reordered columns still works. Per-row failures are
-// collected rather than aborting the batch — one bad row (a typo'd occupancy value,
-// non-numeric rate) shouldn't block every other valid row in the same import. Same
-// owner/tenant contact-field shape as createFlat/updateFlat (CLAUDE.md's "Addition
-// (2026-08-06)") — a CSV row onboards a flat exactly the way the admin form does.
+// Hand-rolled, column-name-based CSV parsing (no library) — works with reordered
+// columns. Per-row failures are collected; the batch continues.
 export async function bulkImportFlats(
   societyId: string,
   csvText: string,
@@ -198,11 +182,8 @@ export async function bulkImportFlats(
   const cell = (cols: string[], col: string) =>
     colIndex[col] === -1 ? undefined : cols[colIndex[col]] || undefined;
 
-  // A bulk-imported row always takes the society's configured default base rate — no
-  // per-row baseRate column, unlike single-flat onboarding where an admin can set a
-  // flat-specific rate. Keeps the CSV contract to identity/contact fields only; a rate
-  // that needs to differ from the default can still be adjusted afterward via the
-  // per-flat edit form.
+  // Every imported row takes the society's default base rate — adjustable afterward
+  // per flat.
   const society = await prisma.society.findUniqueOrThrow({ where: { id: societyId } });
 
   const created: BulkImportResult['created'] = [];

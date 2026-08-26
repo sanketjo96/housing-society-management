@@ -8,12 +8,9 @@ export interface S3Config {
   secretAccessKey: string;
 }
 
-// Same shape/precedent as whatsapp.config.ts's getWhatsAppConfig(): read at call
-// time via env()/requiredEnv() (never cached at module load), and called only from
-// inside getStorageAdapter()'s 's3' branch (index.ts) — never at server startup —
-// so leaving these unset while STORAGE_PROVIDER=local (the default) never blocks
-// docker compose up. 'auto' is R2's documented region value; a real AWS S3 bucket
-// would set S3_REGION to its actual region instead.
+// Read lazily, only from getStorageAdapter()'s 's3' branch — never at server
+// startup, so leaving these unset while STORAGE_PROVIDER=local never blocks
+// startup. 'auto' is R2's region value; a real AWS bucket sets its actual region.
 export function getS3Config(): S3Config {
   return {
     bucket: requiredEnv('S3_BUCKET'),

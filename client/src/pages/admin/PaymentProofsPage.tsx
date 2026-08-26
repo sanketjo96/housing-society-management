@@ -24,10 +24,7 @@ interface LedgerEntryListItem {
   flat: { id: string; wing: string; flatNumber: string };
 }
 
-// Who actually created the row — distinct from the payer it's for. An ADMIN-created
-// entry with no proof attached is exactly a manualDeposit (cash/bank transfer, no
-// UPI screenshot) — this badge is the direct, structured way to see that, instead of
-// reading `note` text or cross-referencing AuditLog.
+// Who created the row, distinct from the payer it's for.
 const CREATED_BY_META: Record<CreatedByType, { className: string; label: string }> = {
   OWNER: { className: 'border border-line text-ink', label: 'Owner' },
   TENANT: { className: 'border border-line text-ink', label: 'Tenant' },
@@ -55,13 +52,7 @@ async function fetchLedgerEntries(status: LedgerEntryStatus): Promise<LedgerEntr
   return res.json();
 }
 
-// Owns just the "View proof" button's own error state — split out from the row so
-// each column's cell renderer is a small, independently-stateful component rather
-// than one component owning an entire <tr> (that shape doesn't fit TanStack Table's
-// per-cell rendering model, see DataTable.tsx). A fileless row is only guaranteed
-// impossible on the Pending tab (filtered in PaymentProofsPage below) — Approved and
-// Rejected are unfiltered historical records, so a manually-marked-paid entry can
-// still reach here with no file.
+// Approved/Rejected rows can lack a file (e.g. a manually-marked-paid entry).
 function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean }) {
   const [viewError, setViewError] = useState<string | null>(null);
 
@@ -86,9 +77,7 @@ function ProofFileCell({ entryId, hasFile }: { entryId: string; hasFile: boolean
   );
 }
 
-// Approved rows only — a legacy entry approved before the Receipt Generation &
-// Approval Workflow shipped (2026-08-11) has no Receipt row, so a 404 here is
-// expected and shown inline rather than treated as a bug.
+// A legacy entry with no Receipt row 404s here — shown inline, not a bug.
 function ReceiptDownloadCell({ entryId }: { entryId: string }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -117,9 +106,7 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
 
-  // Approve no longer settles the entry directly — it opens ReceiptApprovalModal
-  // first (the "receipt validation modal" requirement); this mutation is now fired
-  // by the modal's "Confirm and approve" button, not by clicking Approve itself.
+  // Fired by ReceiptApprovalModal's "Confirm and approve", not the Approve button itself.
   const approveMutation = useMutation({
     mutationFn: async () => {
       const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, { method: 'POST' });
@@ -130,9 +117,6 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
     onSuccess: () => {
       setShowApprovalModal(false);
       queryClient.invalidateQueries({ queryKey: ['admin-ledger-entries'] });
-      // Approval also issues a real Receipt (approveLedgerEntry, admin-ledger-
-      // service.ts) — without this, the Receipt Book page's cached list (30s
-      // staleTime, App.tsx) can silently miss the one just issued.
       queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
     },
   });
@@ -221,12 +205,7 @@ export function PaymentProofsPage() {
     queryFn: () => fetchLedgerEntries(status),
   });
 
-  // Pending and Approved both only show entries with an actual proof attached — a
-  // manually-marked-paid entry (no screenshot) or a Deposit submitted through the
-  // lower-level, no-file-required primitive has nothing to review/display here, so
-  // it's excluded rather than shown with a "No file attached" placeholder. Rejected
-  // stays unfiltered — every rejected submission is worth keeping visible regardless
-  // of whether it had a proof, since rejection itself doesn't hinge on that.
+  // Pending/Approved only show entries with a proof attached. Rejected stays unfiltered.
   const data = useMemo(
     () => (status === 'REJECTED' ? fetched : fetched?.filter((e) => e.fileUrl)),
     [fetched, status],

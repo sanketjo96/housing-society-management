@@ -3,8 +3,7 @@ import { DuplicateFieldError } from '../../../shared/errors/errors';
 import { updateMeSchema } from './profile-schemas';
 import { updateOwnProfile } from './profile-service';
 
-// Generic account self-service, usable by any authenticated role — not flat-specific
-// (see features/flats/resident/ for the flat/tenant self-service that is).
+// Generic account self-service, usable by any authenticated role.
 export async function updateMeHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

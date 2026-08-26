@@ -19,8 +19,8 @@ societyLedgerRouter.post(
   verifyFileSignature(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
   recordSocietyLedgerEntryHandler,
 );
-// Phase E of docs/features/society-onboarding/ — historical bulk import, no file involved
-// (Confirmed Product Decision #4: bulk-imported rows skip the mandatory-proof rule).
+// Historical bulk import — no file involved, bulk-imported rows skip the
+// mandatory-proof rule.
 societyLedgerRouter.post(
   '/api/admin/society-ledger/import',
   requireRole(['ADMIN']),

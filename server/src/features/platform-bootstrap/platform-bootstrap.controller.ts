@@ -3,10 +3,8 @@ import { DuplicateFieldError } from '../../shared/errors/errors';
 import { bootstrapSocietySchema } from './platform-bootstrap.schemas';
 import { bootstrapSociety } from './platform-bootstrap.service';
 
-// No req.user check here (unlike every other admin controller) — this endpoint runs
-// behind requirePlatformSecret, not requireRole, and by design creates the very
-// first admin account for a society that doesn't exist yet. There is no
-// authenticated user to check.
+// No req.user check — gated by requirePlatformSecret, not requireRole, since this
+// creates the very first admin account for a society that doesn't exist yet.
 export async function bootstrapSocietyHandler(req: Request, res: Response) {
   const parsed = bootstrapSocietySchema.safeParse(req.body);
   if (!parsed.success) {

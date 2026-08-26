@@ -11,28 +11,20 @@ export interface ReceiptData {
   transactionType: 'DEPOSIT';
   purpose: string;
   amount: number;
-  // Chairman/secretary signatories (2026-08-17: replaced the single treasurer
-  // signatory this receipt used to show — see CLAUDE.md's "Receipt now signed by
-  // Chairman and Secretary" addendum). Either may be absent (role unassigned).
+  // Either may be absent if that committee role is unassigned.
   chairmanName?: string;
   secretaryName?: string;
   footerNote?: string;
 }
 
-// The two signature images (if any) a receipt is rendered with — keyed by role,
-// not a single generic slot, since both blocks render side by side regardless of
-// whether either image exists (see drawSignatoryBlock's blank-line fallback).
+// The two signature images (if any) a receipt is rendered with.
 export interface ReceiptSignatures {
   chairman?: Buffer;
   secretary?: Buffer;
 }
 
-// Draws one signatory block (signature image or blank line, then name, then role
-// label) at a fixed x/width, and returns the y just past its bottom edge — used to
-// lay out the Chairman and Secretary blocks side by side and then position the
-// footer note below whichever one runs taller (a missing name still reserves the
-// same vertical space via the non-breaking-space fallback, so the two blocks stay
-// visually aligned even when only one role is assigned).
+// Draws one signatory block (image or blank line, then name, then role label) and
+// returns the y just past its bottom edge.
 function drawSignatoryBlock(
   doc: PDFKit.PDFDocument,
   x: number,
@@ -59,8 +51,6 @@ function drawSignatoryBlock(
       doc.image(signatureBuffer, x, sigY, { fit: [width, 45], align: 'center' });
       sigY += 50;
     } catch {
-      // A corrupt/unreadable signature buffer must never block a receipt from
-      // rendering — fall back to the blank-line signatory block below.
       drawBlankLine();
     }
   } else {
@@ -84,9 +74,7 @@ const TRANSACTION_TYPE_LABEL: Record<ReceiptData['transactionType'], string> = {
   DEPOSIT: 'Deposit',
 };
 
-// Mirrors client/src/index.css's `@theme` tokens, so the issued PDF reads as
-// the same visual identity as the rest of the app (the reference layout this
-// was redesigned against) instead of an unrelated invented palette.
+// Mirrors client/src/index.css's `@theme` tokens for visual consistency with the app.
 const COLOR = {
   ink: '#182420',
   muted: '#8a9088',
@@ -97,10 +85,8 @@ const COLOR = {
   paper: '#f3f5f0',
 };
 
-// No real society-logo upload exists in this app (only a signature image, see
-// Society.receiptSignatureFileKey) — this small stylised "receipt" glyph
-// (folded-corner page + text lines in a rounded brass badge) fills that slot
-// instead of leaving the header blank.
+// No society-logo upload exists — this stylised "receipt" glyph (folded-corner
+// page in a rounded brass badge) fills that slot instead of leaving it blank.
 function drawLogoMark(doc: PDFKit.PDFDocument, x: number, y: number, size: number): void {
   doc.roundedRect(x, y, size, size, size * 0.22).fill(COLOR.brass);
 
@@ -137,13 +123,10 @@ function drawLogoMark(doc: PDFKit.PDFDocument, x: number, y: number, size: numbe
   }
 }
 
-// Redesigned to match the confirmed reference layout (a bordered "card":
-// logo + society letterhead and receipt number up top, received-from/date
-// row, a shaded type/towards/amount panel, signature block at the bottom) —
-// same ReceiptData contract and content as before, only the presentation
-// changed. Streams into a Buffer rather than a file path since the caller
-// decides where the bytes end up (StorageAdapter.save, or straight to an
-// HTTP response for the pre-approval preview) — see receipt.service.ts.
+// Renders a bordered "card" layout: logo + letterhead and receipt number up top,
+// received-from/date row, a shaded type/towards/amount panel, signature block at
+// the bottom. Streams into a Buffer since the caller decides where the bytes end
+// up (storage save, or straight to an HTTP response for the preview).
 export async function renderReceiptPdf(
   data: ReceiptData,
   signatures?: ReceiptSignatures,
@@ -301,10 +284,7 @@ export async function renderReceiptPdf(
 
     y = y + boxHeight + 40;
 
-    // --- Signatory blocks: Chairman (left) and Secretary (right) — replaced the
-    // former single right-aligned treasurer block (2026-08-17). Each block's image
-    // (if any) sits directly above its name, replacing the blank line, same as the
-    // original single-signatory spec's requirement, just applied to two blocks.
+    // --- Signatory blocks: Chairman (left) and Secretary (right) ---
     const blockWidth = 150;
     const chairmanX = marginX;
     const secretaryX = marginX + contentWidth - blockWidth;

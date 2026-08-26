@@ -2,16 +2,13 @@ import { AlertCircle, AlertTriangle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-// Shared building blocks for the app's admin/resident forms (MyDetailsPage,
-// admin/FlatsListPage) — previously duplicated byte-for-byte across both files.
+// Shared form building blocks.
 
 export const inputClass =
   'w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-teal disabled:bg-paper disabled:text-muted';
 
-// The input is nested inside <label>, not a sibling — this creates a real implicit
-// label/control association (what getByLabelText and screen readers both rely on),
-// not just visual proximity. A label immediately before/after its input with no
-// htmlFor/id link looks right but isn't programmatically associated with anything.
+// Input nested inside <label> for a real implicit label/control association
+// (getByLabelText, screen readers) — not just visual proximity.
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="mb-3.5 block">
@@ -40,8 +37,7 @@ export function SectionHeader({ icon: Icon, title }: { icon: LucideIcon; title: 
 
 export const Divider = () => <div className="my-5 border-t border-line" />;
 
-// Standard mutation-error banner — was styled two different ways (icon+flex vs a bare
-// <p>) across pages for the exact same failure state; unified here.
+// Standard mutation-error banner.
 export function ErrorBanner({ children }: { children: ReactNode }) {
   return (
     <div className="mb-3.5 flex items-start gap-2 rounded-lg bg-coral-light px-3 py-2.5">
@@ -53,12 +49,8 @@ export function ErrorBanner({ children }: { children: ReactNode }) {
   );
 }
 
-// A non-blocking configuration gap, not a mutation failure — e.g. "add a Custom Fee
-// before billing" (OtherChargesPage.tsx) or "add a Finance Category before recording"
-// (ManageFinancePage.tsx). Amber, not coral, and never role="alert" — nothing failed,
-// there's just a prerequisite the admin should go configure. The page/form stays
-// reachable either way; this only explains why the picker below it is empty and links
-// straight to where to fix it.
+// Non-blocking configuration-gap warning (amber, not an error) — a prerequisite
+// the admin needs to go set up, not a failure.
 export function WarningBanner({ children }: { children: ReactNode }) {
   return (
     <div className="mb-3.5 flex items-start gap-2 rounded-lg bg-amber-light px-3 py-2.5">

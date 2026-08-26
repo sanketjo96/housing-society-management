@@ -8,8 +8,7 @@ export interface AuthenticatedUser {
   societyId: string;
 }
 
-// Declaration merging: lets every controller read req.user without a cast, once this
-// middleware (or any future one that sets it) has run.
+// Lets every controller read req.user without a cast, once this middleware has run.
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -19,11 +18,8 @@ declare global {
   }
 }
 
-// requireRole(['ADMIN']) both authenticates (is there a valid access token at all?)
-// and authorizes (is this role allowed here?) — they can't be split into separate
-// middlewares cleanly, since you can't check a role without first decoding a valid
-// token. 401 means "who are you" (missing/malformed/invalid/expired token); 403 means
-// "I know who you are, you're not allowed" (valid token, disallowed role).
+// Authenticates and authorizes together. 401 = no valid token; 403 = valid
+// token, disallowed role.
 export function requireRole(allowedRoles: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;

@@ -1,7 +1,6 @@
-// Resolve recipient + template, then hand off to the existing swappable
-// EmailProvider (src/infrastructure/email) — same "resolve fresh at delivery time,
-// never persist the destination address on the event" rule whatsapp.service.ts
-// already follows for phone numbers (architecture.md §4), applied to email here.
+// Resolve recipient + template, then hand off to the swappable EmailProvider
+// (infrastructure/email). Resolves the address fresh at delivery time — never
+// persisted on the event.
 import { prisma } from '../../../infrastructure/prisma/client';
 import { getEmailProvider } from '../../../infrastructure/email';
 import type { NotificationEvent, NotificationEventType } from '../notification.types';
@@ -42,11 +41,8 @@ export interface DeliverableNotification {
   payload: unknown;
 }
 
-// Called by notification.service.ts's deliverPending() for each claimed EMAIL-channel
-// row. User.email is required+unique at the schema level (unlike User.phone, which is
-// optional free text) — the only way it's missing here is the User row having been
-// deleted after the event was created, which is what the permanent-error branch below
-// covers.
+// User.email is required+unique at the schema level — the only way it's missing
+// here is the User row having been deleted since the event was created.
 export async function sendEmailForNotification(
   row: DeliverableNotification,
 ): Promise<SendEmailForNotificationResult> {
@@ -63,10 +59,8 @@ export async function sendEmailForNotification(
   try {
     await getEmailProvider().send({ to: user.email, subject: content.subject, html: content.html, text: content.text });
   } catch (err) {
-    // EmailProvider doesn't distinguish transient vs. permanent itself (a Resend
-    // network hiccup and a hard bounce look the same at this layer) — default to
-    // transient so a retry is attempted, same conservative default the WhatsApp
-    // client effectively gets from an unclassified error.
+    // EmailProvider doesn't distinguish transient vs. permanent — default to
+    // transient so a retry is attempted.
     throw new EmailTransientError(err instanceof Error ? err.message : String(err));
   }
 

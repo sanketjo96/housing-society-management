@@ -5,9 +5,6 @@ import { DuplicateFieldError } from '../../../shared/errors/errors';
 import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
 import { scopedWhere } from '../../../shared/security/tenant-scope';
 
-// Re-exported for backward compatibility — existing imports (controllers, tests)
-// reference this module directly; the class itself now lives in lib/errors.ts since
-// flats.service.ts (Task 3.1) needs it too.
 export { DuplicateFieldError };
 
 export interface CreateUserInput {
@@ -19,13 +16,8 @@ export interface CreateUserInput {
   societyId: string;
 }
 
-// Scoped to the caller's own society (Task 2.6) — a user id that belongs to a
-// different society returns null, identical to an id that doesn't exist at all.
-// findFirst, not findUnique: Prisma's findUnique only reliably supports filtering by
-// unique fields, and societyId isn't part of User's unique key. findFirst supports an
-// arbitrary combined where clause, so "this id, but only if it's in this society" is
-// a single query, not a fetch-then-check-in-application-code pattern (which would be
-// easy to accidentally skip in a future service).
+// A user id belonging to a different society returns null, same as a nonexistent
+// id. findFirst, not findUnique — societyId isn't part of User's unique key.
 export async function getUserById(id: string, societyId: string) {
   return prisma.user.findFirst({
     where: scopedWhere(societyId, { id }),

@@ -57,13 +57,8 @@ interface MaintenanceBookData {
   outstanding: number;
 }
 
-// Reuses GET /api/me/ledger (no `year` param — lifetime, every row ever) and
-// filters client-side into the two tables this page shows (SYSTEM charges and
-// DEPOSIT history) rather than adding dedicated backend endpoints — the data is
-// already there and a flat's full history is at most a couple hundred rows. `totals`
-// is always lifetime regardless of any `year` param (see ledger-shared.ts), so it's
-// exactly right for both the "Total maintenance amount" and "Maintenance
-// Outstanding" cards without any extra computation.
+// Fetches the full lifetime ledger and filters client-side into SYSTEM charges
+// and DEPOSIT history — no dedicated backend endpoints needed.
 async function fetchMaintenanceBook(): Promise<MaintenanceBookData> {
   const res = await authedFetch('/api/me/ledger');
   if (!res.ok) throw new Error('Could not load your maintenance book.');
@@ -188,22 +183,10 @@ const BOOK_TABS: { value: BookTab; label: string }[] = [
   { value: 'BILLS', label: 'Bills' },
 ];
 
-// SYSTEM-charges-and-Deposit-history view — the resident-view restructure's
-// "Maintenance Book" page, now the home for Maintenance's own Pay control too
-// (previously on the Dashboard, moved here so the Dashboard can be a pure 4-card
-// navigation hub — see ResidentDashboardOverview.tsx). Split into two tabs —
-// "Payment History" (shown first and the default: the Pay control, sitting right
-// above the Deposit history it feeds, then the past Deposits themselves) and
-// "Bills" (just the charges table + date filters, no Pay control — paying is a
-// payment-history-tab action, not a bills-browsing one) — same role="tablist"
-// pattern as admin/PaymentProofsPage.tsx's status tabs, rather than stacking both
-// tables on one page. Same tab structure as OtherChargesBookPage.tsx. "Status" on
-// the Bills table is a real,
-// per-record Unpaid/Partially settled/Paid badge — derived server-side by
-// FIFO-filling the flat's approved deposits+credits across its records oldest-first
-// (see CLAUDE.md's settlement-tracking addendum; ledger.service.ts's
-// computeRecordSettlements). Lifetime view, no year concept — only the Bills tab's
-// date-range filter narrows what's shown.
+// Two tabs: "Payment History" (default — Pay control + Deposit history) and
+// "Bills" (charges table + date filters, no Pay control). Status on the Bills
+// table is a derived Unpaid/Partially settled/Paid badge (FIFO-filled server-side
+// across records oldest-first). Lifetime view — only Bills' date filter narrows it.
 export function MaintenanceBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -214,8 +197,7 @@ export function MaintenanceBookPage() {
     queryKey: ['my-maintenance-records'],
     queryFn: fetchMaintenanceBook,
   });
-  // Shared with OtherChargesBookPage.tsx and the (retired) Dashboard pay panel —
-  // there's only ever one intent, across both pools (docs/features/other-charges/).
+  // There's only ever one open intent, across both pools.
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
   const intentOpenForThisPool = intentQuery.data?.category === 'MAINTENANCE';
   const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'MAINTENANCE';
@@ -225,19 +207,15 @@ export function MaintenanceBookPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  // Pre-fills with the full Outstanding so the common case (pay what you owe) is a
-  // single tap — but only when something is actually owed. At ₹0 Outstanding this
-  // would otherwise pre-fill "0" and immediately show the "greater than ₹0" error;
-  // leaving it blank instead lets a resident type their own advance amount to
-  // deposit as Available Credit against a future month, with no false-error flash.
+  // Pre-fills the full Outstanding; left blank at ₹0 so the "greater than ₹0"
+  // error doesn't flash immediately and the field is free for an advance amount.
   useEffect(() => {
     if (data) setAmountInput(data.outstanding > 0 ? String(data.outstanding) : '');
   }, [data]);
 
   const outstanding = data?.outstanding ?? 0;
   const parsedAmount = Number(amountInput);
-  // No longer capped at Outstanding (2026-08-20 pivot) — any amount beyond it settles
-  // Outstanding in full and the remainder becomes Available Credit once approved.
+  // Amount beyond Outstanding settles it in full; the remainder becomes Available Credit.
   const isAmountValid = amountInput.trim() !== '' && Number.isFinite(parsedAmount) && parsedAmount > 0;
   const overpayAmount = isAmountValid && parsedAmount > outstanding ? parsedAmount - outstanding : 0;
 
@@ -407,11 +385,7 @@ export function MaintenanceBookPage() {
                       </span>
                     )}
                   </div>
-                  {/* Always visible, even at ₹0 Outstanding (not gated behind
-                      outstanding > 0) — a resident may want to deposit an advance
-                      amount to settle against maintenance in a future month, which
-                      becomes Available Credit once approved (see the overpay hint
-                      below). Only an already-open payment intent hides this. */}
+                  {/* Visible even at ₹0 Outstanding, for advance deposits. Hidden only when an intent is already open. */}
                   {!intentQuery.data && (
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="flex flex-col text-xs font-semibold text-muted">
@@ -457,9 +431,7 @@ export function MaintenanceBookPage() {
                     onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] })}
                   />
                 )}
-                {/* docs/features/other-charges/ — at most one open intent at a time, across both
-                    pools. If it's for Other Charges, this page can't start a new one
-                    (server-blocked) — point at where to finish it instead. */}
+                {/* Only one open intent at a time — point at where to finish an Other Charges one. */}
                 {intentOpenForOtherPool && (
                   <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
                     You have a pending payment for Other Charges — finish or cancel it on the{' '}

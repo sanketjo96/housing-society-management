@@ -1,9 +1,5 @@
-// Rule 8 (CLAUDE.md): a maintenance record unpaid past its due date + a grace period
-// flags the flat. Pure functions — no Prisma/DB types — so the "is this actually
-// overdue" and "what does the reminder say" logic is unit-testable without a database
-// and reusable from both the dashboard widget (Task 8.4) and any future automated
-// trigger (out of scope this phase — CLAUDE.md's rule 8 is explicit that sharing stays
-// manual, no auto-post).
+// A maintenance record unpaid past due date + grace period flags the flat.
+// Pure functions, no DB types.
 
 export const DEFAULT_GRACE_PERIOD_DAYS = 7;
 
@@ -22,9 +18,7 @@ export interface EscalationMessageInput {
   societyName: string;
 }
 
-// A ready-to-copy reminder — rule 8: "prepares a message; admin manually shares it (no
-// auto-post to WhatsApp)". Deliberately plain text, no markup, so it pastes cleanly
-// into WhatsApp/SMS/email as-is.
+// Plain text, no markup, so it pastes cleanly into WhatsApp/SMS/email.
 export function buildEscalationMessage(input: EscalationMessageInput): string {
   const dueDateLabel = input.oldestDueDate.toLocaleDateString('en-IN', {
     day: 'numeric',

@@ -30,24 +30,16 @@ async function fetchFlatOptions(): Promise<FlatOption[]> {
   return res.json();
 }
 
-// createdByType=ADMIN is exactly a manualDeposit row — the payer is still whichever
-// resident (owner, or the tenant for maintenance) the payment was recorded against,
-// but the row was created by an admin, not submitted by the resident. Delinked from
-// Payment Proofs (2026-08-20): that page's Pending/Approved tabs only ever show
-// entries with an attached proof file, and a manualDeposit row never has one (it's
-// recorded outside the app, no screenshot) — so these entries were never actually
-// visible there. No status filter here either: manualDeposit always creates an
-// already-APPROVED entry, so filtering by createdByType alone is sufficient.
+// createdByType=ADMIN identifies manualDeposit rows — always already-APPROVED,
+// so no status filter is needed.
 async function fetchMarkAsPaidEntries(): Promise<MarkAsPaidEntry[]> {
   const res = await authedFetch('/api/admin/ledger-entries?createdByType=ADMIN');
   if (!res.ok) throw new Error('Could not load entries.');
   return res.json();
 }
 
-// The admin fallback for a payment that never went through the UPI flow — cash
-// handed to the treasurer, or a bank transfer done outside the app. Creates an
-// already-APPROVED Deposit directly (manualDeposit, admin-ledger-service.ts) and
-// issues a real receipt — there's no screenshot to review, so no PENDING step.
+// Records a cash/bank-transfer payment made outside the app as an already-APPROVED
+// Deposit, and issues a receipt.
 function MarkAsPaidForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const [flatId, setFlatId] = useState('');
@@ -74,13 +66,7 @@ function MarkAsPaidForm({ onDone }: { onDone: () => void }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-mark-as-paid-entries'] });
-      // manualDeposit also issues a real Receipt (admin-ledger-service.ts) —
-      // without this, the Receipt Book page's cached list (30s staleTime,
-      // App.tsx) can silently miss the one just issued.
       queryClient.invalidateQueries({ queryKey: ['admin-receipts'] });
-      // Affects either pool's Outstanding depending on category — refresh the
-      // dashboard cards (and, if this was an Other Charge, its own book/list) so
-      // neither goes stale for the rest of the 30s window.
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard-summary'] });
       queryClient.invalidateQueries({ queryKey: ['admin-other-charges'] });
       onDone();

@@ -1,17 +1,9 @@
 import path from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
 
-// Each endpoint's `@openapi` JSDoc block lives in an openapi file sibling to the route
-// file it documents — `<feature>.openapi.ts` next to `<feature>.route.ts` for a flat
-// feature folder (e.g. features/auth/auth.openapi.ts), or `<prefix>-openapi.ts` next
-// to `<prefix>-route.ts` inside a concern subfolder (e.g.
-// features/flats/admin/admin-flats-openapi.ts) — a separate file rather than inline
-// above each route registration, so the route files themselves stay short and
-// readable. swagger-jsdoc only needs to find the comment blocks somewhere in a matched
-// file, not attached to specific code, so both naming shapes are matched here. Matches
-// both `.ts` (dev, via `tsx watch`) and the compiled `.js` (production, `node
-// dist/server.js`) — swagger-jsdoc parses the raw file text, so comments survive the
-// TypeScript → JavaScript compile untouched.
+// Each endpoint's @openapi JSDoc block lives in a sibling `*.openapi.ts`/
+// `*-openapi.ts` file next to the route file it documents. Matches both `.ts`
+// (dev) and compiled `.js` (production) since swagger-jsdoc parses raw file text.
 const isCompiled = __filename.endsWith('.js');
 const ext = isCompiled ? 'js' : 'ts';
 const routeGlobs = [
@@ -31,9 +23,7 @@ const definition: swaggerJsdoc.Options['definition'] = {
       'committee dues tracking. See the project docs/ directory for the full business ' +
       'rules behind these endpoints.',
   },
-  // Relative, not a hardcoded host — this spec is served by the same origin it
-  // documents (mounted at /api/docs, see app.ts), so "Try it out" requests in the UI
-  // always target whichever host is actually serving this page, dev or production.
+  // Relative, not hardcoded — "Try it out" requests target whichever host serves this page.
   servers: [{ url: '/', description: 'Current host' }],
   components: {
     securitySchemes: {
@@ -278,9 +268,8 @@ const definition: swaggerJsdoc.Options['definition'] = {
       },
     },
   },
-  // Every endpoint requires a bearer token unless its own doc block overrides this
-  // with `security: []` (login, refresh, request-reset, reset — the handful that are
-  // reached before a token exists).
+  // Default: every endpoint requires a bearer token unless its own doc block
+  // overrides with `security: []`.
   security: [{ bearerAuth: [] }],
   tags: [
     { name: 'Auth', description: 'Login, session refresh, logout, password reset.' },

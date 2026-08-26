@@ -1,8 +1,4 @@
-// OpenAPI docs for auth.route.ts's endpoints, kept in a sibling file rather than
-// inline above each route registration — swagger-jsdoc only needs to find these
-// comment blocks somewhere in a matched file (src/infrastructure/openapi/openapi.ts's
-// `apis` glob), not attached to specific code, so pulling them out here keeps
-// auth.route.ts itself readable while still living right next to what it documents.
+// OpenAPI docs for auth.route.ts.
 export {};
 
 /**

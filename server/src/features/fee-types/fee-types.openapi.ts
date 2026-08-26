@@ -1,8 +1,5 @@
-// OpenAPI docs for fee-types.route.ts — see auth/auth.openapi.ts's header comment
-// for why these live in a sibling file rather than inline above each route.
-//
-// Displayed as "Custom Fee(s)" (2026-08-26 rename) — route paths, schema names, and
-// the underlying FeeType model are unchanged, this is display copy only.
+// OpenAPI docs for fee-types.route.ts. Displayed as "Custom Fee(s)" — route
+// paths and the underlying FeeType model keep their original name.
 export {};
 
 /**

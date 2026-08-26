@@ -10,8 +10,7 @@ import {
   upsertOwnTenant,
 } from './resident-flats-service';
 
-// req.user.role is guaranteed OWNER or TENANT by requireRole on this route (see
-// ./route.ts) — ADMIN never reaches here, so there's no third case to handle.
+// req.user.role is guaranteed OWNER or TENANT by requireRole on this route.
 export async function getMyFlatHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
@@ -60,16 +59,9 @@ export async function upsertMyTenantHandler(req: Request, res: Response) {
   }
 }
 
-// A blank phone input submits as '' (React Hook Form), not undefined — '' must be
-// treated as "not provided" here, both so .min(1) doesn't reject an intentionally
-// empty field, and so it's never written to User.phone (a @unique column) as a
-// literal empty string, which would collide with the next blank submission.
-// Combined "one form, one Save changes button" save (resident-experience mockup's My
-// details tab) — owner contact + occupancy + tenant contact together, reusing
-// updateFlat's exact find-or-create-tenant-inline mechanism (../admin/onboarding.service,
-// the 2026-08-06 addendum) rather than duplicating it. wing/flatNumber/baseRate are
-// never accepted here — still admin-set, read-only from the resident side (unchanged
-// rule).
+// One combined save — owner contact + occupancy + tenant — reusing updateFlat's
+// find-or-create-tenant-inline mechanism. wing/flatNumber/baseRate are never
+// accepted here; admin-set and read-only from the resident side.
 export async function updateMyFlatHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

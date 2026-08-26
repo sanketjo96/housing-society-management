@@ -15,10 +15,7 @@ adminLedgerRouter.get(
   requireRole(['ADMIN']),
   listLedgerEntriesHandler,
 );
-// Admin-only — the receipt preview is part of the approval workflow itself, not a
-// resident-facing view (unlike the issued-receipt download, GET
-// /api/ledger-entries/:id/receipt in ../resident/resident-ledger-route.ts, which is
-// shared).
+// Admin-only — part of the approval workflow, not a resident-facing view.
 adminLedgerRouter.get(
   '/api/admin/ledger-entries/:id/receipt-preview',
   requireRole(['ADMIN']),

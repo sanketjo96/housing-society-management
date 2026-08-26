@@ -18,18 +18,12 @@ interface ReceiptListItem {
     note: string | null;
     payer: { id: string; name: string; email: string };
     flat: { id: string; wing: string; flatNumber: string };
-    // Distinct fee type name(s) this receipt settled, only ever populated for
-    // category=OTHER_CHARGE (2026-08-24 addition) — empty for Maintenance, and for
-    // a legacy Other Charges receipt approved before this shipped (never
-    // backfilled, see OtherCharge.settledByLedgerEntryId's schema comment).
+    // Fee type name(s) this receipt settled — only populated for OTHER_CHARGE.
     otherChargeFeeTypeNames: string[];
   };
 }
 
-// A read-only register of every issued receipt — distinct from Payment Proofs
-// (a pending-review queue repurposed to also show approved rows). No pagination,
-// no server-side filtering: fetched once, then filtered/searched client-side, same
-// convention as MaintenanceBookPage's date-range filter — this is a 24-flat MVP.
+// Fetched once; filtered/searched client-side (no server-side filtering).
 async function fetchReceipts(): Promise<ReceiptListItem[]> {
   const res = await authedFetch('/api/admin/receipts');
   if (!res.ok) throw new Error('Could not load the receipt book.');

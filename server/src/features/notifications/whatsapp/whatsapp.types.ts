@@ -21,9 +21,8 @@ export interface SendWhatsAppTemplateResult {
   providerMessageId: string;
 }
 
-// notification.service.ts's deliverPending() branches retry behavior on which of
-// these was thrown — never on a raw HTTP status or Meta error code, so that decision
-// stays inside the WhatsApp layer (architecture.md §4's "normalize provider errors").
+// deliverPending() branches retry behavior on which of these was thrown, never on
+// a raw HTTP status or Meta error code.
 export class WhatsAppTransientError extends Error {
   constructor(message: string) {
     super(message);

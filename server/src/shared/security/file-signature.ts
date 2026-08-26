@@ -1,22 +1,7 @@
-// Phase 9 security-audit fix (2026-08-12): multer's `fileFilter` (proof-upload.ts,
-// signature-upload.ts) only ever checked the client-*declared* Content-Type on the
-// multipart part — never the actual file bytes. That's trivially spoofable (any
-// HTTP client can set an arbitrary Content-Type header regardless of what's
-// actually in the file), so the MIME allowlist those middlewares enforce was not a
-// real content-type guarantee. This is later relevant because uploaded files are
-// served back with `Content-Type` set to the very same client-declared value
-// (ledger.controller.ts/society-settings.controller.ts's file-viewing handlers) —
-// an admin routinely opens residents' uploaded "screenshots" as part of the normal
-// payment-proof review workflow, so a spoofed upload is a real delivery vector
-// against them, not just a theoretical gap.
-//
-// Deliberately hand-rolled rather than a third-party sniffing library (`file-type`
-// was evaluated and rejected — its current major version is ESM-only, awkward from
-// this CommonJS backend, and every version compatible with this codebase carries a
-// known moderate-severity infinite-loop DoS in its ASF/WMV parser, a format this
-// app has no reason to even recognize). Checking magic bytes for exactly the small,
-// fixed set of formats this app actually accepts is a handful of lines and pulls in
-// zero additional attack surface.
+// Verifies actual file bytes, not just the client-declared Content-Type (which
+// any HTTP client can spoof). Hand-rolled rather than a sniffing library — a
+// handful of magic-byte checks for the small fixed set of formats this app
+// accepts, no extra dependency/attack surface.
 export type DetectableFileType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
 
 function startsWith(buffer: Buffer, bytes: number[], offset = 0): boolean {
@@ -38,9 +23,6 @@ export function detectFileType(buffer: Buffer): DetectableFileType | null {
   ) {
     return 'image/webp';
   }
-  // "%PDF-" — the spec allows up to 1KB of leading garbage before this marker in
-  // practice, but every real PDF writer emits it at byte 0, and accepting a wider
-  // search window would only widen what counts as "a PDF" for no real benefit here.
-  if (startsWith(buffer, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf';
+  if (startsWith(buffer, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf'; // "%PDF-"
   return null;
 }

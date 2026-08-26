@@ -1,8 +1,5 @@
-// Internals shared between settings-service.ts (general settings CRUD) and
-// committee-signature-service.ts (signature file upload/remove/view) — both read and
-// write the same Society columns and both return the same SocietySettings shape, so
-// the row-shaping logic (toSettings) and the per-role column-mapping helpers live
-// here rather than in either concern-specific file.
+// Internals shared between settings-service.ts and committee-signature-service.ts —
+// row-shaping (toSettings) and per-role column-mapping helpers.
 
 export interface CommitteeMemberSummary {
   id: string;
@@ -11,9 +8,8 @@ export interface CommitteeMemberSummary {
   phone: string | null;
 }
 
-// Treasurer deliberately reuses the pre-existing receiptSignatureFileKey/
-// receiptSignatureMimeType columns rather than getting its own — see the schema
-// comment on Society.receiptSignatureFileKey.
+// Treasurer reuses the existing receiptSignatureFileKey/receiptSignatureMimeType
+// columns rather than getting its own.
 export type CommitteeRole = 'CHAIRMAN' | 'SECRETARY' | 'TREASURER';
 
 export interface SignatureColumns {
@@ -71,34 +67,24 @@ export function readCommitteeSignatureMimeType(
 export interface SocietySettings {
   name: string;
   address: string;
-  // Basic information tab — required going forward (enforced in the controller's
-  // Zod schema, not the DB, since existing societies predate these fields). Date
-  // strings, "YYYY-MM-DD" — time-of-day is never meaningful for either.
+  // "YYYY-MM-DD" date strings — time-of-day is never meaningful for either.
   constructionDate: string | null;
   formationDate: string | null;
-  // UPI always takes precedence over bank details when both are configured — see
-  // resident-ledger-service.ts's buildPaymentIntentResult, the one place that choice
-  // actually matters.
+  // UPI always takes precedence over bank details when both are configured.
   upiVpa: string | null;
   bankAccountNumber: string | null;
   bankIfsc: string | null;
   tenantRateFactor: number;
   defaultBaseRate: number;
-  // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/features/receipts.md.
   receiptNumberPrefix: string;
   receiptFooterNote: string | null;
-  // Committee-member signatures (2026-08-17) — hasXSignature flags (not the raw
-  // storage keys) are returned to the client; the actual bytes are only ever
-  // served through the dedicated authenticated
-  // GET /api/admin/settings/committee/:role/signature endpoint. Treasurer's flag
-  // reflects the same underlying file the receipt letterhead uses.
+  // hasXSignature flags, not the raw storage keys — bytes are only served through
+  // the authenticated GET /api/admin/settings/committee/:role/signature endpoint.
   hasChairmanSignature: boolean;
   hasSecretarySignature: boolean;
   hasTreasurerSignature: boolean;
-  // Committee tab (Society details) — each nullable, independently set from a
-  // dropdown of this society's owners. Informational only; nothing in billing or
-  // permissions reads these.
+  // Each nullable, independently set from a dropdown of this society's owners.
+  // Informational only; nothing in billing or permissions reads these.
   chairman: CommitteeMemberSummary | null;
   secretary: CommitteeMemberSummary | null;
   treasurer: CommitteeMemberSummary | null;

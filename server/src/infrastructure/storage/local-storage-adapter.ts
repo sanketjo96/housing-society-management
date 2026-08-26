@@ -5,12 +5,8 @@ import path from 'node:path';
 import type { Readable } from 'node:stream';
 import type { SaveFileInput, StorageAdapter } from './types';
 
-// Default adapter (STORAGE_PROVIDER=local, or unset): writes to a directory on local
-// disk — a Docker volume in production (docker-compose.yml's uploads_data), so files
-// survive container restarts/redeploys. No third-party account, credentials, or
-// network dependency, matching CLAUDE.md's "low operating cost, self-hosted VPS"
-// non-functional requirement. Swap STORAGE_PROVIDER (src/infrastructure/storage/index.ts) for a
-// different adapter once a real need for off-box storage (S3, Drive) shows up.
+// Default adapter: writes to a directory on local disk — a Docker volume in
+// production, so files survive container restarts/redeploys.
 export class LocalStorageAdapter implements StorageAdapter {
   constructor(private readonly baseDir: string) {}
 
@@ -30,10 +26,7 @@ export class LocalStorageAdapter implements StorageAdapter {
     await rm(this.resolveSafe(key), { force: true });
   }
 
-  // Keys are always adapter-generated internally (never taken from user input), but
-  // this is a cheap, worthwhile guarantee for a function that touches the filesystem
-  // directly: refuses to resolve any key that would land outside baseDir (e.g. via a
-  // stray '..' segment), rather than trusting the join blindly.
+  // Refuses to resolve a key outside baseDir (e.g. via a stray '..' segment).
   private resolveSafe(key: string): string {
     const fullPath = path.resolve(this.baseDir, key);
     const base = path.resolve(this.baseDir);

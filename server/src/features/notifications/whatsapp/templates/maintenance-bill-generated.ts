@@ -2,9 +2,8 @@ import type { MaintenanceBillGeneratedEvent } from '../../notification.types';
 import type { WhatsAppTemplate } from '../whatsapp.types';
 import { formatInr, formatDateForTemplate } from '../../templates/format';
 
-// Meta-approved template name (requirements.md §5) — confirm approval before Task 7
-// runs against production; the Cloud API rejects an unapproved/unknown template name
-// as a permanent error (see whatsapp.client.ts).
+// Meta-approved template name — the Cloud API rejects an unapproved/unknown name
+// as a permanent error.
 export const MAINTENANCE_BILL_GENERATED_TEMPLATE_NAME = 'maintenance_bill_generated';
 
 // Body placeholders, in order: {{1}} billing month, {{2}} amount, {{3}} due date.

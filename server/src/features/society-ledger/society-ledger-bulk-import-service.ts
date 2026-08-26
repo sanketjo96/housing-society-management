@@ -1,15 +1,8 @@
-// Phase E of docs/features/society-onboarding/ — bulk-imports historical society-level
-// income/expense transactions into Manage Finance. Reuses (via
-// assertValidSocietyLedgerEntry, extracted from society-ledger.service.ts) the exact
-// same direction-matches-category and bank-reference-required-unless-cash checks
-// recordSocietyLedgerEntry already enforces, so the bulk and single-row paths can
-// never silently drift apart. Deliberately skips recordSocietyLedgerEntry's
-// mandatory-file check (Confirmed Product Decision #4, docs/features/society-onboarding/
-// 01-requirements.md) — legacy rows have no scanned receipt to attach retroactively
-// — auto-appending a note that flags each imported row as historical/unverified
-// instead, so it stays visibly distinct from a normal admin-entered row in every
-// list view. Same hand-rolled CSV parsing / per-row-error-collection shape as
-// bulkImportFlats and bulk-charges.service.ts.
+// Bulk-imports historical society-level income/expense transactions into Manage
+// Finance. Reuses assertValidSocietyLedgerEntry so the bulk and single-row paths
+// can't drift apart. Skips the mandatory-file check (legacy rows have no scanned
+// receipt) — appends a note flagging each imported row as historical/unverified
+// instead.
 import { prisma } from '../../infrastructure/prisma/client';
 import type {
   SocietyLedgerDirection,

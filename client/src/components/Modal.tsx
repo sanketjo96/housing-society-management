@@ -1,18 +1,12 @@
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-// No modal component existed in this codebase before the ledger pivot — this is a
-// small, generic one (title/subtitle/close + arbitrary children), following the
-// resident-experience mockup's Modal shape but styled with this app's existing design
-// tokens rather than the mockup's separate hardcoded hex palette.
+// Generic modal: title/subtitle/close + arbitrary children.
 export function Modal({
   title,
   subtitle,
   onClose,
   children,
-  // Defaults to the original fixed small-form width; wider content (e.g. the
-  // receipt-approval PDF preview, ReceiptApprovalModal.tsx) can opt into more room
-  // without every other caller needing to change.
   maxWidthClassName = 'max-w-sm',
 }: {
   title: string;

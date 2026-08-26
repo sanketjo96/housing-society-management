@@ -10,9 +10,7 @@ import {
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import { useState } from 'react';
 
-// Column-level styling hooks (right-aligned numeric columns, a narrow checkbox
-// column, etc.) — TanStack Table's `meta` is untyped by default, this fills it in so
-// every page's column defs get autocomplete/type-checking instead of `as any`.
+// Typed column-level styling hooks for TanStack's otherwise-untyped `meta`.
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
@@ -22,19 +20,11 @@ declare module '@tanstack/react-table' {
   }
 }
 
-// Shared table shell (Task: "use TanStack Table everywhere" refactor) — replaces the
-// hand-rolled <table>/<thead>/<tbody> markup that was duplicated byte-for-byte across
-// FlatsListPage, MaintenancePage, and PaymentProofsPage. Deliberately thin: no
-// filtering/pagination row models — this is a 24-flat MVP (CLAUDE.md: "correctness
-// over scale, don't over-engineer"), every table here has at most a handful of rows,
-// so those row models would be unused weight. Sorting is included but strictly
-// opt-in per column: TanStack only allows sorting a column that defines an
-// `accessorFn`/`accessorKey` (see `getCanSort`), so plain `id`+`cell` display columns
-// (the pattern every other page's columns already use) stay unsortable without any
-// extra flag — only a caller that deliberately adds an accessor gets a clickable
-// header. Callers keep full control over cell content (badges, buttons, checkboxes,
-// nested stateful components) via each column's `cell` renderer — this component
-// only owns the table/thead/tbody chrome, sort toggling, and the empty-state row.
+// Shared table shell: table/thead/tbody chrome, sort toggling, empty-state row.
+// No filtering/pagination row models (small tables only). Sorting is opt-in per
+// column — only columns with an `accessorFn`/`accessorKey` become sortable;
+// plain `id`+`cell` display columns stay unsortable. Cell content is fully
+// caller-controlled via each column's `cell` renderer.
 export function DataTable<T>({
   data,
   columns,

@@ -12,11 +12,10 @@ interface DashboardSummary {
   outstandingTotal: number;
   pendingReviewTotal: number;
   collectionRatePercent: number;
-  // docs/features/other-charges/ — a fully separate pool from the maintenance figures above.
+  // Other Charges pool — separate from maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
-  // docs/features/manage-finance/ — the society's own income/expenditure, unrelated to the
-  // resident-billing figures above.
+  // Society's own income/expenditure, not resident billing.
   societyTotalIncome: number;
   societyTotalExpense: number;
   societyNetPosition: number;
@@ -47,8 +46,7 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
   return res.json();
 }
 
-// Counts only entries with a proof attached — same criterion PaymentProofsPage
-// itself filters by, so this tile's count and the page it links to never disagree.
+// Counts only entries with a proof attached, matching PaymentProofsPage's own filter.
 async function fetchPendingProofsCount(): Promise<number> {
   const res = await authedFetch('/api/admin/ledger-entries?status=PENDING');
   if (!res.ok) throw new Error('Could not load pending proofs.');
@@ -92,15 +90,7 @@ function SummaryCard({
   return <div className="rounded-2xl border border-line bg-white p-5">{content}</div>;
 }
 
-// A titled, bordered container grouping one kind of card together (Society,
-// Finance, Outstanding) — each SummaryCard is still its own white card, but now
-// sits inside a paper-toned panel so a related group visually reads as one unit
-// rather than an unbroken 8-card grid with no structure. "Outstanding" holds the
-// combined Total Outstanding figure plus its two constituent pools, Maintenance
-// and Other Charges (previously Total Outstanding sat in Finance, and Maintenance/
-// Other Charges were their own separate groups) — all three are the same kind of
-// figure (what's still owed), so they now read as one container instead of being
-// split across Finance plus two near-single-card groups.
+// Titled container grouping related SummaryCards into one visual unit.
 function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
   return (
     <div className="mb-5 rounded-2xl border border-line bg-paper p-4">
@@ -113,9 +103,7 @@ function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: s
   );
 }
 
-// Flat-wise dues moved off this page entirely (admin-only /flat-dues, reached only by
-// clicking the Outstanding tile below) — this page now only shows society-wide
-// headline numbers, never the per-flat table.
+// Society-wide headline numbers only; per-flat dues live at /flat-dues.
 export function AdminDashboardPage() {
   const summaryQuery = useQuery({ queryKey: ['admin-dashboard-summary'], queryFn: fetchSummary });
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
@@ -127,8 +115,7 @@ export function AdminDashboardPage() {
   const isLoading = summaryQuery.isLoading || duesQuery.isLoading || pendingProofsQuery.isLoading;
   const isError = summaryQuery.isError || duesQuery.isError || pendingProofsQuery.isError;
 
-  // Occupancy headcounts, derived from the same flat-dues fetch — a flat always has
-  // exactly one owner, and at most one current tenant.
+  // One owner, at most one tenant, per flat.
   const totalFlats = duesQuery.data?.length ?? 0;
   const totalOwners = new Set(duesQuery.data?.map((row) => row.owner.id)).size;
   const totalTenants = new Set(

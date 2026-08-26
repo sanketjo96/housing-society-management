@@ -6,20 +6,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 import type { AuthUser } from '../context/AuthContext';
 
 export interface NavItem {
-  // Absolute path (always under /dashboard) — real, deep-linkable/shareable URLs
-  // rather than in-memory tab state, so each section survives a refresh/bookmark.
   to: string;
   label: string;
   icon: LucideIcon;
-  // Only the "overview" item of each dashboard (the exact /dashboard root) needs
-  // exact matching — every other item is itself a leaf path, so default (prefix)
-  // matching is harmless there but would make /dashboard permanently "active".
+  // Exact-match only; other items use default prefix matching.
   end?: boolean;
 }
 
-// A grouped sidebar entry (e.g. admin's "Settings" -> Billing plan/Fee types) —
-// distinguished from a NavItem by having `children` instead of `to`. Only one level
-// deep; a group's children are always leaf NavItems, never nested groups further.
+// Grouped sidebar entry (e.g. "Settings" with children) — one level deep only.
 export interface NavGroup {
   label: string;
   icon: LucideIcon;
@@ -39,23 +33,11 @@ interface DashboardShellProps {
   children: ReactNode;
 }
 
-// Shared shell for both the admin and resident dashboards: a persistent left nav
-// rail on desktop, collapsing to a hamburger-triggered slide-out drawer below the
-// `md` breakpoint. Only one copy of the nav is ever mounted — its position/
-// visibility is toggled with CSS transforms rather than being duplicated per
-// breakpoint. Nav items are real <NavLink>s (real URLs, deep-linkable and
-// shareable) rather than an ARIA tabs widget over in-memory state — active state
-// comes from the current route (NavLink sets aria-current="page" automatically),
-// not a controlled prop. A persistent top bar (not mobile-only) carries the
-// signed-in user's name — visible regardless of which section is active. Log out
-// lives as a link at the bottom of the left nav panel instead (UI-only placement
-// choice; behavior is unchanged).
+// Shell for both dashboards: a left nav rail on desktop, a slide-out drawer
+// below the `md` breakpoint. One nav instance, toggled via CSS transform.
 export function DashboardShell({ navItems, user, onLogout, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  // Which groups the user has manually toggled open — a group whose child route is
-  // currently active is also treated as open regardless of this set (see
-  // isGroupOpen below), so deep-linking straight into e.g. /settings/billing shows
-  // the Settings submenu already expanded without needing this state pre-seeded.
+  // Manually-toggled-open groups; a group is also open if its active route is a child.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const location = useLocation();
 

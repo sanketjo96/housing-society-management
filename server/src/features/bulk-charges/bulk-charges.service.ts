@@ -1,12 +1,7 @@
-// Phase C of docs/features/society-onboarding/ — bulk-imports one-time per-flat charges from a
-// CSV, branching per row on `pool`. Every row either creates a sentinel-period
-// "Opening Balance" MaintenanceRecord (a one-time pre-go-live arrears figure) or
-// reuses billOtherCharge's exact validation/creation contract for an ad-hoc one-time
-// fee — never a parallel reimplementation of either rule set. Same
-// per-row-error-collection, whole-batch-continues shape as bulkImportFlats
-// (admin-flats-onboarding-service.ts), and the same hand-rolled column-name-based CSV
-// parsing (no library — the expected fields never contain commas or quotes at this
-// MVP's scale).
+// Bulk-imports one-time per-flat charges from a CSV, branching per row on `pool`:
+// either a sentinel-period "Opening Balance" MaintenanceRecord, or an ad-hoc fee
+// via billOtherCharge. Errors are collected per row; the batch continues. CSV
+// parsing is hand-rolled column lookup, no library.
 import { prisma } from '../../infrastructure/prisma/client';
 import { getUniqueConstraintFields } from '../../shared/errors/prisma-errors';
 import { scopedWhere } from '../../shared/security/tenant-scope';
@@ -17,10 +12,8 @@ import {
   InvalidAmountError,
 } from '../other-charges/other-charges.service';
 
-// Sorts lexicographically before every real "YYYY-MM" period, so
-// computeRecordSettlements' oldest-first FIFO fill (ledger-shared.ts) always settles
-// this record before any real month's charge — with zero changes to that function.
-// See docs/features/society-onboarding/02-architecture.md's Data Model section.
+// Sorts lexicographically before every real "YYYY-MM" period, so the oldest-first
+// FIFO settlement fill always settles this record first.
 export const OPENING_BALANCE_PERIOD = '0000-01';
 
 export interface BulkImportChargeRowError {
@@ -36,10 +29,8 @@ export interface BulkImportChargesResult {
 const REQUIRED_COLUMNS = ['wing', 'flatnumber', 'pool', 'amount'];
 const OPTIONAL_COLUMNS = ['feetypename', 'note'] as const;
 
-// MaintenanceRecord has no `note` column (docs/features/society-onboarding/02-architecture.md:
-// "No changes to any existing model's shape") — an Opening Balance row's note goes
-// into AuditLog instead, the same place every other financial action's context
-// already lives, rather than adding a schema column just for this one import path.
+// MaintenanceRecord has no `note` column — an Opening Balance row's note goes into
+// AuditLog instead.
 async function importOpeningBalance(
   societyId: string,
   adminId: string,
@@ -71,8 +62,7 @@ async function importOpeningBalance(
     });
     return {};
   } catch (err) {
-    // @@unique([flatId, period]) makes a re-run a safe row-error, not a duplicate —
-    // the same idempotency guarantee generateMaintenanceRecords already relies on.
+    // @@unique([flatId, period]) makes a re-run a safe row-error, not a duplicate.
     const fields = getUniqueConstraintFields(err);
     if (fields) {
       return { error: `Opening Balance already imported for flat ${flat.wing}-${flat.flatNumber}` };

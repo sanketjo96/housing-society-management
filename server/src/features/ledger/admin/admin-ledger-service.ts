@@ -1,7 +1,5 @@
 // Admin ledger review: list, approve, reject, and the manual cash/bank-transfer
-// fallback. Resident-side ledger actions (Deposit/Credit creation, payment intents)
-// live in ../resident/resident-ledger-service.ts; balance/settlement formulas shared
-// by both live in ../ledger-shared.ts.
+// fallback. Resident-side actions live in ../resident/resident-ledger-service.ts.
 import { randomUUID } from 'node:crypto';
 import type {
   CreatedByType,
@@ -20,12 +18,8 @@ import { InvalidAmountError } from '../ledger-shared';
 
 export { InvalidAmountError, LedgerEntryAlreadyReviewedError, SignaturesNotConfiguredError };
 
-// DEPOSIT_PAYMENT_APPROVED (docs/features/notifications/) — fired once the approval (or
-// manual mark-paid) transaction has actually committed, so a notification is never
-// sent for a payment that ends up rolled back. Never lets a notification failure
-// fail the payment approval itself (requirements.md §4) — notify() only ever writes
-// a PENDING row, but a stray DB error here still shouldn't take a financial
-// approval down with it.
+// Fired only after the approval transaction commits. A notification failure never
+// fails the payment approval itself.
 async function notifyLedgerPaymentApproved(
   entry: { id: string; flatId: string; payerId: string; amount: unknown },
   receiptId: string,
@@ -54,18 +48,13 @@ async function notifyLedgerPaymentApproved(
   }
 }
 
-// Exported for reuse by ../../receipts/admin/admin-receipts-service.ts's listReceipts,
-// which needs the same payer/flat summary shape for its receipt-book rows.
-// `createdByType` is a plain scalar column (not listed here — `include` only takes
-// relations; every scalar, including createdByType, is returned automatically).
+// Exported for reuse by admin-receipts-service.ts's listReceipts (same row shape).
 export const LEDGER_ENTRY_LIST_INCLUDE = {
   payer: { select: { id: true, name: true, email: true } },
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;
 
-// Admin review queue — optionally filtered by status (defaults to every entry; the
-// frontend queue asks for PENDING). No `type` filter anymore — every LedgerEntry is
-// a Deposit (Credit removed for good 2026-08-20).
+// Admin review queue, optionally filtered by status/category/createdByType.
 export async function listPendingLedgerEntries(
   societyId: string,
   filters: {
@@ -86,17 +75,9 @@ export async function listPendingLedgerEntries(
   });
 }
 
-// Approve/reject a single LedgerEntry row directly — much simpler than the pre-pivot
-// PaymentProof flow, since a Deposit/Credit is never linked to specific
-// MaintenanceRecords (settlement is computed against the aggregate, see
-// computeRecordSettlements).
-//
-// Receipt Generation & Approval Workflow (2026-08-11): approval is also the point
-// a receipt is issued (see CLAUDE.md's addendum) — the PDF is rendered and saved
-// via prepareReceiptForEntry *before* the transaction opens (same "write the file,
-// then commit the row" ordering already used for Deposit/Credit proof uploads
-// elsewhere in this feature), then the Receipt row is created in the same transaction
-// as the status change so the two can never disagree.
+// Approving settles the entry and issues its receipt in one step. The receipt PDF
+// is rendered and saved before the transaction opens; the Receipt row is created
+// inside the same transaction as the status change so the two never disagree.
 export async function approveLedgerEntry(id: string, societyId: string, adminId: string) {
   const entry = await prisma.ledgerEntry.findFirst({
     where: { id, flat: { societyId } },
@@ -112,11 +93,9 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
     where: { id: societyId },
     include: { chairman: { select: { name: true } }, secretary: { select: { name: true } } },
   });
-  // Which OtherCharge rows this Deposit is about to settle (2026-08-24 addition) —
-  // only meaningful for category=OTHER_CHARGE, always empty otherwise. Computed
-  // once here, both for the receipt's purpose line below and to actually stamp
-  // these rows inside the transaction — a single read reused for both, not two
-  // separate queries.
+  // Which OtherCharge rows this Deposit is about to settle — only meaningful for
+  // category=OTHER_CHARGE. Reused for both the receipt purpose line and the stamp
+  // below.
   const openOtherCharges =
     entry.category === 'OTHER_CHARGE' ? await getOpenOtherCharges(entry.flatId) : { ids: [], feeTypeNames: [] };
   const issuedAt = new Date();
@@ -195,23 +174,12 @@ export async function rejectLedgerEntry(
   });
 }
 
-// Admin manual "mark as paid" fallback for cash/bank-transfer, no proof involved —
-// directly creates an already-APPROVED Deposit. Logged as MANUAL_MARK_PAID
-// specifically so it's distinguishable in the audit trail from QR-flow approvals (rule
-// 7's explicit requirement), same distinct action name as the pre-pivot flow.
-//
-// Also issues a receipt (2026-08-11 addendum) — a treasurer taking cash needs a
-// receipt at least as much as a UPI depositor, arguably more (no screenshot serving
-// as informal proof). Unlike approveLedgerEntry, the LedgerEntry doesn't exist yet
-// at the point the receipt number needs to be computed (it's derived from the
-// entry's own id) — so the id is precomputed via randomUUID() (same helper already
-// used by local-storage-adapter.ts) and passed explicitly into both the receipt
-// build and the eventual `create`, preserving the same "file saved before the row
-// is committed" ordering used everywhere else.
-// `category` (docs/features/other-charges/) — default MAINTENANCE, fully backward
-// compatible. When OTHER_CHARGE, payerId is always flat.ownerId (matching
-// OtherCharge's own payer rule — Other Charges are always owner-billed, unlike
-// maintenance's tenant-if-occupied resolution below).
+// Admin "mark as paid" fallback for cash/bank-transfer — directly creates an
+// already-APPROVED Deposit and issues its receipt, logged as MANUAL_MARK_PAID to
+// stay distinguishable from QR-flow approvals. The entry id is precomputed
+// (randomUUID) since the receipt number needs it before the row is created.
+// OTHER_CHARGE always bills flat.ownerId; maintenance bills the current tenant if
+// occupied, else the owner.
 export async function manualDeposit(
   societyId: string,
   adminId: string,
@@ -258,10 +226,7 @@ export async function manualDeposit(
         note,
         reviewedById: adminId,
         reviewedAt: issuedAt,
-        // The admin is the creator here, not the resident being paid for — see
-        // CreatedByType's schema comment. This is exactly the distinction that
-        // makes a manualDeposit row identifiable without inferring it from `note`
-        // text or an AuditLog join.
+        // The admin is the creator here, not the resident being paid for.
         createdById: adminId,
         createdByType: 'ADMIN',
         category,

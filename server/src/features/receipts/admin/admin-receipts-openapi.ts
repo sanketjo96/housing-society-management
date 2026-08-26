@@ -1,5 +1,4 @@
-// OpenAPI docs for ./admin-receipts-route.ts — see auth/auth.openapi.ts's header
-// comment for why these live in a sibling file rather than inline above each route.
+// OpenAPI docs for admin-receipts-route.ts.
 export {};
 
 /**

@@ -4,7 +4,6 @@ import { logger } from '../../infrastructure/observability';
 import { calculateMonthlyRate } from '../../shared/billing/rate-calculation';
 import { notify } from '../notifications/notification.service';
 
-// Confirmed decision (CLAUDE.md): MaintenanceRecord.dueDate = generation date + 15 days.
 const DUE_DATE_DAYS = 15;
 
 export interface GenerateResult {
@@ -12,24 +11,18 @@ export interface GenerateResult {
   skipped: number;
 }
 
-// 'YYYY-MM' for "now". Exposed for callers that genuinely want the in-progress month
-// (e.g. an admin previewing current-month occupancy); no longer the generation
-// default — see previousPeriod() below.
+// 'YYYY-MM' for the current month.
 export function currentPeriod(now: Date = new Date()): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
 }
 
-// 'YYYY-MM' for the month immediately before "now" — the default period for both the
-// manual-trigger endpoint (Task 4.3) and the monthly cron (Task 4.4) under arrears
-// billing. Generation deliberately targets the month that just *finished*, not the one
-// in progress: calculateMonthlyRate's "majority of days in the month" rule can only be
-// correct once every day of that month has actually happened and every OccupancyChange
-// affecting it already exists in the DB. Generating for the current (still-unfolding)
-// month would lock in a rate based on incomplete information, permanently — generation
-// is idempotent and never re-runs for a period once records exist, so a mid-month
-// tenant assignment or removal after that would never be reflected.
+// 'YYYY-MM' for the month before "now" — the default generation period. Billing the
+// just-finished month (not the in-progress one) ensures every OccupancyChange for
+// that month already exists before the majority-of-days rate rule runs; generation
+// never re-runs for a period once records exist, so a mid-month occupancy change
+// would otherwise never be reflected.
 export function previousPeriod(now: Date = new Date()): string {
   const year = now.getFullYear();
   const prevMonth = now.getMonth(); // 0-indexed "this month" == 1-indexed previous month, except January
@@ -37,18 +30,10 @@ export function previousPeriod(now: Date = new Date()): string {
   return `${year}-${String(prevMonth).padStart(2, '0')}`;
 }
 
-// Idempotent (Task 4.2's explicit requirement): re-running for the same society+period
-// never duplicates records — @@unique([flatId, period]) plus createMany's
-// skipDuplicates does the enforcement at the database level, not just in application
-// logic, so a concurrent double-trigger (manual + cron racing) can't create doubles
-// either.
-//
-// `actorId` (Phase 9 security-audit addition, 2026-08-12 — this action previously
-// left no audit trail at all, the one gap found when cross-checking AuditLog
-// coverage against Tasks 4.2/6.5/6.6/6.7): the admin who called the manual-trigger
-// endpoint, or `undefined` for the monthly cron (system-triggered, no user in
-// context) — AuditLog.actorId is nullable specifically to represent that
-// distinction, not just "unknown."
+// Idempotent: @@unique([flatId, period]) plus createMany's skipDuplicates enforces
+// no-duplicate-records at the database level, safe even under a concurrent
+// manual+cron race. `actorId` is the admin who triggered generation manually, or
+// undefined for the cron (system-triggered, no user in context).
 export async function generateMaintenanceRecords(
   societyId: string,
   period: string = previousPeriod(),
@@ -135,16 +120,9 @@ export async function generateMaintenanceRecords(
   return { created: result.count, skipped: records.length - result.count };
 }
 
-// MAINTENANCE_BILL_GENERATED (docs/features/notifications/) — createMany doesn't return the
-// created rows, so this re-reads every record for this period+flat set (idempotent
-// generation means that's every record that now exists for the period, whether just
-// created or already there from an earlier run) and calls notify() for each.
-// notify()'s own idempotency (unique key on billId) makes re-notifying an
-// already-existing record a harmless no-op, so this doesn't need to know which rows
-// createMany actually inserted vs. skipped. Never lets a notification failure fail
-// generation itself (requirements.md §4: WhatsApp failures must not roll back a
-// successful business operation) — notify() only ever writes a PENDING row, but a
-// stray DB error here still shouldn't take billing down with it.
+// Re-reads every record for this period+flat set (createMany doesn't return created
+// rows) and notifies for each; notify()'s own idempotency makes re-notifying an
+// already-existing record a no-op. A notification failure never fails generation.
 async function notifyBillsGenerated(
   societyId: string,
   flatIds: string[],
@@ -182,14 +160,8 @@ const FLAT_SUMMARY_INCLUDE = {
   flat: { select: { id: true, wing: true, flatNumber: true } },
 } as const;
 
-// Task 4.5 — a resident's own SYSTEM charges (payerId = their user id), newest period
-// first. Under the ledger pivot (see CLAUDE.md), every MaintenanceRecord is always an
-// implicitly-"Approved" SYSTEM row — this is a building block for
-// ledger.service.ts:getLedgerForResident, which merges these with the flat's
-// LedgerEntry (Deposit) rows and computes the running balances; it's no longer
-// exposed as its own top-level resident endpoint. Scoped by societyId via the flat
-// relation too, even though payerId alone already can't cross a society boundary —
-// defense-in-depth, consistent with every other query in this codebase (Task 2.6).
+// A resident's own SYSTEM charges (payerId = their user id), newest period first.
+// Used by getLedgerForResident to merge with LedgerEntry rows into one balance.
 export async function getMaintenanceRecordsForPayer(payerId: string, societyId: string) {
   return prisma.maintenanceRecord.findMany({
     where: { payerId, flat: { societyId } },
@@ -198,11 +170,7 @@ export async function getMaintenanceRecordsForPayer(payerId: string, societyId: 
   });
 }
 
-// Task 4.6 — every SYSTEM charge in the society, admin view, optionally filtered by
-// period/flat. Same flat summary shape as above, plus the payer's own summary (an
-// admin needs to know *who* to follow up with, not just which flat). No status filter
-// any more — every record is always "Approved" under the ledger pivot; payment
-// state now lives on LedgerEntry, not here.
+// Every SYSTEM charge in the society, admin view, optionally filtered by period/flat.
 export async function listMaintenanceRecordsForSociety(
   societyId: string,
   filters: { period?: string; flatId?: string } = {},

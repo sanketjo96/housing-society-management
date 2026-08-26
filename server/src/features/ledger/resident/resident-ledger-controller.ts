@@ -19,8 +19,7 @@ import {
 } from './resident-ledger-service';
 import { getIssuedReceiptForViewing } from '../../receipts/receipt.service';
 
-// Every handler here resolves "my flat" the same way — requireRole already guarantees
-// OWNER/TENANT (see ./resident-ledger-route.ts), so there's no ADMIN case to handle.
+// requireRole already guarantees OWNER/TENANT, so there's no ADMIN case to handle.
 async function resolveMyFlatId(userId: string, societyId: string, role: 'OWNER' | 'TENANT') {
   const flat = await getMyFlat(userId, societyId, role);
   return flat?.id ?? null;
@@ -60,7 +59,6 @@ export async function getMyLedgerHandler(req: Request, res: Response) {
   res.status(200).json(ledger);
 }
 
-// docs/features/other-charges/ — powers the Dashboard's 4 summary cards in one call.
 export async function getMyBalancesHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });
@@ -295,10 +293,8 @@ export async function getLedgerEntryFileHandler(req: Request, res: Response) {
   }
 }
 
-// Download of an already-issued receipt — admin or the entry's own payer (owner or
-// tenant, symmetric), same auth shape as getLedgerEntryFileHandler above. 404 for
-// a legacy entry approved before this feature existed (no Receipt row) — never
-// lazily fabricated.
+// Download of an already-issued receipt — admin or the entry's own payer. 404 for
+// a legacy entry with no Receipt row — never lazily fabricated.
 export async function getIssuedReceiptHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

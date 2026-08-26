@@ -10,12 +10,9 @@ const CHARGES_CSV_TEMPLATE =
   'A,101,MAINTENANCE_OPENING_BALANCE,,45000,Legacy arrears as of go-live\n' +
   'A,101,OTHER_CHARGE,Water Connection,1500,\n';
 
-// The "Charges" child page under the "Imports" submenu (DashboardLayout.tsx) — Phase
-// C of docs/features/society-onboarding/. Each CSV row is matched to an existing flat by
-// wing+flatNumber (import on the "Resident" page first) and branches on `pool`:
-// MAINTENANCE_OPENING_BALANCE creates a one-time pre-go-live arrears charge that
-// always settles before every real month; OTHER_CHARGE bills an ad-hoc one-time fee
-// against an existing Custom Fee (set those up on Settings -> Custom Fees first).
+// Matches each CSV row to a flat by wing+flatNumber, then branches on `pool`:
+// MAINTENANCE_OPENING_BALANCE (one-time pre-go-live arrears) or OTHER_CHARGE
+// (ad-hoc fee against an existing Custom Fee).
 export function BulkChargesImportPage() {
   return (
     <div className="mx-auto max-w-4xl">

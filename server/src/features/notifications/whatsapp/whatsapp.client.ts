@@ -1,7 +1,5 @@
-// Owns Meta Cloud API HTTP details only — plain fetch, same shape as
-// resend-email-provider.ts's HTTP call (architecture.md §4). Only this file should
-// know Meta's request/response shape; whatsapp.service.ts calls this and never talks
-// to Meta directly.
+// Owns Meta Cloud API HTTP details only — plain fetch. Only this file knows Meta's
+// request/response shape.
 import { getWhatsAppConfig } from './whatsapp.config';
 import {
   SendWhatsAppTemplateInput,
@@ -44,8 +42,7 @@ export async function sendWhatsAppTemplate(
       }),
     });
   } catch (err) {
-    // Network failure (DNS, timeout, connection reset) — Meta was never actually
-    // reached, so this is retry-eligible, not a permanent rejection.
+    // Meta was never reached — retry-eligible, not a permanent rejection.
     throw new WhatsAppTransientError(
       `WhatsApp API request failed: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -55,10 +52,7 @@ export async function sendWhatsAppTemplate(
 
   if (!response.ok) {
     const message = body.error?.message ?? `WhatsApp API responded with HTTP ${response.status}`;
-    // 429 (rate limited) and 5xx (Meta-side outage) are worth retrying; everything
-    // else (400/401/403/404/410 — bad template, unapproved template, invalid/rejected
-    // phone number, bad credentials) is a permanent rejection of this exact message —
-    // retrying it would just fail again the same way (architecture.md §6).
+    // 429/5xx are worth retrying; everything else is a permanent rejection.
     if (response.status === 429 || response.status >= 500) {
       throw new WhatsAppTransientError(message);
     }

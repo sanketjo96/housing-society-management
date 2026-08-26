@@ -2,13 +2,9 @@ import { useEffect, useState } from 'react';
 import { authedFetch } from '../lib/api';
 import { Modal } from './Modal';
 
-// Streams the *exact* PDF the backend would issue if this entry is approved right
-// now (GET .../receipt-preview reuses the same render path the real approval does
-// — see receipt.service.ts) rather than a hand-built React re-implementation of the
-// layout, which would eventually drift from the real template. The endpoint is
-// authenticated, so a plain <iframe src> won't carry the Bearer token — fetch it
-// ourselves and hand the iframe a blob: URL instead, same pattern
-// PaymentProofsPage.tsx's viewProofFile already uses for proof files.
+// Streams the exact PDF the backend would issue if approved right now.
+// Authenticated endpoint — fetch and hand off a blob: URL, since a plain
+// <iframe src> can't carry the Bearer token.
 async function fetchReceiptPreview(entryId: string): Promise<string> {
   const res = await authedFetch(`/api/admin/ledger-entries/${entryId}/receipt-preview`);
   if (!res.ok) {

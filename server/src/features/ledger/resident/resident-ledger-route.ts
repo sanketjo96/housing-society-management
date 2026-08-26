@@ -24,8 +24,6 @@ const verifyProofSignature = verifyFileSignature([
 export const residentLedgerRouter = Router();
 
 residentLedgerRouter.get('/api/me/ledger', requireRole(['OWNER', 'TENANT']), getMyLedgerHandler);
-// docs/features/other-charges/ — Dashboard's 4 summary cards (Maintenance/Other Outstanding
-// + Total Outstanding) in one call.
 residentLedgerRouter.get('/api/me/balances', requireRole(['OWNER', 'TENANT']), getMyBalancesHandler);
 residentLedgerRouter.get(
   '/api/me/ledger/deposits/intent',
@@ -49,10 +47,8 @@ residentLedgerRouter.delete(
   requireRole(['OWNER', 'TENANT']),
   cancelPaymentIntentHandler,
 );
-// Lower-level, one-shot primitive — kept unremoved even though the resident-facing
-// Pay UI now goes through the intent endpoints above (same precedent as CLAUDE.md's
-// flats/tenant addendum: a lower-level endpoint stays available even once the
-// primary UI path moves off it).
+// Lower-level, one-shot primitive — kept even though the Pay UI now goes through
+// the intent endpoints above.
 residentLedgerRouter.post(
   '/api/me/ledger/deposits',
   requireRole(['OWNER', 'TENANT']),
@@ -60,17 +56,14 @@ residentLedgerRouter.post(
   verifyProofSignature,
   createDepositHandler,
 );
-// Admin or the entry's own payer, enforced in the service (getLedgerEntryForViewing)
-// since it depends on data (payerId), not just role — same pattern as the pre-pivot
-// proof file endpoint.
+// Admin or the entry's own payer, enforced in the service since it depends on
+// data (payerId), not just role.
 residentLedgerRouter.get(
   '/api/ledger-entries/:id/file',
   requireRole(['ADMIN', 'OWNER', 'TENANT']),
   getLedgerEntryFileHandler,
 );
-// Shared between the admin Payment Proofs queue and the resident Passbook — admin
-// or the entry's own payer, enforced in the service (getIssuedReceiptForViewing),
-// same pattern as the file endpoint immediately above.
+// Shared between the admin Payment Proofs queue and the resident Passbook.
 residentLedgerRouter.get(
   '/api/ledger-entries/:id/receipt',
   requireRole(['ADMIN', 'OWNER', 'TENANT']),

@@ -1,8 +1,5 @@
-// Pure/no I/O, unit-testable without a database — same shape as lib/upi.ts. Indian
-// numbering (crore/lakh/thousand, not the international million/billion grouping),
-// since receipt amounts (Receipt Generation & Approval Workflow, 2026-08-11) are
-// always INR. Amounts are Decimal(10,2) in the schema, so paise (the two decimal
-// places) are spelled out separately rather than dropped.
+// Indian numbering (crore/lakh/thousand, not international million/billion
+// grouping). Paise (the two decimal places) are spelled out separately.
 
 const ONES = [
   '',

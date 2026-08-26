@@ -1,7 +1,5 @@
-// Mirrors whatsapp/whatsapp.types.ts's error pair — notification.service.ts's
-// deliverPending() branches retry behavior on which of these was thrown, same as it
-// already does for the WhatsApp channel (architecture.md §4's "normalize provider
-// errors" applies per-channel).
+// Mirrors whatsapp.types.ts's error pair — deliverPending() branches retry
+// behavior on which of these was thrown.
 export class EmailTransientError extends Error {
   constructor(message: string) {
     super(message);
@@ -23,9 +21,6 @@ export interface NotificationEmailContent {
 }
 
 export interface SendEmailForNotificationResult {
-  // Resend's own message id isn't threaded through EmailProvider.send() (its
-  // interface returns void — used elsewhere by the password-reset flow, which never
-  // needed one) — always null for now rather than widening that interface for a
-  // value nothing currently reads.
+  // EmailProvider.send() returns void, so this is always null.
   providerMessageId: string | null;
 }

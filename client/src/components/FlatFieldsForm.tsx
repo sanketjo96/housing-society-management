@@ -2,21 +2,10 @@ import { User, Users } from 'lucide-react';
 import type { FieldErrors, UseFormRegister } from 'react-hook-form';
 import { ErrMsg, Field, inputClass, SectionHeader } from './FormField';
 
-// Shared field-rendering sections for the "Flat details / Owner details / Occupancy /
-// (conditional) Tenant details" form shape used both by the admin's flat-edit form
-// (admin/FlatsListPage.tsx's FlatForm) and the resident's own "My details" form
-// (MyDetailsPage.tsx) — see CLAUDE.md's ledger pivot note on why these two forms
-// exist separately (different submit endpoints/payloads/permissions) rather than one
-// merged component, and why only the genuinely-identical Owner/Occupancy sections are
-// extracted here — Flat details (wing/flatNumber/baseRate) differs too much in
-// interaction model (admin: register-bound and sometimes editable; resident: always a
-// plain read-only display) to be worth forcing into one shared component.
-//
-// `register`/`errors` are intentionally loosely typed (`any` field-values generic) —
-// the two callers use different, unrelated form value types that both happen to share
-// these field names; this is the standard react-hook-form pattern for a field-set
-// component reused across forms, since TS can't otherwise unify two independent
-// generic form types.
+// Owner details + Occupancy/Tenant field sections, shared between the admin
+// flat-edit form and the resident "My details" form. `register`/`errors` use
+// `any` since the two callers have unrelated form value types with the same
+// field names — the standard react-hook-form pattern for a shared field set.
 interface OwnerContactFieldsProps {
   register: UseFormRegister<any>;
   errors: FieldErrors<any>;

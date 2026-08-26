@@ -2,16 +2,9 @@ import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { logger } from '../infrastructure/observability';
 
-// First error-handling middleware in the app (added alongside Task 6.2's file upload).
-// multer's fileFilter/limits violations reach here via Express's standard synchronous
-// next(err) mechanism (multer itself isn't async, so this works correctly even though
-// this codebase's async controllers generally handle their own errors via try/catch
-// rather than relying on a catch-all — see CLAUDE.md's "Backend architecture"). Must
-// be mounted last, after every router (Express's 4-arg-signature convention for error
-// middleware).
-// Express only recognizes error-handling middleware by arity (exactly 4 params) — next
-// must stay in the signature even though it's never called here, or Express would treat
-// this as regular middleware and never invoke it for an error.
+// Must be mounted last, after every router. Express only recognizes error
+// middleware by arity (exactly 4 params) — `next` stays in the signature even
+// though it's never called, or Express treats this as regular middleware.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof multer.MulterError) {

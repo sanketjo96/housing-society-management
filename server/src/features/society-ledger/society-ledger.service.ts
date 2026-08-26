@@ -1,9 +1,7 @@
-// SocietyLedgerEntry — "Manage Finance" (docs/features/manage-finance/). A complete,
-// already-true transaction record the moment it's created (same shape as
-// OtherCharge/manualDeposit), NOT LedgerEntry's Deposit/Credit PENDING-then-
-// reviewed shape. Single-admin entry, immutable once created — no approval
-// workflow. No settlement/FIFO concept at all: nothing here reads or writes
-// LedgerEntry, MaintenanceRecord, or OtherCharge.
+// SocietyLedgerEntry — "Manage Finance". A complete, already-true transaction
+// record the moment it's created, not a pending-then-reviewed shape.
+// Single-admin entry, immutable once created — no approval workflow. Entirely
+// separate from LedgerEntry/MaintenanceRecord/OtherCharge.
 import { prisma } from '../../infrastructure/prisma/client';
 import { getStorageAdapter } from '../../infrastructure/storage';
 import type {
@@ -79,12 +77,8 @@ export interface RecordSocietyLedgerEntryInput {
   file: { buffer: Buffer; mimeType: string; extension: string };
 }
 
-// Shared between recordSocietyLedgerEntry (below) and
-// society-ledger-bulk-import-service.ts's bulkImportSocietyLedgerEntries — the two
-// checks that don't depend on how the category was looked up (by id vs. by name) or
-// whether a file is involved. Extracted (2026-08-21, docs/features/society-onboarding/ Phase
-// E) rather than duplicated, so the bulk path can never silently drift from the
-// single-row path's validation rules.
+// Shared between recordSocietyLedgerEntry (below) and the bulk-import service, so
+// neither path can silently drift from the other's validation rules.
 export function assertValidSocietyLedgerEntry<T extends { direction: SocietyLedgerDirection }>(
   category: T | null,
   input: {
@@ -102,12 +96,9 @@ export function assertValidSocietyLedgerEntry<T extends { direction: SocietyLedg
   }
 }
 
-// The one write path. categoryId is revalidated server-side against societyId +
-// isActive (never trusted from the client beyond existence, same contract as
-// billOtherCharge's feeTypeId lookup). direction-matches-category and
-// bank-reference-required-unless-CASH are both re-checked here even though the
-// Zod schema already enforces the latter — defense in depth, same precedent as
-// billOtherCharge re-checking amount > 0 despite its own Zod schema requiring it.
+// categoryId is revalidated server-side against societyId + isActive. Direction
+// and bank-reference rules are re-checked here too, even though Zod already
+// enforces them — defense in depth.
 export async function recordSocietyLedgerEntry(
   societyId: string,
   adminId: string,
@@ -161,9 +152,7 @@ export interface SocietyLedgerTotals {
 }
 
 // Society-wide, all-time totals — feeds admin-dashboard.service.ts's
-// getDashboardSummary. Plain findMany + reduce, matching this codebase's existing
-// aggregation style (getBalancesByFlat, listOtherCharges) rather than
-// prisma.groupBy, at this app's 24-flat scale.
+// getDashboardSummary.
 export async function getSocietyLedgerTotals(societyId: string): Promise<SocietyLedgerTotals> {
   const entries = await prisma.societyLedgerEntry.findMany({
     where: { societyId },
@@ -180,10 +169,8 @@ export async function getSocietyLedgerTotals(societyId: string): Promise<Society
   return { totalIncome, totalExpense, net: totalIncome - totalExpense };
 }
 
-// Admin-only file access — no resident-payer branch needed, unlike LedgerEntry's
-// file endpoint, since every SocietyLedgerEntry is admin-recorded and only admins
-// ever touch this feature. Returns null for "not found, wrong society, or no file
-// attached" (404).
+// Admin-only file access — every SocietyLedgerEntry is admin-recorded. Returns
+// null for not-found/wrong-society/no-file (404).
 export async function getSocietyLedgerEntryFileForViewing(entryId: string, societyId: string) {
   const entry = await prisma.societyLedgerEntry.findFirst({ where: { id: entryId, societyId } });
   if (!entry || !entry.fileUrl) return null;

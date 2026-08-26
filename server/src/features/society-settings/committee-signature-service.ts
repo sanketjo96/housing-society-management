@@ -1,6 +1,5 @@
 // Committee-member signature file upload/remove/view (chairman, secretary,
-// treasurer). General settings CRUD lives in ./settings-service.ts; row-shaping and
-// per-role column helpers shared by both live in ./society-settings-shared.ts.
+// treasurer). General settings CRUD lives in ./settings-service.ts.
 import type { Readable } from 'node:stream';
 import { prisma } from '../../infrastructure/prisma/client';
 import { getStorageAdapter } from '../../infrastructure/storage';
@@ -31,14 +30,9 @@ const SIGNATURE_COLUMNS_SELECT = {
   receiptSignatureMimeType: true,
 } as const;
 
-// Ordering matters: save the new file, point the Society row at it, and only then
-// delete the old one (if replacing) — never delete-then-save. A failure between
-// those steps must never leave Settings referencing a file that no longer exists;
-// worst case on a failed replace, the *old* signature simply stays in effect a bit
-// longer, which is harmless. One role-parameterized implementation replaces the
-// former treasurer-only setReceiptSignature — its one caller (the Receipt
-// template page's standalone signature upload) was removed in favor of managing
-// every committee member's signature from this one place.
+// Ordering matters: save the new file, point the Society row at it, only then
+// delete the old one — never delete-then-save. A failure between those steps
+// leaves the old signature in effect a bit longer, which is harmless.
 export async function setCommitteeSignature(
   societyId: string,
   role: CommitteeRole,
@@ -69,10 +63,9 @@ export async function setCommitteeSignature(
   return toSettings(society);
 }
 
-// Reverts to the blank-signature-line fallback on every future receipt (for the
-// treasurer role) or simply clears the Committee tab's stored image (chairman/
-// secretary). Deletes the stored file only after the DB row is confirmed cleared,
-// same ordering principle as setCommitteeSignature above.
+// Reverts to the blank-signature-line fallback on future receipts (treasurer) or
+// clears the Committee tab's stored image (chairman/secretary). Deletes the file
+// only after the DB row is confirmed cleared.
 export async function removeCommitteeSignature(
   societyId: string,
   role: CommitteeRole,
@@ -96,9 +89,8 @@ export async function removeCommitteeSignature(
   return toSettings(society);
 }
 
-// Authenticated stream-back for the Settings UI's own preview thumbnail — never a
-// public path, same "opaque key, private access" contract as every other stored
-// file in this app.
+// Authenticated stream-back for the Settings UI's preview thumbnail — never a
+// public path.
 export async function getCommitteeSignatureForViewing(
   societyId: string,
   role: CommitteeRole,

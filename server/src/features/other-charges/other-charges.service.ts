@@ -1,17 +1,13 @@
-// Admin-billed ad-hoc charges (joining fee, transfer fee, fine, ...) — docs/other-
-// charges/. A fully separate pool from maintenance dues: OtherCharge rows never
-// touch MaintenanceRecord's settlement math, and no Receipt is ever issued for
-// billing one (Receipts are money-received-only, issued when a Deposit/Credit
-// against this pool is later approved).
+// Admin-billed ad-hoc charges (joining fee, transfer fee, fine, ...). A fully
+// separate pool from maintenance dues — OtherCharge rows never touch
+// MaintenanceRecord's settlement math.
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../infrastructure/prisma/client';
 import { logger } from '../../infrastructure/observability';
 import { computeRecordSettlements, type RecordSettlement } from '../ledger/ledger-shared';
 import { notify } from '../notifications/notification.service';
 
-// Same "billed + 15 days" convention as MaintenanceRecord.dueDate
-// (maintenance-record.service.ts's DUE_DATE_DAYS) — no per-charge custom due date
-// in v1 (docs/features/other-charges/05-future-scope.md).
+// Same "billed + 15 days" convention as MaintenanceRecord.dueDate.
 const DUE_DATE_DAYS = 15;
 
 export class FeeTypeNotBillableError extends Error {
@@ -52,10 +48,8 @@ export interface OtherChargeListItem {
   settledAmount: number;
 }
 
-// Newest-first billing history, each row's settlement status computed against the
-// flat's own Other-Charges pool (never mixed with any other flat's or with
-// maintenance) — same FIFO fill (computeRecordSettlements) the resident-facing book
-// page uses, just run once per flat here rather than once for "the" flat.
+// Newest-first billing history; each row's settlement status is FIFO-filled
+// against that flat's own Other-Charges pool only.
 export async function listOtherCharges(societyId: string): Promise<OtherChargeListItem[]> {
   const charges = await prisma.otherCharge.findMany({
     where: { flat: { societyId } },
@@ -130,10 +124,8 @@ async function notifyOtherChargeBilled(
   }
 }
 
-// The one write path. flatId/feeTypeId are both revalidated server-side against
-// societyId (never trusted from the client beyond existence). payerId is always
-// resolved to flat.ownerId here, never accepted from the client — same "resolved
-// once, server-side" contract as MaintenanceRecord.payerId.
+// flatId/feeTypeId are revalidated server-side against societyId. payerId is always
+// resolved to flat.ownerId here, never accepted from the client.
 export async function billOtherCharge(
   societyId: string,
   adminId: string,

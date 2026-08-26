@@ -1,5 +1,5 @@
 // Resolve recipient + template, then hand off to whatsapp.client.ts. Never talks to
-// Meta directly (architecture.md §4).
+// Meta directly.
 import { prisma } from '../../../infrastructure/prisma/client';
 import { env } from '../../../config/env';
 import type { NotificationEvent, NotificationEventType } from '../notification.types';
@@ -10,11 +10,9 @@ import { buildOtherChargeBilledTemplate } from './templates/other-charge-billed'
 import { buildHelloWorldTemplate } from './templates/hello-world';
 import { SendWhatsAppTemplateResult, WhatsAppPermanentError, WhatsAppTemplate } from './whatsapp.types';
 
-// User.phone is free text today (no format enforced at the schema or Zod level — see
-// requirements.md §5) — most likely a bare 10-digit Indian mobile number, sometimes
-// with a leading 0 or spaces/hyphens from manual entry. Normalize defensively; treat
-// anything that doesn't resolve to a plausible number as a permanent failure (retrying
-// an unparseable number would just fail the same way every time).
+// User.phone is free text (no format enforced) — usually a bare 10-digit Indian
+// mobile number, sometimes with a leading 0 or separators. An unparseable number is
+// a permanent failure — retrying it would just fail the same way every time.
 export function normalizePhoneToE164(rawPhone: string): string {
   const stripped = rawPhone.replace(/[^\d+]/g, '');
 
@@ -35,13 +33,8 @@ export function normalizePhoneToE164(rawPhone: string): string {
 }
 
 function buildTemplate(eventType: NotificationEventType, payload: unknown): WhatsAppTemplate {
-  // TEMPORARY test-mode override: when WHATSAPP_TEST_MODE=true, every event sends
-  // Meta's pre-approved hello_world sample template instead of this society's own
-  // (not-yet-approved) templates — lets the full notify() -> deliverPending() ->
-  // WhatsApp client -> Meta pipeline be proven end-to-end with a real delivery, without
-  // waiting on Meta's template review. Remove this branch (and WHATSAPP_TEST_MODE) once
-  // the real templates are approved. Never on by default — unset/anything else falls
-  // through to the real per-event templates below.
+  // Test-mode override: sends Meta's pre-approved hello_world template instead of
+  // the real per-event templates below. Off by default.
   if (env('WHATSAPP_TEST_MODE') === 'true') {
     return buildHelloWorldTemplate();
   }
@@ -72,10 +65,8 @@ export interface DeliverableNotification {
   payload: unknown;
 }
 
-// Called by notification.service.ts's deliverPending() for each claimed row. Resolves
-// the recipient's *current* WhatsApp number fresh, at send time — never persisted on
-// the event itself (architecture.md §4: "a resident's number can change between when
-// a bill is generated and when the notification actually sends").
+// Resolves the recipient's current WhatsApp number fresh at send time — never
+// persisted on the event itself, since it can change between bill and send.
 export async function sendWhatsAppForNotification(
   row: DeliverableNotification,
 ): Promise<SendWhatsAppTemplateResult> {

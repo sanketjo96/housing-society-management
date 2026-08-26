@@ -1,7 +1,5 @@
 // Resident ledger actions: the Passbook read, payment-intent lock/QR/deep-link flow,
-// and Deposit/Credit creation. Admin review (approve/reject/manual-deposit) lives in
-// ../admin/admin-ledger-service.ts; balance/settlement formulas shared by both live
-// in ../ledger-shared.ts.
+// and Deposit creation. Admin review lives in ../admin/admin-ledger-service.ts.
 import { prisma } from '../../../infrastructure/prisma/client';
 import type {
   LedgerCategory,
@@ -29,11 +27,8 @@ export class NoOpenPaymentIntentError extends Error {
   }
 }
 
-// Neither a UPI VPA nor a complete bank-account+IFSC pair is configured on the
-// society — there's nothing to show a resident trying to pay. Distinct from a
-// resident-facing input error (InvalidAmountError above): this is a
-// society-configuration gap the admin needs to fix, not something the resident
-// did wrong.
+// Neither a UPI VPA nor a complete bank-account+IFSC pair is configured — a
+// society-configuration gap, not a resident input error.
 export class PaymentMethodNotConfiguredError extends Error {
   constructor() {
     super('This society has no payment method configured yet — contact your society admin');
@@ -41,10 +36,9 @@ export class PaymentMethodNotConfiguredError extends Error {
   }
 }
 
-// docs/features/other-charges/ — a resident has at most one open payment intent at a time,
-// across BOTH pools (a deliberate simplification over independent per-pool intents).
-// Starting a new intent while one is already open for a DIFFERENT category is
-// blocked, not silently replaced — see createOrReplacePaymentIntent.
+// At most one open payment intent per flat, across both Maintenance and Other
+// Charges. Starting a new intent while one is open for a different category is
+// blocked, not silently replaced.
 export class IntentAlreadyOpenForOtherCategoryError extends Error {
   constructor(public readonly openCategory: LedgerCategory) {
     super(
@@ -65,16 +59,10 @@ export interface LedgerRow {
   amount: number;
   status: 'APPROVED' | ProofStatus;
   note?: string | null;
-  // Only set on SYSTEM/OTHER_CHARGE rows — the derived per-record settlement (see
-  // computeRecordSettlements, ../ledger-shared.ts). Undefined on DEPOSIT rows,
-  // which have no concept of being "settled" themselves.
+  // Only set on SYSTEM/OTHER_CHARGE rows — the derived per-record settlement.
   settledAmount?: number;
   settlementStatus?: RecordSettlementStatus;
-  // Only meaningful on DEPOSIT rows — true once a Receipt row exists (i.e. the
-  // entry has been approved since the Receipt Generation & Approval Workflow
-  // shipped, 2026-08-11). Lets the resident Passbook show a "Download receipt"
-  // action only where one genuinely exists, rather than a failed round-trip for a
-  // still-pending row or a legacy entry approved before this feature existed.
+  // Only meaningful on DEPOSIT rows — true once a Receipt row exists.
   hasReceipt?: boolean;
 }
 
@@ -85,11 +73,10 @@ export interface LedgerForResident {
   availableYears: number[];
 }
 
-// Normalizes either charge source (MaintenanceRecord or OtherCharge) into one shape
-// the rest of this function can treat uniformly — `sortKey` feeds
-// computeRecordSettlements' FIFO ordering (a real 'YYYY-MM' period for maintenance;
-// an ISO dueDate for Other Charges — safe here since the two pools' rows are never
-// mixed into one settlement call, unlike an earlier, rejected merged design).
+// Normalizes either charge source (MaintenanceRecord or OtherCharge) into one shape.
+// `sortKey` feeds computeRecordSettlements' FIFO ordering: a 'YYYY-MM' period for
+// maintenance, an ISO dueDate for Other Charges — the two pools are never mixed
+// into one settlement call.
 interface NormalizedCharge {
   id: string;
   amount: unknown;
@@ -136,21 +123,11 @@ async function fetchNormalizedCharges(
   }));
 }
 
-// The resident's Dashboard — charge rows (SYSTEM/OTHER_CHARGE, always "Approved")
-// merged with the flat's LedgerEntry rows (Deposit/Credit, real status) for the
-// SAME pool only, newest first. Never stored as a union — computed fresh from both
-// tables every time. `category` (docs/features/other-charges/) — default MAINTENANCE, fully
-// backward compatible; switches which charge table is queried and filters
-// LedgerEntry to matching-category rows, never both pools in one response. `year`
-// scopes the returned `entries` to a calendar year; omitted returns every row ever
-// (what Maintenance Book relies on when showing full history). Two separate totals
-// are returned: `totals` is always lifetime/all-time — Outstanding is current
-// financial state, not a per-year concept, so it must never change just because a
-// resident is browsing a different year's entries (also what a payment intent locks
-// against, see createOrReplacePaymentIntent — a resident should never be able to
-// underpay by switching to a smaller-year view first). `yearTotals` is scoped to
-// `year` (or equal to `totals` when `year` is omitted) — used for numbers that
-// *are* naturally "sum over a period," e.g. the Dashboard's "Total Paid (year)" row.
+// The resident's Dashboard — charge rows merged with the flat's LedgerEntry
+// (Deposit) rows for the same pool, newest first, computed fresh every call.
+// `category` selects which pool. `year` scopes the returned `entries` and
+// `yearTotals`; `totals` always stays lifetime — Outstanding is current financial
+// state, not a per-year concept, and is what a payment intent locks against.
 export async function getLedgerForResident(
   flatId: string,
   category: LedgerCategory = 'MAINTENANCE',
@@ -173,10 +150,8 @@ export async function getLedgerForResident(
     ...new Set([...allCharges.map((c) => c.year), ...allEntries.map((e) => e.createdAt.getFullYear())]),
   ].sort((a, b) => b - a);
 
-  // Always derived from the *lifetime* charge set and the *lifetime* approved
-  // deposits (never the year-filtered arrays) — a record's settlement depends on
-  // its position in the flat's full oldest-to-newest history, not on whichever
-  // year the resident happens to be browsing.
+  // Always derived from the lifetime charge set, never the year-filtered arrays —
+  // settlement depends on full oldest-to-newest history, not the browsed year.
   const settlements = computeRecordSettlements(
     allCharges.map((c) => ({ id: c.id, period: c.sortKey, amount: c.amount })),
     totals.approvedDeposits,
@@ -223,10 +198,8 @@ export interface ResidentBalancesSummary {
   totalOutstanding: number;
 }
 
-// Powers the Dashboard's 4 summary cards (Maintenance Outstanding, Available
-// Credit, Other Outstanding, Total Outstanding) in one cheap call — deliberately
-// NOT built on getLedgerForResident, which computes full entries/settlement for a
-// use case that only needs 2 numbers. docs/features/other-charges/.
+// Powers the Dashboard's 4 summary cards in one cheap call — not built on
+// getLedgerForResident, which computes far more than these 2 numbers need.
 export async function getResidentBalancesSummary(flatId: string): Promise<ResidentBalancesSummary> {
   const [maintenance, otherCharges] = await Promise.all([
     computeFlatBalances(flatId),
@@ -250,16 +223,13 @@ export interface PaymentIntentResult {
   bankAccountNumber?: string;
   bankIfsc?: string;
   createdAt: string;
-  // docs/features/other-charges/ — which pool this intent is locked against. Lets a page for
-  // the OTHER pool tell "there's an open intent, but it's for Maintenance" apart
-  // from "there's an open intent for me" without a second round-trip.
+  // Which pool this intent is locked against.
   category: LedgerCategory;
 }
 
-// UPI always takes precedence when configured (CLAUDE.md's payment-method rule) —
-// bank details are only ever surfaced when the society has no UPI VPA set. Throws
-// PaymentMethodNotConfiguredError if neither is usable, rather than returning a
-// result with nothing a resident could actually act on.
+// UPI always takes precedence when configured; bank details only surface when the
+// society has no UPI VPA set. Throws PaymentMethodNotConfiguredError if neither is
+// usable.
 async function buildPaymentIntentResult(
   intent: { id: string; amount: unknown; createdAt: Date; category: LedgerCategory },
   societyId: string,
@@ -296,18 +266,9 @@ async function buildPaymentIntentResult(
   throw new PaymentMethodNotConfiguredError();
 }
 
-// Re-derives the QR/UPI link fresh every call rather than storing them on the row —
-// they're cheap/deterministic from `amount` alone, so there's nothing to keep in
-// sync, and a resident revisiting a QR on a later day still gets a valid one.
-//
-// `flat: { societyId }` on every query below (Phase 9 security-audit
-// defense-in-depth, 2026-08-12) — PaymentIntent has no direct societyId column of
-// its own, only via its Flat relation, and every caller today already pre-validates
-// `flatId` against the caller's own society (resident-ledger-controller.ts's
-// resolveMyFlatId), so this filter is currently unreachable-but-inert. It's added
-// anyway so a future caller that ever passes a client-supplied flatId straight
-// through without going via resolveMyFlatId first fails safe (empty result) rather
-// than silently reading/mutating a different society's pending payment.
+// Re-derives the QR/UPI link fresh every call rather than storing it — cheap and
+// deterministic from `amount` alone. `flat: { societyId }` on every query below is
+// defense-in-depth: PaymentIntent has no direct societyId column, only via Flat.
 export async function getOpenPaymentIntent(
   flatId: string,
   societyId: string,
@@ -317,14 +278,10 @@ export async function getOpenPaymentIntent(
   return buildPaymentIntentResult(intent, societyId);
 }
 
-// "Amount locked" — one open intent per flat (`flatId` unique), replaced wholesale
-// if the resident starts over with a different amount for the SAME category before
-// submitting. A different category is BLOCKED instead (docs/features/other-charges/ — at
-// most one open intent at a time, across both pools, a deliberate simplification
-// over independent per-pool intents). No longer capped at the flat's outstanding
-// (2026-08-20 pivot) — a resident may lock any positive amount; any part beyond
-// Outstanding settles it in full and the remainder surfaces as Available Credit
-// once approved, via the same balancesFromRows formula (../ledger-shared.ts).
+// One open intent per flat, replaced wholesale if the resident re-locks a different
+// amount for the same category before submitting; a different category is blocked
+// instead. Any positive amount is allowed — an amount beyond Outstanding settles it
+// in full and the remainder surfaces as Available Credit once approved.
 export async function createOrReplacePaymentIntent(
   flatId: string,
   payerId: string,
@@ -357,11 +314,8 @@ interface ProofFileInput {
   extension: string;
 }
 
-// Finalizes an open intent into a real, reviewable Deposit — same shape as
-// `createDeposit` below (transaction creating the LedgerEntry + audit log), plus
-// clearing the intent row in the same transaction ("intent clears" on submit). File
-// is required here (unlike the lower-level `createDeposit` below) — the whole point
-// of the intent flow is "come back once you have a screenshot".
+// Finalizes an open intent into a real, reviewable Deposit, clearing the intent row
+// in the same transaction. File is required here, unlike createDeposit below.
 export async function submitPaymentIntent(
   flatId: string,
   payerId: string,
@@ -388,12 +342,9 @@ export async function submitPaymentIntent(
         note: 'UPI payment - awaiting review',
         fileUrl: saved.key,
         mimeType: file.mimeType,
-        // Self-service — the resident submitting this is also the creator.
         createdById: payerId,
         createdByType: role,
-        // Inherited from the intent being finalized — never re-derived, so the
-        // resulting Deposit always settles the exact pool the resident locked
-        // against (docs/features/other-charges/).
+        // Inherited from the intent, never re-derived.
         category: intent.category,
       },
     });
@@ -416,12 +367,7 @@ export interface CreateDepositInput {
   file?: ProofFileInput;
 }
 
-// Proof file is optional here (deliberate reversal of the pre-pivot mandatory-proof
-// rule — see CLAUDE.md's ledger pivot note): the resident-experience mockup's "Upload
-// payment proof" button in the Pay panel has no wired behavior, and the written spec
-// for Pay only requires the amount field. `category` trails as a defaulted param
-// (not inserted before `input`) so every existing call site stays valid unchanged.
-// No longer capped at Outstanding (2026-08-20 pivot) — see createOrReplacePaymentIntent.
+// Proof file is optional here. No amount cap against Outstanding.
 export async function createDeposit(
   payerId: string,
   flatId: string,

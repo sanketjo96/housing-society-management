@@ -20,25 +20,16 @@ export interface DashboardSummary {
   // docs/features/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
-  // docs/features/manage-finance/ — the society's own income/expenditure (SocietyLedgerEntry),
-  // entirely unrelated to the resident-billing figures above (no shared rows, no
-  // shared math). "Recorded since tracking began" — NOT a live bank balance; there
-  // is no admin-configurable opening balance to anchor it to one (future scope).
+  // The society's own income/expenditure, unrelated to resident billing.
+  // "Recorded since tracking began" — not a live bank balance.
   societyTotalIncome: number;
   societyTotalExpense: number;
   societyNetPosition: number;
 }
 
-// Society-wide bulk fetch (two queries total, not N+1 across flats), grouped by
-// flatId so each flat's balances can be computed with ledger.service.ts's shared
-// balancesFromRows — the exact same formula the resident's own Passbook uses, never
-// duplicated here.
-//
-// `category` (docs/features/other-charges/) — default MAINTENANCE, backward compatible with
-// every existing call site. When OTHER_CHARGE, queries OtherCharge instead of
-// MaintenanceRecord and filters LedgerEntry to matching-category rows — the same
-// parameterization pattern as ledger-shared.ts's computeFlatBalances, one function
-// reused twice rather than a duplicated sibling.
+// Fetches all flats' records/entries in two queries (not N+1), then groups by
+// flatId and runs each through balancesFromRows. `category` selects which pool:
+// MAINTENANCE reads MaintenanceRecord, OTHER_CHARGE reads OtherCharge.
 async function getBalancesByFlat(societyId: string, category: LedgerCategory = 'MAINTENANCE') {
   const flats = await listFlats(societyId);
   const [records, entries] = await Promise.all([
@@ -69,18 +60,9 @@ async function getBalancesByFlat(societyId: string, category: LedgerCategory = '
   }));
 }
 
-// Task 8.1 — society-wide, all-time (every MaintenanceRecord/LedgerEntry ever
-// generated, not scoped to a period) since no date-range picker was asked for.
-// "Outstanding" is the sum of each flat's own Outstanding — summed per flat, not
-// computed as one global subtraction, since a flat that has overpaid must never
-// offset another flat's balance (each Math.max(0, ...) is per-flat, per the ledger
-// formula). pendingReviewTotal covers pending Deposits still awaiting review —
-// neither "confirmed collected" nor "still owed with no action taken."
-//
-// totalPaid = approvedDeposits — Credit was removed for good on 2026-08-20 (see
-// CLAUDE.md's pivot addendum); every LedgerEntry is a Deposit now, so this and
-// collectionRatePercent read the same figure. Still used for FlatDues.paidTotal
-// below.
+// Society-wide, all-time totals. outstandingTotal sums each flat's own
+// Outstanding rather than one global subtraction, so an overpaid flat never
+// offsets another flat's balance.
 export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
   const [byFlat, byFlatOtherCharges, societyLedgerTotals] = await Promise.all([
     getBalancesByFlat(societyId),
@@ -100,10 +82,7 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
   }
   const collectionRatePercent = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
 
-  // Fully separate pool (docs/features/other-charges/) — summed per-flat, same Math.max(0,...)-
-  // per-flat convention as outstandingTotal above, never netted against a flat that's
-  // overpaid on the other pool. totalOutstandingTotal is a plain sum of two already-
-  // floored figures.
+  // Separate pool, summed per-flat like outstandingTotal above.
   const otherChargesOutstandingTotal = byFlatOtherCharges.reduce(
     (sum, { balances }) => sum + balances.outstanding,
     0,
@@ -132,21 +111,8 @@ export interface FlatDues {
   creditTotal: number;
 }
 
-// Task 8.2 — every flat, not just the ones with dues (a settled flat showing ₹0 is
-// itself useful information for an admin scanning the table), sorted highest-owed
-// first. outstandingTotal here is each flat's Outstanding — the primary "what they
-// owe right now" figure. paidTotal is that flat's approvedDeposits (same as
-// getDashboardSummary's totalPaid — see that function's comment), reused here
-// per-flat rather than only in the aggregate. creditTotal is that flat's
-// availableCredit — the flip side of outstanding (exactly one of the two is ever
-// nonzero, per ledger-shared.ts's balancesFromRows) — a distinct figure from
-// paidTotal: paidTotal is the cumulative funds ever applied, creditTotal is whatever
-// of that is still unused after covering totalCharges.
-//
-// Maintenance only — the admin Dashboard's "Other Charges Outstanding Total" tile
-// drills into a per-charge list instead (GET /api/admin/other-charges, already
-// carries settlement status and fee type; docs/features/other-charges/), not a flat-wise
-// aggregate, since a fee-type breakdown only makes sense per charge.
+// Every flat (not just ones with dues), sorted highest-owed first. Maintenance
+// pool only — Other Charges has its own per-charge drill-down instead.
 export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
   const byFlat = await getBalancesByFlat(societyId);
 
@@ -172,16 +138,8 @@ export interface ResidentLedgerRow {
   outstandingOtherCharges: number;
 }
 
-// "Manage Resident Ledger" — a comprehensive per-flat overview combining both pools
-// (Maintenance + Other Charges, docs/features/other-charges/) in one row, reached via its own
-// sidebar nav item rather than a dashboard drill-down like /flat-dues or
-// /other-charges-dues (both of which are filtered to only what's currently owed).
-// Lists every flat, not just ones with a balance — a "manage" page is meant for
-// browsing the whole society, not flagging exceptions — sorted by wing then flat
-// number (a stable directory order) rather than by any balance figure. Two
-// independent getBalancesByFlat calls, same pattern as getDashboardSummary above —
-// never a single merged query, since the two pools' charge sources
-// (MaintenanceRecord vs OtherCharge) are genuinely different tables.
+// Every flat, both pools (Maintenance + Other Charges) combined into one row,
+// sorted by wing then flat number.
 export async function getResidentLedgerOverview(societyId: string): Promise<ResidentLedgerRow[]> {
   const [byFlat, byFlatOtherCharges] = await Promise.all([
     getBalancesByFlat(societyId),
@@ -213,18 +171,8 @@ export interface FlaggedFlat {
   message: string;
 }
 
-// Task 8.4 — rule 8's escalation. A Deposit is not tied to specific charges (payment
-// is against the aggregate balance), but a MaintenanceRecord's own settlement state
-// *is* derivable (computeRecordSettlements, ledger.service.ts's FIFO fill against the
-// flat's approved-deposit total) — so "oldest charge" means the oldest record that
-// isn't fully PAID yet, not just the oldest record overall. A flat that has already
-// settled its oldest few months but still owes newer ones must be judged against the
-// newer, still-open month's due date, not a stale already-paid one. A flat is flagged
-// when it still has something Outstanding AND that oldest-unsettled charge's dueDate
-// is past dueDate + gracePeriodDays (default 7, CLAUDE.md's confirmed decision;
-// query-param overridable). outstandingTotal is the flat's full Outstanding (rule 8's
-// "computes outstanding total... across all that flat's unpaid records"), not just
-// whatever portion happens to be technically overdue.
+// Flags a flat when it has Outstanding > 0 and its oldest not-yet-PAID
+// MaintenanceRecord is past dueDate + gracePeriodDays (default 7).
 export async function getFlaggedFlats(
   societyId: string,
   gracePeriodDays: number = DEFAULT_GRACE_PERIOD_DAYS,
@@ -250,21 +198,16 @@ export async function getFlaggedFlats(
     const unsettled = flatRecords
       .filter((r) => settlements.get(r.id)?.status !== 'PAID')
       .sort((a, b) => a.period.localeCompare(b.period));
-    // balances.outstanding > 0 guarantees at least one non-PAID record exists — the
-    // FIFO fill can never mark every record PAID while approvedDeposits < totalCharges.
+    // outstanding > 0 guarantees at least one non-PAID record exists.
     const oldestUnsettled = unsettled[0]!;
     const oldestDueDate = oldestUnsettled.dueDate;
     if (!isOverdue(oldestDueDate, gracePeriodDays, now)) continue;
-    // How many still-open (not fully settled) months have passed their due date — a
-    // month that's already PAID off, even if its due date is technically in the past,
-    // isn't part of "how overdue is this flat" from the admin's perspective.
+    // Only counts records not already settled off.
     const overdueRecordCount = unsettled.filter((r) =>
       isOverdue(r.dueDate, gracePeriodDays, now),
     ).length;
 
-    // Whoever currently occupies the flat, not whichever payerId happens to be on the
-    // oldest charge — a mid-history tenant swap could otherwise name someone who has
-    // already moved out as the message's recipient.
+    // Current occupant, not the payer on the oldest charge (may have moved out).
     const recipient = flat.currentTenant ?? flat.owner;
 
     flagged.push({

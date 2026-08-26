@@ -27,9 +27,7 @@ async function fetchFlats(): Promise<FlatSummary[]> {
   return res.json();
 }
 
-// Always shaped like "create" (wing/flatNumber included) — in edit mode they're
-// rendered disabled and simply excluded from the PATCH payload the mutation sends,
-// rather than needing a second parallel schema/type for the same form.
+// Same schema for create and edit; edit mode disables wing/flatNumber and omits them from the PATCH payload.
 const flatFormSchema = z
   .object({
     wing: z.string().min(1, 'Wing is required'),
@@ -90,13 +88,8 @@ function FlatForm({
 
   const occupancy = watch('occupancy');
 
-  // New flats are pre-filled from the admin Billing plan page's default base rate
-  // (2026-08-06 addendum), purely a starting point still freely editable before
-  // saving. Applied via effect rather than useForm's defaultValues, since the
-  // Settings fetch (in the parent) can resolve after this form has already mounted —
-  // defaultValues are captured once at mount and wouldn't pick up a later value. Only
-  // fires while the field is still untouched, so it can never clobber something the
-  // admin already typed.
+  // Pre-fills baseRate from the society default once it loads (may resolve after
+  // mount, so an effect is used instead of defaultValues). Skips if already touched.
   useEffect(() => {
     if (!isEdit && defaultBaseRate !== undefined && !getValues('baseRate')) {
       setValue('baseRate', defaultBaseRate);
@@ -107,8 +100,7 @@ function FlatForm({
     mutationFn: async (values) => {
       const path = isEdit ? `/api/admin/flats/${flat.id}` : '/api/admin/flats';
       const method = isEdit ? 'PATCH' : 'POST';
-      // wing/flatNumber are immutable once a flat exists — updateFlat's contract
-      // doesn't accept them, so they're simply not sent in edit mode.
+      // wing/flatNumber are immutable once a flat exists — omitted in edit mode.
       const body = isEdit
         ? {
             baseRate: values.baseRate,
@@ -212,8 +204,7 @@ function occupancyLabel(flat: FlatSummary) {
 export function FlatsListPage() {
   const [editingId, setEditingId] = useState<string | null | 'new'>(null);
   const { data, isLoading, isError } = useQuery({ queryKey: ['admin-flats'], queryFn: fetchFlats });
-  // Fetched here too (not just on the Billing plan page) so a new flat's base rate
-  // can be pre-filled even if the admin never opens Billing plan this session.
+  // Used to pre-fill a new flat's base rate.
   const { data: settings } = useQuery({ queryKey: ['society-settings'], queryFn: fetchSettings });
 
   const columns = useMemo<ColumnDef<FlatSummary, unknown>[]>(

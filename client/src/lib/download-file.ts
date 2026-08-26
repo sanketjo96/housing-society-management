@@ -1,10 +1,7 @@
 import { authedFetch } from './api';
 
-// Every authenticated file endpoint (proof screenshots, issued receipts) is never a
-// public URL, so a plain <a href> won't carry the Bearer token — fetch the bytes
-// ourselves and hand the browser a blob: URL instead. Works for both images and
-// PDFs — the browser's own viewer opens either in the new tab. Shared by
-// PaymentProofsPage and ReceiptBookPage.
+// Authenticated file endpoints aren't public URLs, so a plain <a href> can't
+// carry the Bearer token — fetch and hand off a blob: URL instead.
 export async function downloadAuthedFile(path: string, errorMessage: string) {
   const res = await authedFetch(path);
   if (!res.ok) throw new Error(errorMessage);

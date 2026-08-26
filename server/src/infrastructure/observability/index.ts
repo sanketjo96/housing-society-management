@@ -1,5 +1,2 @@
-// The stable façade every feature/job/middleware imports through. Trivial today
-// (Stage 1 is structured logging only), but this is the file a future Stage 2
-// (sentry.ts) re-exports alongside `logger` — call sites never have to change when
-// that lands. See docs/features/observability/02-architecture.md.
+// Stable façade every feature/job/middleware imports through.
 export { logger } from './logger';

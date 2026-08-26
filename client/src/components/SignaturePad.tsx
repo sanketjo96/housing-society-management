@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-// Generic canvas signature pad — Pointer Events cover mouse, trackpad, and touch
-// uniformly, so no separate touch handlers are needed. `touch-none` on the canvas
-// stops the page from scrolling while the admin is mid-stroke on a touchscreen.
-// Backing-store resolution is capped at 2x devicePixelRatio (not the raw screen
-// DPR, which can be 3-4x on newer displays) — keeps the exported PNG's pixel
-// dimensions, and therefore its file size, bounded regardless of the admin's
-// monitor. A signature (mostly transparent background, thin dark strokes) at that
-// size is a few KB, nowhere near the 2MB upload cap — no separate resize step
-// needed.
+// Canvas signature pad. Pointer Events cover mouse/trackpad/touch uniformly.
+// Backing-store resolution capped at 2x devicePixelRatio, bounding the
+// exported PNG's file size regardless of the admin's screen DPR.
 export function SignaturePad({ onSave, height = 160 }: { onSave: (file: File) => void; height?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,8 +65,6 @@ export function SignaturePad({ onSave, height = 160 }: { onSave: (file: File) =>
     setHasDrawn(false);
   }
 
-  // A blank canvas can't be saved — hasDrawn (any stroke at all) gates both
-  // buttons.
   function handleSave() {
     canvasRef.current!.toBlob((blob) => {
       if (!blob) return;

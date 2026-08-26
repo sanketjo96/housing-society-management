@@ -15,8 +15,7 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Purely decorative — a stylized floor/unit grid on the brand panel, not tied to
-// any real flat or occupancy data.
+// Purely decorative — a stylized floor/unit grid, not real data.
 const FLOORS = [6, 5, 4, 3, 2, 1];
 const UNITS = ['A', 'B', 'C', 'D'];
 

@@ -1,9 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-// Same breakpoint DashboardShell.tsx already forks its own layout on (`md`, 768px) —
-// "mobile" means the same thing everywhere in this app. useSyncExternalStore (not
-// useState+useEffect) so the very first render is already correct instead of
-// flashing the desktop layout for one frame before a resize listener catches up.
+// useSyncExternalStore so the first render is already correct, no flash of
+// the wrong layout before a resize listener catches up.
 const QUERY = '(max-width: 767px)';
 
 function subscribe(callback: () => void) {

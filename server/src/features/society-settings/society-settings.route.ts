@@ -19,9 +19,7 @@ societySettingsRouter.patch(
   requireRole(['ADMIN']),
   updateSocietySettingsHandler,
 );
-// :role is 'chairman' | 'secretary' | 'treasurer' — see the controller's
-// parseCommitteeRoleParam. Treasurer's signature is the same file a receipt's
-// letterhead uses (society-settings-shared.ts's committeeSignatureUpdateData).
+// :role is 'chairman' | 'secretary' | 'treasurer'.
 societySettingsRouter.post(
   '/api/admin/settings/committee/:role/signature',
   requireRole(['ADMIN']),

@@ -57,13 +57,8 @@ interface OtherChargesBookData {
   outstanding: number;
 }
 
-// Mirrors MaintenanceBookPage.tsx's shape exactly — its own Outstanding, its own
-// charges list, its own Pay flow, and its own Payment History (docs/features/other-charges/).
-// Reuses GET /api/me/ledger with category=OTHER_CHARGE (no separate backend
-// endpoint, same "the data is already there" reasoning as Maintenance Book) and
-// filters client-side into the two tables this page shows (OTHER_CHARGE charges and
-// DEPOSIT history). `totals` is always lifetime regardless of any `year` param (see
-// ledger.service.ts), so it's exactly right for both cards without extra computation.
+// Fetches the OTHER_CHARGE ledger and filters client-side into charges and
+// Deposit history — same shape as MaintenanceBookPage.tsx for the Other Charges pool.
 async function fetchOtherChargesBook(): Promise<OtherChargesBookData> {
   const res = await authedFetch('/api/me/ledger?category=OTHER_CHARGE');
   if (!res.ok) throw new Error('Could not load your other charges.');
@@ -183,18 +178,9 @@ const BOOK_TABS: { value: BookTab; label: string }[] = [
   { value: 'BILLS', label: 'Bills' },
 ];
 
-// OTHER_CHARGE-and-Deposit-history view — the structural mirror of
-// MaintenanceBookPage.tsx for the Other Charges pool (docs/features/other-charges/): the same
-// two summary cards, the same "Payment History" (default, home of the Pay
-// control)/"Bills" tabs, the same sortable/date-filterable charges table with a
-// derived settlement-status badge, and the same Payment History table with receipt
-// downloads. Reached only via the Dashboard's "Other Outstanding" card, not a
-// sidebar item.
-//
-// One deliberate difference from Maintenance: Other Charges can never be settled
-// partially. The Pay widget always locks the flat's full `outstanding` total —
-// shown read-only, not as an editable field — rather than letting a resident type
-// a smaller amount and leave a charge half-paid.
+// Structural mirror of MaintenanceBookPage.tsx for the Other Charges pool, except
+// Other Charges can never be settled partially — the Pay widget always locks the
+// full `outstanding` total, shown read-only.
 export function OtherChargesBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -204,8 +190,7 @@ export function OtherChargesBookPage() {
     queryKey: ['my-other-charges'],
     queryFn: fetchOtherChargesBook,
   });
-  // Shared with MaintenanceBookPage.tsx — there's only ever one intent, across both
-  // pools (docs/features/other-charges/).
+  // There's only ever one open intent, across both pools.
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
   const intentOpenForThisPool = intentQuery.data?.category === 'OTHER_CHARGE';
   const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'OTHER_CHARGE';
@@ -215,9 +200,6 @@ export function OtherChargesBookPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  // Other Charges can never be settled partially — there's no amount to validate,
-  // the Pay button always locks the full `outstanding` total (see the Payments-tab
-  // widget below).
   const outstanding = data?.outstanding ?? 0;
 
   const lockMutation = useMutation<{ intent: unknown }, Error, number>({
@@ -406,10 +388,6 @@ export function OtherChargesBookPage() {
                   )}
                 </div>
 
-                {/* Other Charges can't be settled partially (unlike Maintenance) — the
-                    amount is always the full outstanding total, shown read-only above
-                    rather than as an editable field, so there's nothing to validate here. */}
-
                 {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
 
                 {intentOpenForThisPool && intentQuery.data && (
@@ -419,9 +397,7 @@ export function OtherChargesBookPage() {
                     onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
                   />
                 )}
-                {/* docs/features/other-charges/ — at most one open intent at a time, across both
-                    pools. If it's for Maintenance, this page can't start a new one
-                    (server-blocked) — point at where to finish it instead. */}
+                {/* Only one open intent at a time — point at where to finish a Maintenance one. */}
                 {intentOpenForOtherPool && (
                   <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
                     You have a pending payment for Maintenance — finish or cancel it on the{' '}

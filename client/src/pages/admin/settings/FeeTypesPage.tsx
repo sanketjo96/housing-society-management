@@ -9,8 +9,7 @@ import { DataTable } from '../../../components/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass } from '../../../components/FormField';
 import { authedFetch } from '../../../lib/api';
 
-// Route/model/endpoint names stay "fee type(s)" (unchanged) — every user-visible
-// string on this page says "Custom fee(s)" (2026-08-26 rename).
+// Shown to users as "Custom fee(s)"; model/route names still say FeeType.
 interface FeeType {
   id: string;
   name: string;
@@ -31,9 +30,7 @@ const feeTypeFormSchema = z.object({
 
 type FeeTypeFormValues = z.infer<typeof feeTypeFormSchema>;
 
-// Same list<->form swap pattern as FlatsListPage.tsx's FlatForm — the only other
-// DataTable-with-add page in this app. No separate shared component, since this
-// form is small enough to stay inline.
+// Inline form, list<->form swap on submit.
 function FeeTypeForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const {

@@ -4,16 +4,15 @@ import { useAuth, type AuthUser } from '../context/AuthContext';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  // Omitted entirely = any authenticated role is allowed, just not an anonymous visitor.
+  // Omitted = any authenticated role allowed, just not anonymous.
   allowedRoles?: AuthUser['role'][];
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
 
-  // Still attempting the silent session-restore (see AuthContext) — don't redirect
-  // yet, that would bounce an already-logged-in user to /login for a split second on
-  // every page load, before their session even had a chance to be restored.
+  // Session restore still in flight — don't redirect yet or an already-logged-in
+  // user briefly bounces to /login on every page load.
   if (isLoading) {
     return <p>Loading…</p>;
   }

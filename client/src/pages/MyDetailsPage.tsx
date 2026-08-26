@@ -19,9 +19,7 @@ interface MyFlat {
   occupancyEffectiveFrom: string | null;
 }
 
-// 403 (an ADMIN visiting this page — GET /api/me/flat is OWNER/TENANT only) and 404
-// (no flat linked yet) both mean "nothing to show here" from this page's point of
-// view — the profile section below still works regardless.
+// 403/404 both mean "nothing to show" — the profile section still works regardless.
 async function fetchMyFlat(): Promise<MyFlat | null> {
   const res = await authedFetch('/api/me/flat');
   if (res.status === 404 || res.status === 403) return null;
@@ -56,9 +54,7 @@ const profileSchema = z.object({
 });
 type ProfileValues = z.infer<typeof profileSchema>;
 
-// A TENANT's own profile (name/phone/email). An OWNER never sees this — the combined
-// flat form below (MyFlatForm) edits the exact same fields via its "Owner details"
-// section, so a second, redundant "edit your name" form would just duplicate it.
+// A TENANT's own profile. OWNERs edit the same fields via MyFlatForm instead.
 function ProfileSection() {
   const { user, refreshUser } = useAuth();
   const {
@@ -77,9 +73,7 @@ function ProfileSection() {
       if (!res.ok) throw new Error(body?.error ?? 'Could not save your details.');
       return body;
     },
-    // Without this, AuthContext's `user` (and anything reading useAuth().user, e.g.
-    // the Dashboard header) would keep showing the pre-edit name/email until the next
-    // full page load — PATCH /api/me only updates the database, not local auth state.
+    // PATCH /api/me only updates the DB — refresh local auth state too.
     onSuccess: () => void refreshUser(),
   });
 
@@ -120,8 +114,7 @@ function ProfileSection() {
   );
 }
 
-// Always shaped like the mockup's MyDetailsTab — occupancy/tenant fields are simply
-// unused when occupancy stays 'owner', rather than needing a second parallel schema.
+// Occupancy/tenant fields are unused when occupancy stays 'owner'.
 const myFlatSchema = z
   .object({
     ownerName: z.string().min(1, "Owner's name is required"),
@@ -141,13 +134,8 @@ const myFlatSchema = z
 type MyFlatFormInput = z.input<typeof myFlatSchema>;
 type MyFlatFormValues = z.infer<typeof myFlatSchema>;
 
-// The OWNER-only combined "My details" form — same visual shape as admin's flat-edit
-// form (FlatsListPage.tsx's FlatForm): Flat details (locked), Owner details, Occupancy,
-// conditional Tenant details, one "Save changes" button. Reuses
-// OwnerDetailsFields/OccupancyFields (components/FlatFieldsForm.tsx) — the exact same
-// sections the admin form uses — and PUT /api/me/flat, which itself reuses
-// updateFlat's find-or-create-tenant-inline mechanism server-side
-// (flats.service.ts) — this is where occupancy changes are self-reported.
+// OWNER-only combined form: locked flat details, Owner details, Occupancy,
+// conditional Tenant details, one Save button — self-reports occupancy changes.
 function MyFlatForm({ flat }: { flat: MyFlat }) {
   const queryClient = useQueryClient();
   const { refreshUser } = useAuth();
@@ -181,8 +169,6 @@ function MyFlatForm({ flat }: { flat: MyFlat }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-flat'] });
-      // The dashboard header shows the caller's own name — keep it in sync if the
-      // owner just edited it here.
       void refreshUser();
     },
   });

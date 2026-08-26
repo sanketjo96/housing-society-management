@@ -7,13 +7,8 @@ import { env } from '../../config/env';
 
 export type { SaveFileInput, StorageAdapter } from './types';
 
-// Task 6.2/6.3's provider switch: one env var picks the implementation; nothing else
-// in the codebase imports a concrete adapter class directly (every service/controller
-// goes through this factory). 'local' (this MVP's original single-VPS deployment
-// target) and 's3' (2026-08-26 — Cloudflare R2, or any S3-compatible endpoint) are
-// both implemented; 'gdrive' remains a named-but-unfilled extension point: implement
-// StorageAdapter (./types.ts) and add a case below, no other file in the codebase
-// needs to change.
+// One env var picks the implementation; no other file imports a concrete adapter
+// class directly. 'gdrive' is a named-but-unimplemented extension point.
 export function getStorageAdapter(): StorageAdapter {
   const provider = env('STORAGE_PROVIDER', 'local');
   switch (provider) {
@@ -24,9 +19,8 @@ export function getStorageAdapter(): StorageAdapter {
       const client = new S3Client({
         region: config.region,
         endpoint: config.endpoint,
-        // R2 (and most non-AWS S3-compatible endpoints) need path-style addressing
-        // (https://endpoint/bucket/key) rather than AWS's default virtual-hosted
-        // style (https://bucket.endpoint/key).
+        // Path-style addressing (endpoint/bucket/key) — required by R2 and most
+        // non-AWS S3-compatible endpoints.
         forcePathStyle: true,
         credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
       });

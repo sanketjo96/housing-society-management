@@ -25,10 +25,7 @@ async function fetchFlats(): Promise<FlatSummary[]> {
   return res.json();
 }
 
-// Admin-only page (App.tsx: /tenants, allowedRoles ADMIN) — reached only via the
-// "Total Tenants" tile on AdminDashboardPage, not a sidebar nav item, same pattern as
-// FlatWiseDuesPage. Lists only tenant information (flat + tenant contact details) —
-// owner-occupied flats and flat/onboarding management stay on /flats.
+// Tenant-occupied flats only — owner/onboarding management stays on /flats.
 export function TenantsListPage() {
   const flatsQuery = useQuery({ queryKey: ['admin-flats'], queryFn: fetchFlats });
 

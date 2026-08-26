@@ -1,11 +1,7 @@
-// Typed event payloads for the notification feature (Phase 1: WhatsApp only — see
-// docs/features/notifications/requirements.md §2). A business feature builds one of these and
-// hands it to NotificationService.notify() — it never sees NotificationLog, cron, or
-// WhatsApp types (docs/features/notifications/claude-instructions.md, rule 10).
-//
-// requirements.md §3: "Events represent business facts, not WhatsApp operations" and
-// "Events contain recipient.userId, not a phone number" — the current WhatsApp number
-// is resolved later, at delivery time, from recipient.userId (see whatsapp.service.ts).
+// Typed event payloads for the notification feature. A business feature builds one
+// of these and hands it to notify() — it never sees NotificationLog, cron, or
+// channel-specific types. Events carry recipient.userId, not a phone/email address —
+// those are resolved later, at delivery time.
 
 interface NotificationEventBase {
   eventId: string;
@@ -37,11 +33,8 @@ export interface DepositPaymentApprovedEvent extends NotificationEventBase {
   };
 }
 
-// docs/features/other-charges/ — fired when an admin bills an ad-hoc fee (joining fee,
-// transfer fee, fine, ...) to a flat's owner. A separate event from
-// MAINTENANCE_BILL_GENERATED even though both represent "a new charge exists" —
-// Other Charges is a deliberately separate pool throughout this feature, including
-// at the notification layer.
+// Fired when an admin bills an ad-hoc fee (joining fee, transfer fee, fine, ...) to
+// a flat's owner. Separate from MAINTENANCE_BILL_GENERATED.
 export interface OtherChargeBilledEvent extends NotificationEventBase {
   eventType: 'OTHER_CHARGE_BILLED';
   data: {

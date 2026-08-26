@@ -7,9 +7,7 @@ export interface UpiLinkInput {
   note: string;
 }
 
-// Task 6.1 — a UPI deep link per the standard `upi://pay` intent scheme any UPI app
-// (GPay, PhonePe, Paytm, ...) recognizes. Pure/no I/O, so it's unit-testable without a
-// database — this is the one place the exact query-param shape lives.
+// Builds a `upi://pay` deep link any UPI app recognizes.
 export function buildUpiDeepLink(input: UpiLinkInput): string {
   const params = new URLSearchParams({
     pa: input.vpa,
@@ -21,9 +19,7 @@ export function buildUpiDeepLink(input: UpiLinkInput): string {
   return `upi://pay?${params.toString()}`;
 }
 
-// Local generation only (`qrcode` npm package) — no external API, per CLAUDE.md's
-// tech-stack table. Returns a base64 PNG data URL the frontend can drop straight into
-// an <img src>, no separate image-hosting endpoint needed.
+// Returns a base64 PNG data URL the frontend can drop straight into an <img src>.
 export async function generateQrDataUrl(link: string): Promise<string> {
   return QRCode.toDataURL(link, { errorCorrectionLevel: 'M' });
 }

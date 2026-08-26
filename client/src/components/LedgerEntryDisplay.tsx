@@ -3,11 +3,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authedFetch } from '../lib/api';
 
-// Small shared display pieces for a resident's ledger rows (approval-status badge,
-// receipt download) — previously duplicated inline in ResidentDashboardOverview.tsx
-// before the resident-dashboard restructure split its Deposit history out to
-// MaintenanceBookPage.tsx.
-
 export type ApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
 
 const STATUS_META: Record<ApprovalStatus, { className: string; label: string }> = {
@@ -29,10 +24,8 @@ export function dateLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// The issued-receipt endpoint is authenticated (never a public URL), so a plain
-// <a href> won't carry the Bearer token — fetch it ourselves and hand the browser a
-// blob: URL instead, same pattern the admin Payment Proofs queue uses for both proof
-// files and receipts.
+// Authenticated endpoint — a plain <a href> can't carry the Bearer token, so
+// fetch and hand off a blob: URL instead.
 export async function downloadReceipt(entryId: string) {
   const res = await authedFetch(`/api/ledger-entries/${entryId}/receipt`);
   if (!res.ok) throw new Error('Could not load your receipt.');
@@ -42,8 +35,6 @@ export async function downloadReceipt(entryId: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-// Owns its own error state — same reasoning as PaymentProofsPage.tsx's per-cell
-// components (doesn't fit TanStack Table's per-cell rendering model otherwise).
 export function ReceiptDownloadButton({ entryId }: { entryId: string }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -64,10 +55,7 @@ export function ReceiptDownloadButton({ entryId }: { entryId: string }) {
   );
 }
 
-// Same white-card/accent-color scheme as admin/AdminDashboardPage.tsx's SummaryCard
-// (border-line, white background, coral for an outstanding debt, teal for a
-// positive/credit figure) — the resident Dashboard previously used a dark "ink" card
-// here, which read as a different design system from the admin dashboard entirely.
+// Coral for an outstanding debt, teal for a positive/credit figure.
 export function SummaryCard({
   label,
   value,

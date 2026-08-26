@@ -11,8 +11,7 @@ import { authedFetch } from '../../../lib/api';
 import { fetchOwners, fetchSettings, type CommitteeMember, type SocietySettings } from './settings-api';
 import { SettingsFormActions } from './SettingsFormActions';
 
-// Mirrors the server's format check (society-settings.controller.ts) — 4-letter
-// bank code, a literal '0', then 6 alphanumeric branch chars, e.g. HDFC0001234.
+// 4-letter bank code, literal '0', 6 alphanumeric branch chars, e.g. HDFC0001234.
 const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const TABS = [
@@ -22,10 +21,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
 
-// Split into three independently-saved forms (each its own mutation) rather than
-// one combined submit — matches this app's existing PaymentProofsPage tab pattern,
-// and means switching tabs never risks losing another tab's unsaved edits or
-// silently re-sending fields the admin never touched on this visit.
+// Three independently-saved forms/tabs, each its own mutation.
 
 // ---- Basic information ----
 
@@ -148,11 +144,8 @@ function committeeValuesFromSettings(settings: SocietySettings): CommitteeValues
   };
 }
 
-// A plain <select> of the society's owners — nothing typed in, matches the
-// confirmed requirement that committee roles are picked, not entered. Defined at
-// module scope (not inline in CommitteeTab's render) so it isn't recreated as a new
-// component type on every render, which would otherwise remount the <select> and
-// drop focus.
+// Module-scoped (not inline) so it isn't recreated every render, which would
+// remount the <select> and drop focus.
 function CommitteeSelectField({
   label,
   owners,
@@ -183,10 +176,7 @@ function CommitteeSelectField({
   );
 }
 
-// Authenticated preview thumbnail — GET .../signature is never a public path, so a
-// plain <img src> won't carry the Bearer token; fetch it ourselves and hand the
-// <img> a blob: URL, same pattern used for proof files elsewhere in this app.
-// Parameterized by endpoint (one per committee role) rather than hardcoded.
+// Plain <img src> can't carry the Bearer token, so fetch and hand off a blob: URL.
 function SignaturePreview({ endpoint, hasSignature, alt }: { endpoint: string; hasSignature: boolean; alt: string }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -206,8 +196,7 @@ function SignaturePreview({ endpoint, hasSignature, alt }: { endpoint: string; h
         setPreviewUrl(objectUrl);
       })
       .catch(() => {
-        // A broken preview fetch just means no thumbnail shows — not worth its own
-        // error banner on a settings page.
+        // No thumbnail shows; not worth its own error banner.
       });
     return () => {
       cancelled = true;
@@ -227,13 +216,8 @@ const COMMITTEE_ROLE_PARAM: Record<'chairman' | 'secretary' | 'treasurer', strin
   treasurer: 'treasurer',
 };
 
-// Signing operates only on whoever is actually, currently, on record for this role
-// — never on an unsaved dropdown pick. If the form's pending value differs from
-// what's saved, this shows a "save first" note instead of the upload/draw widget.
-// This isn't just a UX nicety: the backend clears a role's signature the instant
-// its assignee id genuinely changes (society-settings.service.ts's
-// isGenuineReassignment), so uploading "for" someone before their id is even saved
-// would just get wiped out the moment Save runs afterward.
+// Signing only applies to the saved role assignment, never an unsaved dropdown
+// pick — shows a "save first" note if the form's pending value differs.
 function CommitteeSignatureField({
   role,
   label,
@@ -288,9 +272,6 @@ function CommitteeSignatureField({
           No signature yet — required.
         </p>
       )}
-      {/* Once a signature is set, only "Remove signature" is shown — upload/draw
-          reappear the moment removal actually completes (hasSignature flips back
-          to false via onChanged's refetch), not on click. */}
       {!hasSignature && (
         <>
           <div className="mb-2 flex gap-3">
@@ -356,11 +337,8 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
     defaultValues: committeeValuesFromSettings(settings),
   });
 
-  // Re-applied once `owners` resolves too, not just `settings` — an already-assigned
-  // role's <option> doesn't exist in the DOM until the owners list has loaded, so a
-  // reset() that only fires on `settings` would set chairmanId to an option the
-  // <select> doesn't have yet, and the browser silently falls back to the first
-  // (blank) option instead.
+  // Re-applied once `owners` resolves too — an assigned role's <option> doesn't
+  // exist until then, so resetting only on `settings` would fall back to blank.
   useEffect(() => {
     reset(committeeValuesFromSettings(settings));
   }, [settings, owners, reset]);
@@ -378,9 +356,6 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
     },
   });
 
-  // A signature change (upload/remove) never touches chairmanId et al., so the
-  // committee form itself doesn't need resetting — just refresh the shared cache
-  // the way every other settings mutation in this file already does.
   function handleSignatureChanged(updated: SocietySettings) {
     queryClient.setQueryData(['society-settings'], updated);
   }
@@ -468,10 +443,7 @@ function CommitteeTab({ settings }: { settings: SocietySettings }) {
 
 const paymentSchema = z
   .object({
-    // Both optional — a society configures either a UPI VPA or a bank account
-    // number + IFSC pair (or both, in which case UPI always takes precedence for
-    // the resident-facing Pay flow — see ledger.service.ts's
-    // buildPaymentIntentResult). Empty strings are valid ("not configured").
+    // Empty strings are valid ("not configured"); UPI takes precedence when both are set.
     upiVpa: z.string(),
     bankAccountNumber: z.string(),
     bankIfsc: z

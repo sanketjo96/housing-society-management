@@ -38,8 +38,7 @@ export function BillingPlanPage() {
     defaultValues: { defaultBaseRate: undefined, tenantRateFactor: undefined },
   });
 
-  // Form fields can't be pre-filled until the GET resolves, so sync them in once data
-  // arrives — same pattern as every other edit form in this app (e.g. FlatForm).
+  // Sync form fields once the GET resolves.
   useEffect(() => {
     if (data) reset(formValuesFromSettings(data));
   }, [data, reset]);

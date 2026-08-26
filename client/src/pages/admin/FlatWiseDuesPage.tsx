@@ -22,14 +22,8 @@ async function fetchFlatDues(): Promise<FlatDues[]> {
   return res.json();
 }
 
-// Admin-only page (App.tsx: /flat-dues, allowedRoles ADMIN) — reached only via the
-// "Maintenance Outstanding Total" tile on AdminDashboardPage, not a sidebar nav item,
-// since it's a drill-down of that one figure rather than a destination of its own.
-// Shows every owner, not just those with an outstanding balance — a flat that's
-// fully settled (and has no credit either) still gets a row, explicitly marked as
-// settled, rather than silently disappearing from the list (2026-08-24 change; was
-// previously filtered to outstandingTotal > 0 only). Credit is shown alongside
-// Outstanding so a fully-paid-or-ahead flat's state is visible at a glance too.
+// Shows every owner, not just those with an outstanding balance — a settled flat
+// still gets a row, marked "Settled" rather than disappearing from the list.
 export function FlatWiseDuesPage() {
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
 

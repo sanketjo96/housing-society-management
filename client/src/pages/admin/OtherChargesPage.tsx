@@ -33,8 +33,7 @@ interface FlatOption {
   owner: { name: string };
 }
 
-// "Fee type" internally (model/route names, unchanged) — user-facing copy on this
-// page and everywhere else it's shown says "Custom fee" (2026-08-26 rename).
+// Shown to users as "Custom fee"; model/route names still say FeeType.
 interface FeeTypeOption {
   id: string;
   name: string;
@@ -90,8 +89,7 @@ const billFormSchema = z.object({
 type BillFormInput = z.input<typeof billFormSchema>;
 type BillFormValues = z.infer<typeof billFormSchema>;
 
-// One flat at a time — no bulk billing (docs/features/other-charges/, a confirmed scope
-// decision). Same list<->form swap pattern as FlatsListPage.tsx.
+// One flat at a time — no bulk billing.
 function BillChargeForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const { data: flats, isLoading: flatsLoading } = useQuery({
@@ -121,8 +119,6 @@ function BillChargeForm({ onDone }: { onDone: () => void }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-other-charges'] });
-      // Both dashboard summary figures depend on Other Charges totals — refresh
-      // them immediately rather than waiting out the 30s staleTime.
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard-summary'] });
       onDone();
     },
@@ -144,8 +140,6 @@ function BillChargeForm({ onDone }: { onDone: () => void }) {
 
       <h1 className="m-0 mb-4 font-display text-lg text-ink">Bill a charge</h1>
 
-      {/* Page/form stay reachable either way (2026-08-26) — a missing catalog is
-          surfaced as a warning + link to go configure one, not a block. */}
       {!feeTypesLoading && feeTypes?.length === 0 && (
         <WarningBanner>
           No Custom Fees are set up yet, so there's nothing to bill against. Add one on{' '}

@@ -2,10 +2,8 @@ import { z } from 'zod';
 
 export const bulkImportSocietyLedgerSchema = z.object({ csv: z.string().min(1) });
 
-// The direction-matches-category rule is NOT expressed here — it needs a DB
-// lookup (the category's own direction), so it's checked in
-// recordSocietyLedgerEntry (society-ledger.service.ts), not in Zod. Same
-// precedent as FeeTypeNotBillableError living in the service, not the schema.
+// The direction-matches-category rule needs a DB lookup, so it's checked in
+// recordSocietyLedgerEntry, not here.
 export const recordSocietyLedgerEntrySchema = z
   .object({
     direction: z.enum(['INCOME', 'EXPENSE']),

@@ -42,9 +42,7 @@ async function fetchActiveFinanceCategories(direction: Direction): Promise<Finan
   return res.json();
 }
 
-// The authenticated file endpoint doesn't carry a Bearer token via a plain <a href>,
-// same reasoning as LedgerEntryDisplay.tsx's downloadReceipt — fetch it ourselves and
-// hand the browser a blob: URL.
+// Plain <a href> can't carry the Bearer token, so fetch and hand off a blob: URL.
 async function downloadSocietyLedgerFile(entryId: string) {
   const res = await authedFetch(`/api/admin/society-ledger/${entryId}/file`);
   if (!res.ok) throw new Error('Could not load this file.');
@@ -73,10 +71,7 @@ function FileDownloadButton({ entryId }: { entryId: string }) {
   );
 }
 
-// Single combined form with a direction toggle (confirmed decision — one "Manage
-// Finance" page, not two separate Income/Expense flows), same list<->form swap
-// pattern as OtherChargesPage.tsx's BillChargeForm. Submitted as FormData since a
-// file is involved.
+// One form with a direction toggle, submitted as FormData (includes a file).
 function RecordEntryForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const [direction, setDirection] = useState<Direction>('EXPENSE');
@@ -118,9 +113,6 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-society-ledger'] });
-      // Society Finance dashboard cards depend on this feature's totals — refresh
-      // them immediately rather than waiting out the 30s staleTime (same precedent
-      // as OtherChargesPage.tsx's BillChargeForm onSuccess).
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard-summary'] });
       onDone();
     },
@@ -167,9 +159,6 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
         </div>
       </Field>
 
-      {/* Page/form stay reachable either way — a missing catalog for the currently
-          selected direction is a warning + link to go configure one, not a block,
-          same pattern as OtherChargesPage.tsx's Custom Fee warning. */}
       {!categoriesLoading && categories?.length === 0 && (
         <WarningBanner>
           No {direction === 'INCOME' ? 'Income' : 'Expense'} categories are set up yet, so there's

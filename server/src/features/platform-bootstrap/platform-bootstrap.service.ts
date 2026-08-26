@@ -1,8 +1,4 @@
-// Phase A of docs/features/society-onboarding/ — the one genuinely new mechanism that plan
-// adds. Every other bulk-import path in that plan is a thin wrapper around an
-// existing single-row service (createFlat, billOtherCharge,
-// recordSocietyLedgerEntry); this one has no such precedent, since nothing in this
-// codebase has ever created a Society outside prisma/seed.ts.
+// Creates a brand-new Society plus its first ADMIN user.
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../../infrastructure/prisma/client';
@@ -22,15 +18,10 @@ export interface BootstrapSocietyResult {
   adminUserId: string;
 }
 
-// societyId is generated inside the transaction — never accepted from the caller —
-// so this endpoint can only ever create a brand-new society, never reach into an
-// existing one (the vulnerability class docs/features/security-audit.md finding 9.1 fixed:
-// a client-supplied societyId letting an existing ADMIN reach another society's
-// data). The admin's password is a random, unusable value (bcrypt-hashed, same
-// convention as findOrCreateUserByEmail/createUser) — the account becomes usable
-// only via the password-reset link requestPasswordReset() sends, run *after* the
-// transaction commits, not inside it (sending an email isn't something a DB
-// transaction should be able to roll back).
+// societyId is generated inside the transaction, never accepted from the caller —
+// this can only ever create a new society. The admin's password is a random,
+// unusable bcrypt hash; the account becomes usable only via the password-reset
+// link sent after the transaction commits.
 export async function bootstrapSociety(
   input: BootstrapSocietyInput,
 ): Promise<BootstrapSocietyResult> {

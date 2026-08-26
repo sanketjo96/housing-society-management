@@ -18,13 +18,9 @@ interface ImportResultBase {
   errors: { row: number; message: string }[];
 }
 
-// Shared shell for every CSV bulk-import panel under /imports/* (ImportsPage.tsx,
-// BulkChargesImportPage.tsx, FinanceHistoryImportPage.tsx) — extracted 2026-08-21
-// once the third near-identical copy of this panel (download template / upload /
-// per-row error list) was about to be written. Each page supplies its own
-// endpoint/template/labels and how to render its own success message (the three
-// backends don't share a response shape — Flats returns `created`, the other two
-// return `imported` — only `errors: [{ row, message }]` is common to all of them).
+// Shared shell for a CSV bulk-import panel: download template, upload, show
+// per-row errors. Caller supplies endpoint/template/labels and its own
+// success-message renderer, since response shapes vary by endpoint.
 export function CsvImportPanel<T extends ImportResultBase>({
   title,
   description,
@@ -45,10 +41,6 @@ export function CsvImportPanel<T extends ImportResultBase>({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  // Takes the file's raw text as the mutation variable (not component state) — no
-  // textarea to hold it in; every backend still parses CSV text server-side, only
-  // how that text reaches the request body changed, from "typed into a textarea"
-  // to "read from an uploaded file".
   const mutation = useMutation<T, Error, string>({
     mutationFn: async (csv) => {
       const res = await authedFetch(endpoint, { method: 'POST', body: JSON.stringify({ csv }) });

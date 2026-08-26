@@ -6,8 +6,7 @@ export const createFinanceCategorySchema = z.object({
   description: z.string().optional(),
 });
 
-// isActive-only — see updateFinanceCategory's comment on why this is tighter than
-// updateFeeTypeSchema (no rename in v1, docs/features/manage-finance/05-future-scope.md).
+// isActive-only — no rename support yet.
 export const updateFinanceCategorySchema = z.object({
   isActive: z.boolean(),
 });

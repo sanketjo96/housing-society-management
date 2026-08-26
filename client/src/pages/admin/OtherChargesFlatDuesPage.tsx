@@ -31,14 +31,7 @@ interface OtherChargeDueRow {
   settlementStatus: SettlementStatus;
 }
 
-// Reuses GET /api/admin/other-charges (the same list OtherChargesPage.tsx's "Bill a
-// Charge" page shows) rather than a flat-wise aggregate — a fee-type breakdown only
-// makes sense per charge, not per flat, since one flat can owe several different fee
-// types at once. Filtered to only what's still owed (UNPAID/PARTIALLY_SETTLED) — a
-// fully PAID charge isn't a "due" — and sorted by Outstanding descending, same
-// highest-owed-first convention as FlatWiseDuesPage.tsx. There is no Credit column
-// here, deliberately: Credit only ever exists against the Maintenance pool
-// (createCredit has no category param) — it can never apply to an Other Charge.
+// Filters to UNPAID/PARTIALLY_SETTLED, sorted by Outstanding descending.
 async function fetchOtherChargesDues(): Promise<OtherChargeDueRow[]> {
   const res = await authedFetch('/api/admin/other-charges');
   if (!res.ok) throw new Error('Could not load other charges dues.');
@@ -81,11 +74,7 @@ function SettlementBadge({ row }: { row: OtherChargeDueRow }) {
   );
 }
 
-// Admin-only page (App.tsx: /other-charges-dues, allowedRoles ADMIN) — reached only
-// via the "Other Charges Outstanding Total" tile on AdminDashboardPage, not a
-// sidebar nav item, same drill-down convention as /flat-dues. Deliberately a
-// separate, read-only URL from /other-charges (the "Custom Bills" billing action,
-// sidebar item) — this page never links to billing.
+// Read-only dues view — separate from /other-charges, which handles billing.
 export function OtherChargesFlatDuesPage() {
   const duesQuery = useQuery({ queryKey: ['admin-other-charges-dues'], queryFn: fetchOtherChargesDues });
 

@@ -1,5 +1,4 @@
-// OpenAPI docs for finance-categories.route.ts — see auth/auth.openapi.ts's header
-// comment for why these live in a sibling file rather than inline above each route.
+// OpenAPI docs for finance-categories.route.ts.
 export {};
 
 /**
