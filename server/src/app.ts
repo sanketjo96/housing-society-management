@@ -40,7 +40,7 @@ export const app = express();
 // sees nginx's own container IP for every request instead of the real client IP.
 app.set('trust proxy', 1);
 
-// First in the chain (docs/observablity/), so its measured response time covers the
+// First in the chain (docs/features/observability/), so its measured response time covers the
 // full request lifecycle — position relative to routing doesn't affect correctness
 // (pino-http hooks res.on('finish'/'close')), only what's included in the timing.
 app.use(requestLogger);

@@ -11,7 +11,7 @@ const FINANCE_HISTORY_CSV_TEMPLATE =
   'INCOME,Bank Interest,850,2024-03-31,BANK_TRANSFER,INTT-2024-0331,\n';
 
 // The "Finance" child page under the "Imports" submenu (DashboardLayout.tsx) — Phase
-// E of docs/society-onboarding/. A dedicated page rather than an inline panel on
+// E of docs/features/society-onboarding/. A dedicated page rather than an inline panel on
 // ManageFinancePage.tsx (the original architecture sketch), so every onboarding
 // import lives in one place under /imports/*. Each category must already exist
 // under Settings -> Finance categories before importing. No proof file is required

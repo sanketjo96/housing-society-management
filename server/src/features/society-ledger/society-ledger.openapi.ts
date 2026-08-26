@@ -9,7 +9,7 @@ export {};
  *     tags: [Manage Finance (Admin)]
  *     summary: List every society income/expense transaction, newest by transaction date
  *     description: >
- *       docs/manage-finance/. Entirely separate from resident-billing LedgerEntry —
+ *       docs/features/manage-finance/. Entirely separate from resident-billing LedgerEntry —
  *       no flat, no payer, no settlement math.
  *     responses:
  *       200: { description: OK. }
@@ -48,7 +48,7 @@ export {};
  *     tags: [Manage Finance (Admin)]
  *     summary: Bulk-import historical society income/expense transactions via CSV
  *     description: >
- *       Phase E of docs/society-onboarding/. Reuses the same
+ *       Phase E of docs/features/society-onboarding/. Reuses the same
  *       direction-matches-category and bank-reference-required-unless-cash checks
  *       recordSocietyLedgerEntry enforces, but skips the mandatory-proof-file rule
  *       (legacy rows have no scanned receipt) — each imported row's note is

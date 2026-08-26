@@ -1,14 +1,14 @@
 # Flats — flat & society onboarding
 
 Reference for flat management endpoints, built up through Phase 3. Same route/prefix
-convention as `docs/auth.md`: every path below is mounted under `/api/`.
+convention as `docs/features/auth.md`: every path below is mounted under `/api/`.
 
 **Every endpoint under `/api/admin/*` is admin-only.** `wing` and `flatNumber` are
 permanently immutable once a flat exists (Task 3.1: never editable, not even by an
 admin — see "Edit a flat" below). Owner/tenant *contact details* (name/phone/email),
 by contrast, are editable by both an admin (via these endpoints) and, since Task 3.7,
 by the resident themselves (`/api/me/flat*`, documented at the bottom of this page and
-in `docs/auth.md`).
+in `docs/features/auth.md`).
 
 ## Redesign (2026-08-06): owner/tenant are contact fields, not ids
 
@@ -32,7 +32,7 @@ accounts inline, via a new shared helper, `findOrCreateUserByEmail()`:
   (currently stubbed to log the reset link — Phase 7 replaces the stub with a real
   send). The person sets their own password via that link and logs in normally
   afterward — no separate invite-token subsystem, just two already-built pieces wired
-  together. See `docs/auth.md` for the fuller version of this reasoning (it was first
+  together. See `docs/features/auth.md` for the fuller version of this reasoning (it was first
   established for Task 3.7's resident self-service, then reused here for symmetry).
 
 This was a genuine breaking change to Task 3.1's already-shipped contract and docs —
@@ -176,7 +176,7 @@ empty `csv` field.
 Confirmed against a shared resident-view UI mockup: an `OWNER`/`TENANT` may update
 their own profile directly, and an `OWNER` may manage their own flat's tenant, without
 admin involvement. See `CLAUDE.md`'s "Addition (2026-08-06)" for the full reasoning and
-`docs/auth.md` for the endpoint reference (`PATCH /api/me`, `GET /api/me/flat`,
+`docs/features/auth.md` for the endpoint reference (`PATCH /api/me`, `GET /api/me/flat`,
 `PUT`/`DELETE /api/me/flat/tenant`) — documented there since it's not `/admin`-scoped.
 The `PUT` upserts the tenant in place (same semantics as `PATCH /api/admin/flats/:id`'s
 `occupancy: 'tenant'`, not the id-based `assignTenant`'s reject-on-existing behavior).

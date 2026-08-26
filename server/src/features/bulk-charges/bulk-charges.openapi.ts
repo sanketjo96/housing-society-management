@@ -9,7 +9,7 @@ export {};
  *     tags: [Bulk Charges Import (Admin)]
  *     summary: Bulk-import one-time per-flat charges (Opening Balance arrears or Other Charges) via CSV
  *     description: >
- *       Phase C of docs/society-onboarding/. Each row is matched to an existing flat
+ *       Phase C of docs/features/society-onboarding/. Each row is matched to an existing flat
  *       by wing+flatNumber and branches on `pool`: MAINTENANCE_OPENING_BALANCE
  *       creates a sentinel-period MaintenanceRecord that always settles before every
  *       real month; OTHER_CHARGE resolves an existing FeeType by name and reuses

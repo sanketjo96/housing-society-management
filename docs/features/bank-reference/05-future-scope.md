@@ -4,7 +4,7 @@ Everything below is **deliberately not built in v1**. Documented so the path is
 clear if a real need appears — not so it gets scheduled prematurely. Re-read
 [`01-requirements.md`](./01-requirements.md) before starting any item here to
 confirm the trigger is real, not anticipated (same discipline
-`docs/other-charges/05-future-scope.md` applies to its own deferred items).
+`docs/features/other-charges/05-future-scope.md` applies to its own deferred items).
 
 ## 1. Real Bank-Statement Matching / Open-Banking Integration
 **What**: verify a submitted `bankReference` against actual bank records via an

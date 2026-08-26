@@ -32,7 +32,7 @@ not be re-litigated without a new conversation:
    field blank with no error shown — the resident can still type a reference
    manually, or submit with none at all. Same "must never block a financial
    transaction from settling" precedent already established for the receipt
-   signature-render fallback (`docs/receipts.md`).
+   signature-render fallback (`docs/features/receipts.md`).
 3. **The field is optional at every layer** — schema, submission, and review.
    Not every Deposit will have a usable reference (a poor screenshot, an app OCR
    doesn't recognize), and that must never be a hard stop.
@@ -43,7 +43,7 @@ not be re-litigated without a new conversation:
    directly assert "this came from OCR."
 5. **The admin never re-types the reference at approval.** It's simply displayed
    next to the proof screenshot in the existing receipt-approval preview modal
-   (`docs/receipts.md`'s "Approval flow") — the admin visually cross-checks and
+   (`docs/features/receipts.md`'s "Approval flow") — the admin visually cross-checks and
    clicks "Confirm and approve," exactly as today, with one more piece of
    context on screen.
 6. **`manualDeposit` (the admin cash/bank-transfer fallback) gets direct admin
@@ -79,7 +79,7 @@ not be re-litigated without a new conversation:
   already true of `qrcode` for UPI QR generation and the `local` storage adapter.
 - **Never blocks a financial transaction**: any OCR failure degrades silently to a
   blank, resident-editable field — identical precedent to the receipt-signature
-  render fallback documented in `docs/receipts.md`.
+  render fallback documented in `docs/features/receipts.md`.
 - **No new trust surface**: provenance (`bankReferenceSource`) is always computed
   from the server's own independent OCR re-run, never accepted as a value the
   client asserts about itself.

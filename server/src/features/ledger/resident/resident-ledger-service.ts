@@ -41,7 +41,7 @@ export class PaymentMethodNotConfiguredError extends Error {
   }
 }
 
-// docs/other-charges/ — a resident has at most one open payment intent at a time,
+// docs/features/other-charges/ — a resident has at most one open payment intent at a time,
 // across BOTH pools (a deliberate simplification over independent per-pool intents).
 // Starting a new intent while one is already open for a DIFFERENT category is
 // blocked, not silently replaced — see createOrReplacePaymentIntent.
@@ -139,7 +139,7 @@ async function fetchNormalizedCharges(
 // The resident's Dashboard — charge rows (SYSTEM/OTHER_CHARGE, always "Approved")
 // merged with the flat's LedgerEntry rows (Deposit/Credit, real status) for the
 // SAME pool only, newest first. Never stored as a union — computed fresh from both
-// tables every time. `category` (docs/other-charges/) — default MAINTENANCE, fully
+// tables every time. `category` (docs/features/other-charges/) — default MAINTENANCE, fully
 // backward compatible; switches which charge table is queried and filters
 // LedgerEntry to matching-category rows, never both pools in one response. `year`
 // scopes the returned `entries` to a calendar year; omitted returns every row ever
@@ -226,7 +226,7 @@ export interface ResidentBalancesSummary {
 // Powers the Dashboard's 4 summary cards (Maintenance Outstanding, Available
 // Credit, Other Outstanding, Total Outstanding) in one cheap call — deliberately
 // NOT built on getLedgerForResident, which computes full entries/settlement for a
-// use case that only needs 2 numbers. docs/other-charges/.
+// use case that only needs 2 numbers. docs/features/other-charges/.
 export async function getResidentBalancesSummary(flatId: string): Promise<ResidentBalancesSummary> {
   const [maintenance, otherCharges] = await Promise.all([
     computeFlatBalances(flatId),
@@ -250,7 +250,7 @@ export interface PaymentIntentResult {
   bankAccountNumber?: string;
   bankIfsc?: string;
   createdAt: string;
-  // docs/other-charges/ — which pool this intent is locked against. Lets a page for
+  // docs/features/other-charges/ — which pool this intent is locked against. Lets a page for
   // the OTHER pool tell "there's an open intent, but it's for Maintenance" apart
   // from "there's an open intent for me" without a second round-trip.
   category: LedgerCategory;
@@ -319,7 +319,7 @@ export async function getOpenPaymentIntent(
 
 // "Amount locked" — one open intent per flat (`flatId` unique), replaced wholesale
 // if the resident starts over with a different amount for the SAME category before
-// submitting. A different category is BLOCKED instead (docs/other-charges/ — at
+// submitting. A different category is BLOCKED instead (docs/features/other-charges/ — at
 // most one open intent at a time, across both pools, a deliberate simplification
 // over independent per-pool intents). No longer capped at the flat's outstanding
 // (2026-08-20 pivot) — a resident may lock any positive amount; any part beyond
@@ -393,7 +393,7 @@ export async function submitPaymentIntent(
         createdByType: role,
         // Inherited from the intent being finalized — never re-derived, so the
         // resulting Deposit always settles the exact pool the resident locked
-        // against (docs/other-charges/).
+        // against (docs/features/other-charges/).
         category: intent.category,
       },
     });

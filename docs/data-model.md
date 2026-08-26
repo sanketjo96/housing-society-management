@@ -42,7 +42,7 @@ model Society {
 > always takes precedence when both are configured. `bankAccountNumber`/`bankIfsc`
 > are validated as a pair (both-or-neither) in `society-settings.service.ts`'s
 > `updateSocietySettings`, not at the schema level — Prisma can't express "A or (B
-> and C)" as a column constraint. Full contract: `docs/payments.md`'s "Payment
+> and C)" as a column constraint. Full contract: `docs/features/payments.md`'s "Payment
 > method: UPI or bank transfer" section.
 
 > **Receipt fields added 2026-08-11** (Receipt Generation & Approval Workflow) —
@@ -51,7 +51,7 @@ model Society {
 > issue correctly before an admin ever visits Settings; the rest are optional, simply
 > omitted from a rendered receipt when unset. `receiptSignatureFileKey` is an opaque
 > `StorageAdapter` key (same contract as `LedgerEntry.fileUrl`), never a public URL.
-> Full contract: `docs/receipts.md`.
+> Full contract: `docs/features/receipts.md`.
 
 > **`defaultBaseRate` added 2026-08-06** (admin Settings tab addendum, `CLAUDE.md`):
 > pre-fills the base-rate field when onboarding a *new* flat via the admin UI. Purely a
@@ -59,7 +59,7 @@ model Society {
 > calculation, independently editable, unaffected by later changes to this field.
 > `GET`/`PATCH /api/admin/settings` (admin-only) expose this and `tenantRateFactor`
 > together as "the two values that drive billing," even though only `tenantRateFactor`
-> is read directly by `calculateMonthlyRate` — see `docs/maintenance-records.md`.
+> is read directly by `calculateMonthlyRate` — see `docs/features/maintenance-records.md`.
 
 > **Added during the Phase 1 review** (2026-08-05), not the initial Task 1.1 pass —
 > both fields were explicit requirements (`upiVpa`: Epic 2, "UPI VPA for QR
@@ -139,7 +139,7 @@ Field decisions worth explaining:
 
 > **Addition (2026-08-06)**: `name`, `phone`, and `email` are also what a resident's
 > planned self-service profile update (`PATCH /api/me`, see `CLAUDE.md`) will write to
-> directly, for their own row — no new field needed. See `docs/auth.md` for how a
+> directly, for their own row — no new field needed. See `docs/features/auth.md` for how a
 > self-service-created `TENANT` (`role`, `passwordHash`) gets provisioned with a
 > working login without a password field ever being collected from the owner creating
 > them.
@@ -238,7 +238,7 @@ reverts to owner-occupied) and maps directly onto how Task 3.2's endpoints will 
 
 > **Addition (2026-08-06)**: this exact mechanism is also what the planned
 > resident-facing (owner self-service) tenant management reuses — see `CLAUDE.md`'s
-> "Addition (2026-08-06)" and `docs/flats.md`'s "Not yet built" section. The one
+> "Addition (2026-08-06)" and `docs/features/flats-and-residents.md`'s "Not yet built" section. The one
 > behavioral difference: the resident-facing version updates the existing tenant's
 > `User` row in place when the flat already has one (matching a single-form "Save"
 > UX), rather than rejecting re-assignment the way Task 3.2's admin endpoint does.
@@ -297,7 +297,7 @@ Task 4.1 builds the real month-level rate calculation on top of it.
 > `computeRecordSettlements` computes it fresh on every read — FIFO-filling a flat's
 > `approvedDeposits` total across its records oldest-first. No schema change at all;
 > this model is unchanged from the pivot above. Full mechanism:
-> `docs/payments.md`'s "Settlement status" section, `CLAUDE.md`'s 2026-08-07 addendum.
+> `docs/features/payments.md`'s "Settlement status" section, `CLAUDE.md`'s 2026-08-07 addendum.
 
 ```prisma
 enum PayerType {
@@ -468,7 +468,7 @@ into `availableCredit` — no special-case code needed.
 **`fileUrl`/`mimeType` are optional at the schema level** — unlike the pre-pivot
 `PaymentProof.fileUrl` (required), a proof screenshot is no longer mandatory to
 submit a Deposit (a real reversal of the old rule 7, see `CLAUDE.md`). Same
-opaque-storage-key contract as before (`StorageAdapter`, `docs/payments.md`) — served
+opaque-storage-key contract as before (`StorageAdapter`, `docs/features/payments.md`) — served
 only through the authenticated `GET /api/ledger-entries/:id/file`.
 
 **`note` vs `adminNote`** — for a Deposit, `note` is a short fixed string set by the
@@ -527,7 +527,7 @@ No counter table, no race condition to guard against.
 
 Full contract, endpoints, and the two implementation judgment calls (whether the
 manual cash/bank-transfer fallback also issues a receipt, and what happens for a
-legacy entry approved before this model existed): `docs/receipts.md`.
+legacy entry approved before this model existed): `docs/features/receipts.md`.
 
 ### NotificationLog and AuditLog — the polymorphic-lite pattern
 

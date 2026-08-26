@@ -23,7 +23,7 @@ export class InvalidTenantError extends Error {
 
 // Assigning a tenant to a flat that already has one is rejected rather than silently
 // swapped — closing the existing OccupancyChange row is a real state change the caller
-// didn't explicitly ask for. removeTenant must be called first (see docs/flats.md).
+// didn't explicitly ask for. removeTenant must be called first (see docs/features/flats-and-residents.md).
 export class TenantAlreadyAssignedError extends Error {
   constructor() {
     super('Flat already has a current tenant — remove them before assigning a new one');

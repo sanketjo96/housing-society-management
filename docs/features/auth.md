@@ -374,7 +374,7 @@ Built per `CLAUDE.md`'s "Addition (2026-08-06)". Handlers live in
 `src/controllers/me.controller.ts`, routed from `src/routes/me.route.ts`; the
 profile-update logic is `src/services/me.service.ts`'s `updateOwnProfile()`, while the
 flat/tenant logic reuses `src/services/flats.service.ts` (`getMyFlat()`,
-`upsertOwnTenant()`, `removeOwnTenant()` — see `docs/flats.md` for those).
+`upsertOwnTenant()`, `removeOwnTenant()` — see `docs/features/flats-and-residents.md` for those).
 
 ### `PATCH /api/me` — own profile update, any role
 
@@ -395,11 +395,11 @@ no associated flat yet (e.g. a `TENANT` before any owner has assigned them).
 
 ### `PUT`/`DELETE /api/me/flat/tenant` — `OWNER` only
 
-The resident-facing equivalent of `docs/flats.md`'s admin `PATCH /api/admin/flats/:id`
+The resident-facing equivalent of `docs/features/flats-and-residents.md`'s admin `PATCH /api/admin/flats/:id`
 `occupancy` field, scoped to `req.user.id === flat.ownerId` instead of `requireRole
 (['ADMIN'])`. `PUT` upserts: updates the existing tenant's contact info in place if the
 flat already has one (**not** the id-based admin `assignTenant`'s reject-on-existing
-behavior — see `docs/flats.md`), or creates a new `TENANT` account if none exists yet.
+behavior — see `docs/features/flats-and-residents.md`), or creates a new `TENANT` account if none exists yet.
 `DELETE` closes the open `OccupancyChange` and clears `currentTenantId`, returning
 `409` (`NoCurrentTenantError`) if the flat is already owner-occupied.
 
@@ -411,4 +411,4 @@ the link, in `console` mode). The tenant follows that link to set their own real
 password and logs in normally — reuses this task's existing token/email mechanics
 rather than building a separate invite-token system. The identical
 `findOrCreateUserByEmail()` pattern was later reused by Task 3.1/3.2's redesigned
-admin flat-onboarding endpoints too (`docs/flats.md`).
+admin flat-onboarding endpoints too (`docs/features/flats-and-residents.md`).

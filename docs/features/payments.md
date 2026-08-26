@@ -35,7 +35,7 @@
 
 Reference for the ledger flow: balance computation, UPI QR generation for a
 resident-chosen amount, optional proof upload, admin review, and the manual
-mark-as-paid fallback. Same route/prefix convention as `docs/auth.md` — every path
+mark-as-paid fallback. Same route/prefix convention as `docs/features/auth.md` — every path
 below is mounted under `/api/`.
 
 ## Storage adapter — `src/lib/storage/`
@@ -98,7 +98,7 @@ society-configuration gap, not a resident input error — distinct from
 ## Balance formula — `src/features/ledger/ledger-shared.ts`'s `balancesFromRows`
 
 The one place this formula is computed — reused by both the resident's own Dashboard
-(below) and the admin dashboard (`docs/admin-dashboard.md`), so it's never duplicated.
+(below) and the admin dashboard (`docs/features/admin-dashboard.md`), so it's never duplicated.
 `LedgerEntry` only ever represents a Deposit (Credit removed for good, 2026-08-20
 pivot above) — `outstanding` and `availableCredit` are the two sides of the same
 subtraction, exactly one of them is ever nonzero:
@@ -124,7 +124,7 @@ caller's flat's `MaintenanceRecord`s (rendered as `type: 'SYSTEM'`, always
 status), sorted newest-first. Response: `{ entries: LedgerRow[], totals: FlatBalances,
 yearTotals: FlatBalances, availableYears: number[] }` — `totals` is always
 lifetime; `yearTotals` is scoped to an optional `?year=` query param (see
-`docs/admin-dashboard.md` and `CLAUDE.md`'s resident-view restructure note). As of
+`docs/features/admin-dashboard.md` and `CLAUDE.md`'s resident-view restructure note). As of
 2026-08-07, each SYSTEM row also carries `settledAmount: number` and
 `settlementStatus: 'UNPAID' | 'PARTIALLY_SETTLED' | 'PAID'` (see "Settlement status"
 below) — undefined on DEPOSIT rows, which have no settlement concept of their own.
@@ -135,7 +135,7 @@ below) — undefined on DEPOSIT rows, which have no settlement concept of their 
 the single aggregate number that drives the Pay flow — a resident may lock/submit any
 positive amount, no longer capped at Outstanding (2026-08-20 pivot). What's new here
 is a *display* concern: which specific months are paid, partially paid, or untouched,
-surfaced on Maintenance Book and used by escalation (`docs/admin-dashboard.md`).
+surfaced on Maintenance Book and used by escalation (`docs/features/admin-dashboard.md`).
 
 `ledger-shared.ts`'s `computeRecordSettlements(records, totalApprovedFunds)` is a pure
 function — no DB access, no stored state:
@@ -174,7 +174,7 @@ year the resident happens to be browsing.
 Lower-level, one-shot primitive — kept unremoved even though the resident-facing Pay
 UI now goes through the payment-intent endpoints (`POST`/`GET`/`DELETE
 /api/me/ledger/deposits/intent`, `POST .../intent/submit` — see
-`docs/maintenance-records.md`/`CLAUDE.md`'s resident-view restructure note for the
+`docs/features/maintenance-records.md`/`CLAUDE.md`'s resident-view restructure note for the
 full intent-lock flow). `multipart/form-data`: an `amount` field, plus an **optional**
 `file` field (image/PDF, same server-side validation —
 `src/middleware/proof-upload.ts`). Proof is not mandatory here. Re-validated
@@ -212,7 +212,7 @@ simply reflects the newly-approved amount on the next read.
 endpoint directly from an "Approve" click — it first fetches a PDF preview from
 `GET /api/admin/ledger-entries/:id/receipt-preview` and shows it in a confirmation
 modal; only "Confirm and approve" actually calls this endpoint, which is also the
-point a `Receipt` row is created and its PDF saved. See `docs/receipts.md` for the
+point a `Receipt` row is created and its PDF saved. See `docs/features/receipts.md` for the
 full contract; nothing about this endpoint's request/response shape changed, only
 what happens inside it.
 
@@ -235,7 +235,7 @@ matching the recipient logic used elsewhere (escalation messages, etc.). **Logge
 `MANUAL_MARK_PAID`**, same distinct audit action name as the pre-pivot flow (rule 7's
 explicit requirement that this stay distinguishable from QR-flow approvals), one
 `AuditLog` row. Also issues a receipt, same as the Approve endpoint (2026-08-11
-addendum, `docs/receipts.md`) — a cash/bank payment gets one just as a UPI deposit
+addendum, `docs/features/receipts.md`) — a cash/bank payment gets one just as a UPI deposit
 does, with no preview step (there's no `PENDING` state here to preview against
 before committing).
 
@@ -246,7 +246,7 @@ flow off `ResidentDashboardOverview.tsx` (now a pure 4-card navigation hub) onto
 page some time before this doc was updated to match. Two summary cards —
 **Total maintenance amount** and **Maintenance Outstanding** — above the Bills tab's
 "You owe ₹X" row (or "Nothing outstanding right now"), an **amount field + Pay
-button** (see `docs/maintenance-records.md`'s intent-lock flow).
+button** (see `docs/features/maintenance-records.md`'s intent-lock flow).
 Below (Payments tab): the Deposit ledger as a `DataTable`
 (`client/src/components/DataTable.tsx`) — Date / Amount / Status, with
 `ApprovalBadge` (Approved/Pending/Rejected) pills. No Type column — every row is a
@@ -302,7 +302,7 @@ row, since an entry is never linked to multiple records.
 **2026-08-11 addendum**: the page gained a Pending/Approved/Rejected status tab
 (querying the same endpoint with a different `?status=`), Approve now opens a
 receipt-preview modal instead of settling directly, and Approved rows show a
-"Download receipt" action. Full detail: `docs/receipts.md`.
+"Download receipt" action. Full detail: `docs/features/receipts.md`.
 
 ## Manually verified against the real running stack
 

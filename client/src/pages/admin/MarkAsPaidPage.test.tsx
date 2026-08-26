@@ -105,7 +105,7 @@ describe('MarkAsPaidPage', () => {
     // manualDeposit also issues a real Receipt — Receipt Book's cached list must
     // be invalidated too, or a 30s-fresh cache would silently miss it.
     await waitFor(() => expect(queryClient.getQueryState(['admin-receipts'])?.isInvalidated).toBe(true));
-    // Affects one of the two pools (docs/other-charges/) — the admin dashboard's
+    // Affects one of the two pools (docs/features/other-charges/) — the admin dashboard's
     // cards and (if applicable) the Other Charges list must refresh too.
     expect(queryClient.getQueryState(['admin-dashboard-summary'])?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(['admin-other-charges'])?.isInvalidated).toBe(true);

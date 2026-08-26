@@ -1,7 +1,7 @@
 # Maintenance records — Phase 4
 
 Reference for monthly generation, rate calculation, and the record endpoints. Same
-route/prefix convention as `docs/auth.md`: every path below is mounted under `/api/`.
+route/prefix convention as `docs/features/auth.md`: every path below is mounted under `/api/`.
 
 ## Rate calculation — `src/lib/rate-calculation.ts`
 
@@ -97,7 +97,7 @@ cron's own run would have been.
 > **Pivot note (2026-08-06)**: Task 4.5's `GET /api/me/maintenance-records` (below, for
 > history) is **replaced** by `GET /api/me/ledger`, which merges these same records
 > (rendered as SYSTEM rows, `status: 'APPROVED'` always) with the flat's `LedgerEntry`
-> rows and returns the three running balances — see `docs/payments.md` and
+> rows and returns the three running balances — see `docs/features/payments.md` and
 > `CLAUDE.md`'s ledger pivot note. `getMaintenanceRecordsForPayer` (the underlying
 > query, `payerId === req.user.id`, newest period first) still exists as an internal
 > building block `ledger.service.ts` calls; it's no longer exposed as its own
@@ -105,7 +105,7 @@ cron's own run would have been.
 >
 > **Addendum (2026-08-07)**: each SYSTEM row also carries a derived
 > `settlementStatus` (`UNPAID`/`PARTIALLY_SETTLED`/`PAID`) and `settledAmount` — see
-> `docs/payments.md`'s "Settlement status" section. `status: 'APPROVED'` (the
+> `docs/features/payments.md`'s "Settlement status" section. `status: 'APPROVED'` (the
 > LedgerEntry-review vocabulary) is unrelated and unchanged; `settlementStatus` is the
 > new field to read for per-month payment state.
 
@@ -170,8 +170,8 @@ once again shows an Available Credit card and an Add-credit button, and its ledg
 table's Type column is back too. `MaintenanceBookPage.tsx`'s "Status" column, briefly a
 static "Approved" badge once `MaintenanceRecord.status` was dropped, is a real
 per-record Unpaid/Partially settled/Paid badge again as of 2026-08-07 — derived, not
-stored, from `approvedDeposits + approvedCredits`; see `docs/payments.md`'s
-"Settlement status" section. See `docs/payments.md` for the current pages.
+stored, from `approvedDeposits + approvedCredits`; see `docs/features/payments.md`'s
+"Settlement status" section. See `docs/features/payments.md` for the current pages.
 
 ## Manually verified against the real running stack
 

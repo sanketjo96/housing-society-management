@@ -6,7 +6,7 @@ import type { EmailProvider, SendEmailInput } from './types';
 // `npm run dev` never need a real RESEND_API_KEY. tests/setup.ts relies on this
 // being the default — it never sets EMAIL_PROVIDER.
 //
-// Deliberately exempt from the observability console.* sweep (docs/observablity/):
+// Deliberately exempt from the observability console.* sweep (docs/features/observability/):
 // this console.log IS the provider's send implementation, not diagnostic logging —
 // routing real email subject/body through the structured logger would mix an ops-log
 // stream with user content for no benefit.

@@ -1,4 +1,4 @@
-// SocietyLedgerEntry — "Manage Finance" (docs/manage-finance/). A complete,
+// SocietyLedgerEntry — "Manage Finance" (docs/features/manage-finance/). A complete,
 // already-true transaction record the moment it's created (same shape as
 // OtherCharge/manualDeposit), NOT LedgerEntry's Deposit/Credit PENDING-then-
 // reviewed shape. Single-admin entry, immutable once created — no approval
@@ -82,7 +82,7 @@ export interface RecordSocietyLedgerEntryInput {
 // Shared between recordSocietyLedgerEntry (below) and
 // society-ledger-bulk-import-service.ts's bulkImportSocietyLedgerEntries — the two
 // checks that don't depend on how the category was looked up (by id vs. by name) or
-// whether a file is involved. Extracted (2026-08-21, docs/society-onboarding/ Phase
+// whether a file is involved. Extracted (2026-08-21, docs/features/society-onboarding/ Phase
 // E) rather than duplicated, so the bulk path can never silently drift from the
 // single-row path's validation rules.
 export function assertValidSocietyLedgerEntry<T extends { direction: SocietyLedgerDirection }>(

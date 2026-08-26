@@ -98,7 +98,7 @@ response body, since no frontend consumed it yet. Building this page against the
 task's explicit "httpOnly cookie preferred" meant reworking those already-tested
 endpoints: `login` now sets the refresh token via `res.cookie(...)` and no longer
 includes it in the body at all; `refresh`/`logout` now read it from
-`req.cookies.refreshToken` instead of the request body. See `docs/auth.md` for the
+`req.cookies.refreshToken` instead of the request body. See `docs/features/auth.md` for the
 full detail — the service layer (`login()`, `refreshAccessToken()`, `logout()`)
 didn't need to change at all, only the controller's plumbing did, which is exactly
 the payoff the route/controller/service split was supposed to provide.

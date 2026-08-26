@@ -3,7 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { SummaryCard } from '../components/LedgerEntryDisplay';
 import { authedFetch } from '../lib/api';
 
-// docs/other-charges/ — powers all 4 Dashboard cards in one cheap call, independent
+// docs/features/other-charges/ — powers all 4 Dashboard cards in one cheap call, independent
 // of (and never merged into) any per-pool ledger fetch.
 interface BalancesSummary {
   maintenance: { outstanding: number; availableCredit: number };
@@ -20,7 +20,7 @@ async function fetchMyBalances(): Promise<BalancesSummary> {
 // Resident Dashboard restructure: this page is now a pure navigation hub of exactly
 // 4 summary cards, one per balance pool — no Pay control, no transaction table here
 // anymore. That content moved to each pool's own book page: Maintenance Outstanding
-// -> /maintenance-book, Other Outstanding -> /other-charges-book (docs/other-charges/
+// -> /maintenance-book, Other Outstanding -> /other-charges-book (docs/features/other-charges/
 // established this drill-down pattern first). Total Outstanding has nowhere to drill
 // into — it's the sum of the other two Outstanding figures, not its own pool.
 // Available Maintenance Credit also points at /maintenance-book (2026-08-20 pivot) —

@@ -18,7 +18,7 @@ function renderPage() {
 
 // One MAINTENANCE receipt (a Deposit) and one OTHER_CHARGE receipt (a Deposit
 // against the Other Charges pool) — the Category column must distinguish them
-// (docs/other-charges/): Receipt Book covers both pools, its backend query
+// (docs/features/other-charges/): Receipt Book covers both pools, its backend query
 // (listReceipts) has no category filter.
 const receipts = [
   {

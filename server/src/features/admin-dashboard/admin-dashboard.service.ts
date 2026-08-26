@@ -17,10 +17,10 @@ export interface DashboardSummary {
   outstandingTotal: number;
   pendingReviewTotal: number;
   collectionRatePercent: number;
-  // docs/other-charges/ — a fully separate pool from the maintenance figures above.
+  // docs/features/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
-  // docs/manage-finance/ — the society's own income/expenditure (SocietyLedgerEntry),
+  // docs/features/manage-finance/ — the society's own income/expenditure (SocietyLedgerEntry),
   // entirely unrelated to the resident-billing figures above (no shared rows, no
   // shared math). "Recorded since tracking began" — NOT a live bank balance; there
   // is no admin-configurable opening balance to anchor it to one (future scope).
@@ -34,7 +34,7 @@ export interface DashboardSummary {
 // balancesFromRows — the exact same formula the resident's own Passbook uses, never
 // duplicated here.
 //
-// `category` (docs/other-charges/) — default MAINTENANCE, backward compatible with
+// `category` (docs/features/other-charges/) — default MAINTENANCE, backward compatible with
 // every existing call site. When OTHER_CHARGE, queries OtherCharge instead of
 // MaintenanceRecord and filters LedgerEntry to matching-category rows — the same
 // parameterization pattern as ledger-shared.ts's computeFlatBalances, one function
@@ -100,7 +100,7 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
   }
   const collectionRatePercent = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
 
-  // Fully separate pool (docs/other-charges/) — summed per-flat, same Math.max(0,...)-
+  // Fully separate pool (docs/features/other-charges/) — summed per-flat, same Math.max(0,...)-
   // per-flat convention as outstandingTotal above, never netted against a flat that's
   // overpaid on the other pool. totalOutstandingTotal is a plain sum of two already-
   // floored figures.
@@ -145,7 +145,7 @@ export interface FlatDues {
 //
 // Maintenance only — the admin Dashboard's "Other Charges Outstanding Total" tile
 // drills into a per-charge list instead (GET /api/admin/other-charges, already
-// carries settlement status and fee type; docs/other-charges/), not a flat-wise
+// carries settlement status and fee type; docs/features/other-charges/), not a flat-wise
 // aggregate, since a fee-type breakdown only makes sense per charge.
 export async function getFlatWiseDues(societyId: string): Promise<FlatDues[]> {
   const byFlat = await getBalancesByFlat(societyId);
@@ -173,7 +173,7 @@ export interface ResidentLedgerRow {
 }
 
 // "Manage Resident Ledger" — a comprehensive per-flat overview combining both pools
-// (Maintenance + Other Charges, docs/other-charges/) in one row, reached via its own
+// (Maintenance + Other Charges, docs/features/other-charges/) in one row, reached via its own
 // sidebar nav item rather than a dashboard drill-down like /flat-dues or
 // /other-charges-dues (both of which are filtered to only what's currently owed).
 // Lists every flat, not just ones with a balance — a "manage" page is meant for

@@ -5,7 +5,7 @@ specified below. See [`02-architecture.md`](./02-architecture.md)'s
 implementation-status note for the one placement change from the original
 sketch (every importer lives under one "Imports" nav submenu, including
 Phase E, not inline on `ManageFinancePage.tsx`), and
-[`../feature-track/status.md`](../feature-track/status.md) for the
+[`../_index.md`](../_index.md) for the
 cross-feature index entry.
 
 ## Context
@@ -30,7 +30,7 @@ cross-feature index entry.
 ## Problem Statement
 Three separate gaps block onboarding a second society today:
 1. **No way to create a `Society` + its first `ADMIN` user** other than a
-   direct DB/seed-script action. `docs/auth.md`'s "Bootstrapping note"
+   direct DB/seed-script action. `docs/features/auth.md`'s "Bootstrapping note"
    explicitly flags this as deliberately deferred, never built.
 2. **No way to bulk-load historical financial data** — arrears, one-time
    charges, and past society expenses — once a society and its flats exist.
@@ -38,7 +38,7 @@ Three separate gaps block onboarding a second society today:
    the flat/owner/tenant roster, not money.
 3. **No documented process** for taking a client from "here's an Excel file"
    to "residents can log in and pay" — this genuinely doesn't exist anywhere
-   in `docs/` yet (confirmed: `docs/flats.md` is titled "flat & society
+   in `docs/` yet (confirmed: `docs/features/flats-and-residents.md` is titled "flat & society
    onboarding" but only ever covers *flat* onboarding).
 
 ## Confirmed Product Decisions
@@ -92,7 +92,7 @@ should not be re-litigated without a new conversation:
 - **Never trust a client-supplied `societyId`** for any endpoint that could
   reach into an *existing* society — the exact discipline already enforced
   everywhere else in this codebase since the Phase 9 security audit
-  (`docs/security-audit.md` finding 9.1) must extend to every new endpoint
+  (`docs/features/security-audit.md` finding 9.1) must extend to every new endpoint
   this feature adds.
 - **Backward compatibility**: zero change to any existing single-flat or
   single-entry code path (`createFlat`, `billOtherCharge`,

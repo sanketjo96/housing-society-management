@@ -9,7 +9,7 @@ export {};
  *     tags: [Platform Bootstrap]
  *     summary: Create a brand-new Society + its first ADMIN user
  *     description: >
- *       Phase A of docs/society-onboarding/ — a concierge-onboarding action run by a
+ *       Phase A of docs/features/society-onboarding/ — a concierge-onboarding action run by a
  *       platform operator (curl/Postman/a short internal script), not an
  *       admin-facing feature. Gated by a shared secret
  *       (X-Platform-Bootstrap-Secret header) instead of a JWT, since no admin

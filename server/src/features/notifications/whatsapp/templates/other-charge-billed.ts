@@ -2,7 +2,7 @@ import type { OtherChargeBilledEvent } from '../../notification.types';
 import type { WhatsAppTemplate } from '../whatsapp.types';
 import { formatInr, formatDateForTemplate } from '../../templates/format';
 
-// Meta-approved template name (docs/other-charges/04-roadmap.md — submit as soon as
+// Meta-approved template name (docs/features/other-charges/04-roadmap.md — submit as soon as
 // this code ships, not at the end of the whole feature; approval lead time runs in
 // parallel). The Cloud API rejects an unapproved/unknown template name as a
 // permanent error (see whatsapp.client.ts).

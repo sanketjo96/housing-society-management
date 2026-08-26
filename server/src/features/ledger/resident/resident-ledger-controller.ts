@@ -60,7 +60,7 @@ export async function getMyLedgerHandler(req: Request, res: Response) {
   res.status(200).json(ledger);
 }
 
-// docs/other-charges/ — powers the Dashboard's 4 summary cards in one call.
+// docs/features/other-charges/ — powers the Dashboard's 4 summary cards in one call.
 export async function getMyBalancesHandler(req: Request, res: Response) {
   if (!req.user) {
     res.status(401).json({ error: 'Unauthenticated' });

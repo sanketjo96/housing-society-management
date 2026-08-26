@@ -36,17 +36,17 @@ the source of truth for build progress since it lives in git.
 ## Phase 3 — Flat & Society Onboarding
 
 - [x] 3.1 Create/edit flat endpoints (redesigned 2026-08-06 — owner/tenant are
-      find-or-create contact fields, not pre-existing ids; see `docs/flats.md`'s
+      find-or-create contact fields, not pre-existing ids; see `docs/features/flats-and-residents.md`'s
       "Redesign" section, confirmed against the admin-view UI mockup)
 - [x] 3.2 Assign/remove tenant endpoint (id-based, still admin-only; kept alongside
-      3.1's redesign as a lower-level alternative — `docs/flats.md`)
+      3.1's redesign as a lower-level alternative — `docs/features/flats-and-residents.md`)
 - [x] 3.3 List flats endpoint
 - [x] 3.4 CSV bulk import for flats (redesigned alongside 3.1 — same inline
       owner/tenant contact fields as the form, not a pre-existing-owner lookup)
 - [x] 3.5 Frontend onboard-flat form
 - [x] 3.6 Frontend flat list and tenant assignment UI (3.5+3.6 merged into one page,
       `FlatsListPage.tsx`, matching the admin mockup's list ↔ inline-form pattern —
-      `docs/flats.md`)
+      `docs/features/flats-and-residents.md`)
 
 > **3.7/3.8 added 2026-08-06, not in the original `task-prompts-v1` breakdown** — see
 > `CLAUDE.md`'s "Addition (2026-08-06)". Confirmed against a shared resident-view UI
@@ -56,7 +56,7 @@ the source of truth for build progress since it lives in git.
 > corrections).
 
 - [x] 3.7 Resident self-service endpoints — `PATCH /api/me` (own profile, any role) +
-      `GET/PUT/DELETE /api/me/flat(/tenant)` (`OWNER`/`TENANT`, `docs/auth.md`). **2026-08-06
+      `GET/PUT/DELETE /api/me/flat(/tenant)` (`OWNER`/`TENANT`, `docs/features/auth.md`). **2026-08-06
       ledger pivot**: added `PUT /api/me/flat` (OWNER, one combined owner+occupancy+tenant
       save, reusing `updateFlat`) as the primary path; `PUT`/`DELETE /api/me/flat/tenant`
       kept as a lower-level alternative, unremoved.
@@ -90,14 +90,14 @@ outside the original tracker numbering:
 - **Arrears billing**: generation's default period switched from the current
   (in-progress) month to the previous (just-completed) one — a real correctness fix,
   not a style change. See `CLAUDE.md`'s "Addendum (2026-08-06): monthly generation
-  switched to arrears billing" and `docs/maintenance-records.md`.
+  switched to arrears billing" and `docs/features/maintenance-records.md`.
 - **Admin Settings tab**: `GET`/`PATCH /api/admin/settings` (`tenantRateFactor`,
   `defaultBaseRate`) plus `client/src/pages/admin/SettingsPage.tsx` — previously
-  `tenantRateFactor` had no admin UI at all. See `docs/maintenance-records.md`'s
+  `tenantRateFactor` had no admin UI at all. See `docs/features/maintenance-records.md`'s
   "Admin settings" section and `docs/data-model.md`'s `Society.defaultBaseRate` note.
 - **Seed backfill**: `prisma/seed.ts` now generates `2026-01`–last-month
   `MaintenanceRecord`s for the seeded society on every run, so the demo shows real data
-  for all three roles instead of an empty state. See `docs/maintenance-records.md`'s
+  for all three roles instead of an empty state. See `docs/features/maintenance-records.md`'s
   "Seed backfill" section.
 
 ## Phase 5 — [DISSOLVED] Quarterly invoicing
@@ -122,12 +122,12 @@ summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 > `/api/me/maintenance-records/qr` → `/api/me/ledger/deposits/qr`,
 > `/api/me/payment-proofs` → `/api/me/ledger/deposits` (proof now optional) +
 > `/api/me/ledger/credits` (new; **later removed entirely, 2026-08-07** — Credit was
-> dropped from the product, see `docs/payments.md`), `/api/admin/payment-proofs*` →
+> dropped from the product, see `docs/features/payments.md`), `/api/admin/payment-proofs*` →
 > `/api/admin/ledger-entries*`, `MaintenancePage.tsx` → `PassbookPage.tsx` (later
 > split into `ResidentDashboardOverview.tsx`/`MaintenanceBookPage.tsx`). The tasks
 > below are kept checked (the underlying capability — QR pay, proof review, manual
 > mark-paid — still exists) with their original endpoint names for history; see
-> `docs/payments.md` for the current contract.
+> `docs/features/payments.md` for the current contract.
 
 - [x] 6.1 UPI QR generation endpoint (`POST /api/me/maintenance-records/qr` — accepts
       selected maintenanceRecordIds, not one invoiceId; stateless, no DB write)
@@ -148,12 +148,12 @@ summary → 4.6) and Phase 8 (dues overview UI → already covered by 8.1/8.2).
 
 **Storage adapter, built alongside 6.2/6.3, not its own numbered task**: proof files
 needed somewhere to live, kept explicitly swappable (`local`/`s3`/`gdrive`) rather than
-hardcoded to disk — see `docs/payments.md` and `server/src/lib/storage/`. Only `local`
+hardcoded to disk — see `docs/features/payments.md` and `server/src/lib/storage/`. Only `local`
 is actually implemented; `s3`/`gdrive` are named extension points.
 
 **Not yet wired**: reject/approve don't send an actual notification yet (rule 7 says
 the resident should be notified) — that's `EmailProvider`, explicitly Phase 7's scope,
-not built here. `docs/payments.md` has the full detail.
+not built here. `docs/features/payments.md` has the full detail.
 
 ## Phase 7 — Notifications (email only)
 
@@ -164,7 +164,7 @@ not built here. `docs/payments.md` has the full detail.
       `requestPasswordReset()` already goes through — Task 2.4's reset flow, the
       2026-08-06 resident self-service tenant flow, and the same-day admin
       flat-onboarding flow all now send real email automatically, no changes needed at
-      those call sites. `docs/auth.md`'s "Email (Phase 7, now built)" section has the
+      those call sites. `docs/features/auth.md`'s "Email (Phase 7, now built)" section has the
       full contract. 7.2–7.6 below (the other notification triggers) are still
       unbuilt — this only covers the send mechanism + its one existing consumer.
 - [ ] 7.2 Maintenance-record-generated notification (was: invoice-generated)
@@ -176,7 +176,7 @@ not built here. `docs/payments.md` has the full detail.
 ## Phase 8 — Admin Dashboard
 
 > **Pivot note (2026-08-06)**: internals rewritten against the ledger model — see the
-> Phase 6 pivot note above and `docs/admin-dashboard.md`. `outstandingTotal` (8.1/8.2)
+> Phase 6 pivot note above and `docs/features/admin-dashboard.md`. `outstandingTotal` (8.1/8.2)
 > is now each flat's Outstanding, not a UNPAID/PENDING_REVIEW sum;
 > the pending-proofs widget (8.3) now queries `/api/admin/ledger-entries`; 8.4's
 > "unpaid records" now means "SYSTEM charges past due," since there's no per-charge
@@ -197,7 +197,7 @@ not built here. `docs/payments.md` has the full detail.
       period via `?gracePeriodDays=`, default 7; message is prepared for the admin to
       manually copy/share, never auto-sent, per rule 8)
 
-Full contract, design decisions, and manual verification: `docs/admin-dashboard.md`.
+Full contract, design decisions, and manual verification: `docs/features/admin-dashboard.md`.
 
 > **Receipt Generation & Approval Workflow added 2026-08-11, not in the original
 > `task-prompts-v1` breakdown** — see `CLAUDE.md`'s "Addition (2026-08-11)". Layered
@@ -221,7 +221,7 @@ Full contract, design decisions, and manual verification: `docs/admin-dashboard.
       `ResidentDashboardOverview.tsx`'s Passbook receipt download
 
 Full contract, the two implementation judgment calls, and manual verification:
-`docs/receipts.md`.
+`docs/features/receipts.md`.
 
 ## Phase 9 — Security & Hardening Audit
 
@@ -279,7 +279,7 @@ Full contract, the two implementation judgment calls, and manual verification:
       type is what's persisted from here on. Also added a global
       `X-Content-Type-Options: nosniff` header (`app.ts`) as defense-in-depth.
 
-Full findings, fixes, and reasoning: `docs/security-audit.md`.
+Full findings, fixes, and reasoning: `docs/features/security-audit.md`.
 
 ## Phase 10 — Production Deployment
 

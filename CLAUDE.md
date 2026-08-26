@@ -1,1182 +1,199 @@
-# CLAUDE.md — Housing Society Management (MVP)
+# CLAUDE.md — Housing Society Management
 
-Persistent project rules. Read in full before starting any task. Source of truth for
-business rules is `docs/requirements.md` (mirrors the original requirements doc), as
-amended by the pivot below — this file exists to keep the rules and confirmed decisions
-in context during implementation. The phase/task breakdown lives in the task tracker
-**`task-prompts-v1`** (supersedes the original `task-prompts` — the original quarterly
-invoicing design is preserved there for history but is no longer current) — 11 phases
-(0–10), authoritative for what to build next and in what order. Phase 5 (originally
-"quarterly invoicing") is dissolved; its tasks are marked `REMOVED` in the tracker, with
-their remaining useful concerns folded into Phase 4 and Phase 8.
-
-### Pivot (2026-08-05): quarterly `Invoice` bundling dropped
-
-Original design: `MaintenanceRecord`s were monthly/accrual-only, bundled 3-at-a-time
-into a quarterly `Invoice`, which was the only payable entity. **This has been
-replaced**: `MaintenanceRecord` is now independently payable immediately after
-generation — no bundling, no quarter to wait for. A resident sees their live
-outstanding balance (however many unpaid months exist) and may select any combination
-of unpaid records to settle in a single payment. Every record stays a clean
-paid/unpaid binary; "partial payment" means *selecting a subset of records*, never
-splitting one record's amount. The business rules below reflect the current (post-pivot)
-design; see `docs/data-model.md`'s pivot note and `task-prompts-v1` for full reasoning.
-
-### Addition (2026-08-06): resident self-service — own profile + tenant management
-
-Confirmed against a shared resident-view UI mockup (`ResidentExperience`'s "My
-details" tab): an authenticated resident (`OWNER` or `TENANT`) may update their own
-`name`/`phone`/`email` directly — no admin action required. Beyond that, an `OWNER`
-may also create, update, or remove the `TENANT` currently associated with their own
-flat, from their own resident view.
-
-**This is additive, not a replacement.** The admin-only endpoints from Task 3.2
-(`POST`/`DELETE /api/admin/flats/:id/tenant`) stay exactly as built — for an admin
-correcting a resident's mistake or acting on their behalf. The new resident-facing
-endpoints are a second, narrower path for the common case (an owner instating their
-own tenant), scoped to `req.user.id === flat.ownerId`, not a general admin capability.
-
-**What stays admin-only, unchanged**: `wing`, `flatNumber`, and `baseRate` are set at
-flat onboarding (Task 3.1) and remain **read-only from the resident side** — a
-resident sees these fields but cannot edit them from their own view (matches the
-mockup: those inputs are rendered `disabled`, with "Set by your society admin and
-can't be changed here"). Flat onboarding itself (creating a new `Flat` row at all)
-also stays admin-only.
-
-**Interaction model differs deliberately from the admin endpoints**: Task 3.2's
-`assignTenant` rejects re-assignment if the flat already has a tenant
-(`TenantAlreadyAssignedError`) — an admin must call `removeTenant` first. The
-resident-facing equivalent instead **updates the existing tenant's details in place**
-when one is already assigned, matching the mockup's single "Save changes" button over
-one form (occupancy toggle + tenant fields together) rather than a two-step
-remove-then-assign flow. Removing a tenant entirely (toggling back to owner-occupied)
-still closes the open `OccupancyChange` row, same underlying mechanism as Task 3.2.
-
-**How a self-service-created tenant gets a working login**: when an owner "creates" a
-tenant (name/phone/email in the mockup — no password field), the backend creates a
-real `TENANT` `User` immediately, given a random, unusable password, then triggers the
-same password-reset mechanism Task 2.4 already built (`requestPasswordReset()`,
-currently stubbed to log the reset link rather than email it — Phase 7 replaces the
-stub with a real send). The tenant sets their own password via that link and logs in
-normally afterward. No new account-provisioning subsystem — this reuses two
-already-built pieces (user creation, password reset) instead of inventing an invite
-flow. **Not public self-signup** (still out of scope, unchanged): the account is
-created by an authenticated resident, for a specific person tied to their own flat,
-never open to the public.
-
-**Not yet built** — this is a requirements/scope decision, not an implementation yet.
-Tracked as a Phase 3 addendum in `docs/task-status.md` (outside the original
-`task-prompts-v1` numbering, since this wasn't in the original tracker).
-
-### Addendum (2026-08-06, same day): Task 3.1/3.2 redesigned to match the admin mockup
-
-Confirmed against a second shared UI mockup (`AdminExperience`'s "Flats and
-residents" tab): the real admin flat-onboarding workflow is **one form** — wing,
-flat number, base rate, owner contact, occupancy, tenant contact — saved together,
-with no separate "create the owner's account first" step. Tasks 3.1/3.2 as originally
-built required a pre-existing `ownerId`/`tenantId`; this was confirmed as a genuine
-**breaking change** to that already-shipped contract (Task 3.1 had already been
-committed and pushed) rather than a new addition, and applied: `createFlat`/
-`updateFlat` now take owner/tenant **contact fields** and find-or-create the
-underlying accounts inline, reusing the exact same mechanism (`findOrCreateUserByEmail`
-— random unusable password + the existing password-reset stub) established just above
-for resident self-service. The id-based `assignTenant`/`removeTenant` (Task 3.2) were
-kept as a lower-level alternative, not removed, since they still have a legitimate use
-case (linking an already-known account without re-typing its details) and were already
-tested. Full mechanism and the exact request/response contracts: `docs/flats.md`.
+Persistent project rules and orientation. Read in full before starting work.
+For anything beyond this file's scope, see the Documentation map below —
+especially `docs/features/_index.md`, the entry point for every feature.
 
 ## Project overview
 
-Web app for a single residential housing society's committee: flat onboarding, monthly
-maintenance accrual (independently payable per month, see pivot note above), UPI-based
-payment collection with manual proof verification, and email notifications including
-overdue-dues escalation.
-
-- Initial scale: one society, ~24 flats. Schema must not require a rewrite to onboard a
-  second society later, but multi-society UX (society switching, cross-society admin) is
-  explicitly out of scope for this MVP.
-- Deployment target: self-hosted VPS (7.6GB RAM, 55GB disk), via Docker Compose.
-
-## Personas
-
-- **Admin** (committee member): onboards flats, reviews payment proofs, monitors dues.
-- **Owner**: owns a flat, may or may not live in it. Views own dues, pays via QR.
-  Manages their own contact details and their flat's current tenant (§ Addition
-  2026-08-06, above) — but not the flat's admin-set fields (wing, flat number, base
-  rate), which stay read-only from the resident side.
-- **Tenant**: rents from an owner. Same as owner, but billed at a higher rate while
-  occupying. May also update their own contact details.
-
-## Core business rules (authoritative — do not deviate without confirming)
-
-1. **Rate logic**: owner-occupied flat pays 1x base rate. Tenant-occupied flat pays 1.5x
-   (configurable factor), billed to the tenant, not the owner.
-2. **Occupancy is tracked historically** via `OccupancyChange`, not a single current flag
-   — a flat's occupancy can change mid-quarter and past billing periods must retain the
-   rate that actually applied at the time.
-3. **Maintenance records are monthly and always a SYSTEM charge.** One record per flat
-   per calendar month, storing the rate/amount/payer type for that month, generated
-   with a `dueDate` (still used for escalation). Under the ledger pivot (§ below), a
-   `MaintenanceRecord` is never individually marked paid **in the schema** — it
-   permanently contributes its `amount` to the flat's `totalCharges`; payment is
-   tracked separately, against the running balance, in `LedgerEntry`. A per-record
-   settlement status (Unpaid / Partially Settled / Paid) is nonetheless shown to
-   residents (Maintenance Book) and used by escalation — **derived fresh on every
-   read**, never stored, by FIFO-filling the flat's approved-deposit total across its
-   records oldest-first (§ "Addendum (2026-08-07): per-record settlement status"
-   below). This is a display/escalation concern layered on top of the aggregate
-   model, not a reversion to a stored per-record paid flag.
-4. **A resident's Outstanding is a single running balance, not a sum of unpaid
-   months.** `Outstanding` = `totalCharges` − approved Deposits (floored at 0); the
-   flip side of the same subtraction, `Available Credit` = approved Deposits −
-   `totalCharges` (also floored at 0), is nonzero exactly when funds exceed what's
-   currently billed — which now only happens by a resident paying more than they
-   currently owe (see rule 6). No separate "Payable" — Outstanding directly is the
-   amount due. (Credit — a separate resident-requested adjustment type — was removed
-   entirely on 2026-08-07, re-introduced the same day in a different shape, then
-   removed a third and final time on 2026-08-20 when Deposit's Outstanding cap was
-   lifted, making a separate Credit request redundant — see the "Pivot (2026-08-20)"
-   addendum, § below, for the full history.)
-5. **Cadence**: exactly 12 maintenance records per flat per year (one per month).
-6. **Payment is against the aggregate balance — explicit partial payment is allowed,
-   and so is overpayment.** A resident may pay any amount ≥ ₹1 in one Deposit — up to
-   the current Outstanding (partial payment), exactly matching it, or beyond it
-   (2026-08-20 pivot: the old cap at Outstanding was lifted). Paying less than the
-   full amount is expected and fine, not an error case; paying more settles
-   Outstanding in full and the remainder becomes `Available Credit` (rule 4) once
-   approved. This is a deliberate reversal of the original per-record "no partial
-   payment" rule (see § Ledger Pivot below) — there is no longer a concept of the
-   *resident* selecting specific records to pay. (The *system* does automatically
-   allocate an approved payment across records for display purposes — see rule 3 and
-   the 2026-08-07 settlement addendum — but this is invisible to the Pay flow itself:
-   the resident still only ever enters/confirms one amount.)
-7. **Payment method (this phase): UPI QR + manual proof verification, proof now
-   optional.** No payment gateway integration (that's Phase 2, out of scope here). Flow:
-   - Resident views Outstanding → an amount field (pre-filled with the full
-     Outstanding, editable to any amount ≥ ₹1 — rule 6, including above Outstanding
-     since the 2026-08-20 pivot) → taps Pay, which locks whichever amount was entered
-     as a payment intent (fixed/read-only from that point on — no editing an
-     already-locked intent) → sees a QR encoding a UPI deep link for that amount
-     (desktop) or gets deep-linked straight into a UPI app (mobile) — see § Ledger
-     Pivot below for the full intent-lock flow. (2026-08-07: the amount field was
-     originally missing from the frontend entirely — this gap was closed the same
-     day.)
-   - Resident pays via any UPI app, then attaches a screenshot to finalize the
-     intent into a Deposit — the screenshot **is** required at this step (unlike
-     the lower-level one-shot `POST /api/me/ledger/deposits` primitive, which still
-     accepts no file, kept unremoved for API-level flexibility).
-   - The Deposit is created at `status: PENDING`.
-   - Admin approves (→ `APPROVED`, now counts toward the balance) or rejects (→
-     `REJECTED`, resident notified with optional reason, may re-submit).
-   - Admin manual "mark as paid" fallback for cash/bank-transfer creates an
-     already-`APPROVED` Deposit directly, logged distinctly in the audit trail
-     (`MANUAL_MARK_PAID`, separate from QR-flow approvals).
-   - **No separate "Add credit" request anymore (removed for good 2026-08-20).** A
-     resident-requested Credit (amount + required reason + required proof, for a
-     committee-approved adjustment like a repair cost) existed at points in this
-     project's history but is gone — the Pay flow above is the only way to affect the
-     balance, and paying beyond Outstanding is what now produces `Available Credit`.
-     See the "Pivot (2026-08-20)" addendum, § below.
-8. **Escalation**: a flat with Outstanding > 0 whose oldest **not-yet-fully-settled**
-   maintenance charge is past due date + grace period → flagged (2026-08-07: keyed
-   off the oldest *unsettled* charge, not the oldest charge overall — a flat that
-   already paid off its oldest months but still owes newer ones must be judged
-   against the newer, still-open month's due date, not a stale already-paid one; see
-   the settlement addendum below). System computes the flat's outstanding total (its
-   full Outstanding, not just the overdue portion) and prepares a message; admin
-   manually shares it (no auto-post to WhatsApp — see out-of-scope list, compliance
-   risk).
-9. **Notifications are email-only this phase.** WhatsApp Business API is Phase 2.
-10. **Resident self-service** (added 2026-08-06): an `OWNER`/`TENANT` may update their
-    own `name`/`phone`/`email` without admin involvement. An `OWNER` additionally has a
-    single combined "My details" form — Flat details (locked), Owner details, Occupancy,
-    conditional Tenant details, one Save — that both edits their own identity and
-    manages their flat's current `TENANT` in one request (`PUT /api/me/flat`, § Ledger
-    Pivot below); a `TENANT` only edits their own profile. Does not extend to admin-set
-    flat fields (`wing`/`flatNumber`/`baseRate`) or to creating new `Flat` rows — see the
-    "Addition (2026-08-06)" section above for the original mechanism and reasoning.
-
-### Addendum (2026-08-06, same day): monthly generation switched to arrears billing
-
-Confirmed while reviewing the interaction between `calculateMonthlyRate`'s
-majority-of-days rule and the monthly generation cron's original timing. **Was**:
-generation defaulted to the *current* calendar month, run at 00:05 on the 1st (forward
-billing — bill for August on August 1st). **Now**: generation defaults to the
-*previous* calendar month (`previousPeriod()`), run at the same 00:05-on-the-1st cron
-time, but generating for the month that just ended.
-
-**Why this was a real bug, not a style preference**: the majority-of-days rule can only
-be evaluated correctly once every day of the target month has actually happened —
-generating on Aug 1st for August cannot know about a tenant assigned or removed on Aug
-10th, because that hasn't happened yet. Generation never re-runs for a period once
-records exist (idempotency is a hard requirement, above), so that August record would
-have been permanently wrong — locked in at whatever occupancy existed at 00:05 on Aug
-1st, regardless of what actually happened the rest of the month. Arrears billing
-(generate Sept 1st for August) guarantees the full month's `OccupancyChange` history
-already exists in the DB before the rate is calculated.
-
-**Practical effect on `dueDate`**: still generation time + 15 days (unchanged), but the
-meaning shifts — residents now pay for *last* month within 15 days of it ending,
-instead of paying for the *current* month while it's still in progress. `currentPeriod()`
-is kept as a named export (some future caller may legitimately want "the in-progress
-month," e.g. a preview), but `generateMaintenanceRecords`'s default, the manual-trigger
-endpoint's default, and the cron are all now `previousPeriod()`. Full reasoning and a
-worked example: `docs/maintenance-records.md`.
-
-### Addendum (2026-08-06, same day): admin Settings tab for billing-rule values
-
-`Society.tenantRateFactor` (rule 1's configurable multiplier) had a schema column and
-a default value since the Phase 1 review, but **no admin UI to ever change it** —
-confirmed as a real gap, not by design. Added `GET`/`PATCH /api/admin/settings`
-(admin-only) plus a new "Settings" tab on `/dashboard`, alongside "Flats and
-residents". Two fields: **tenant occupancy factor** (`tenantRateFactor`, feeds
-`calculateMonthlyRate` directly — a change takes effect on the very next generation
-run) and **default base rate** (`defaultBaseRate`, a new `Society` column that only
-pre-fills the base-rate field when onboarding a *new* flat in the admin UI).
-
-**Explicitly scoped to avoid a bigger, unrequested change**: `Flat.baseRate` stays
-per-flat, independently editable per flat exactly as it already was (confirmed via
-`AskUserQuestion` before implementing, given a per-flat-vs-society-wide base rate is a
-real fork with different schema implications) — `defaultBaseRate` never overrides an
-existing flat's rate, and calculations never read it. Only `tenantRateFactor` is
-actually consumed by billing logic. Full contract and worked reasoning:
-`docs/maintenance-records.md`'s "Admin settings" section, `docs/data-model.md`'s
-`Society.defaultBaseRate` note.
-
-### Pivot (2026-08-06): resident view moves to a transaction ledger (Passbook + My details)
-
-Confirmed against an updated resident-experience UI mockup (`resident-experience
-(4).jsx`, fetched via the Google Drive connector). This **replaces** the
-record-selection payment model rules 3/6/7 originally described (select specific
-`UNPAID` records → pay their exact sum → cascade to `PAID`) with a **balance-based
-ledger**, the same category of change as the 2026-08-05 Invoice pivot — a real reversal
-of a previously-confirmed rule (rule 6's "no partial payment"), not an additive tweak.
-
-**The model** (superseded in part by the 2026-08-07 Credit-removal pivot below —
-kept here as the historical record of the original ledger design): every
-resident-visible row was one of three types — **SYSTEM** (an auto-generated monthly
-charge, i.e. a `MaintenanceRecord` — always implicitly "Approved," never
-individually editable or payable on its own), **Deposit** (created when a resident
-pays via UPI, starts `PENDING`), or **Credit** (an advance deposit or expense
-reimbursement the resident logs, starts `PENDING`, covers both cases in one action —
-**Credit no longer exists, see the 2026-08-07 pivot**). Only `APPROVED` rows counted
-toward three running numbers:
-
-```
-totalCharges     = sum(MaintenanceRecord.amount) for the flat, every row
-approvedDeposits = sum(LedgerEntry.amount) where type=DEPOSIT, status=APPROVED
-approvedCredits  = sum(LedgerEntry.amount) where type=CREDIT,  status=APPROVED
-
-Outstanding    = max(0, totalCharges - approvedDeposits)
-Credit balance = approvedCredits
-Payable        = max(0, Outstanding - Credit balance)
-```
-
-**Current formula (2026-08-07 onward)**: `Outstanding = max(0, totalCharges -
-approvedDeposits)` — that's it, no Credit balance, no separate Payable. See the
-2026-08-07 pivot section below for the full reasoning.
-
-`PENDING`/`REJECTED` rows stay visible in the resident's Passbook for transparency but
-are excluded from all three sums. A resident may pay **any amount up to Payable** —
-explicit, deliberate partial payment against the aggregate balance, not against
-specific months (there is no longer a concept of "select which records to pay").
-
-**Design decision: additive schema change, not a full replacement.** Rather than
-unifying SYSTEM/Deposit/Credit into one new polymorphic table (which would require
-migrating `MaintenanceRecord`'s generation/idempotency/rate-calc history),
-`MaintenanceRecord` is kept exactly as generated (Phase 4's arrears billing,
-`calculateMonthlyRate`, idempotency — all untouched); only its `status`
-(`PaymentStatus`) column is dropped, since a charge is never individually "paid"
-anymore. A new model, `LedgerEntry`, holds only Deposit/Credit rows and **replaces**
-`PaymentProof` entirely — its many-to-many "one proof covers N selected records" shape
-no longer applies once payment is against an aggregate, not specific months. Full
-schema: `docs/data-model.md`'s "LedgerEntry" section.
-
-**Two further rule reversals, both explicit in the new spec, not incidental:**
-- **Proof upload is now optional for a Deposit** (was mandatory, rule 7) — the
-  mockup's "Upload payment proof" button in the Pay panel is decorative/unwired, and the
-  written spec's Pay flow only requires an amount.
-- **Escalation (rule 8) redefined**: since a Deposit is no longer tied to specific
-  charges, there's no per-charge paid/unpaid state to check. A flat is flagged when
-  `Outstanding > 0 AND` its **oldest** `MaintenanceRecord.dueDate` is past
-  `dueDate + gracePeriodDays` — the natural generalization of "you still owe money and
-  your oldest bill has been sitting a while." `outstandingTotal` in the flagged-flat
-  response is the flat's full Outstanding, matching rule 8's "computes outstanding
-  total... across all that flat's unpaid records" wording.
-
-**My details also changes** (Passbook's sibling tab): the resident-facing form now
-matches the admin flat-edit form's exact visual shape (Flat details locked, Owner
-details/Occupancy/Tenant details fully editable), submitted as **one combined
-request**, `PUT /api/me/flat` (OWNER only), reusing `updateFlat`'s existing
-find-or-create-tenant-inline mechanism (`flats.service.ts`, the 2026-08-06 addendum)
-rather than duplicating it — `wing`/`flatNumber`/`baseRate` are still never accepted.
-This replaces the previous three-endpoint split (`PATCH /api/me` + `PUT`/`DELETE
-/api/me/flat/tenant`) as the primary resident-side path; those lower-level endpoints
-are kept, unremoved, same precedent as the admin id-based `assignTenant`/`removeTenant`
-alongside `createFlat`/`updateFlat`. A `TENANT` keeps the simpler original
-flow (read-only flat info + their own profile) — occupancy/tenant management stays an
-`OWNER`-only capability, unchanged.
-
-**Explicitly out of scope**: the mockup's decorative floor/unit occupancy-grid sidebar
-(`FacadeMini`) is hardcoded demo chrome, not derived from real data, and needs
-floor-plan geometry this schema doesn't model — not built. Full contract, endpoint
-list, and manual verification: `docs/payments.md`, `docs/admin-dashboard.md`.
-
-### Pivot (2026-08-07): Credit removed from the system entirely
-
-Confirmed decision, not a bug fix: the society will never use Credit (the "advance
-deposit or expense reimbursement" concept introduced by the 2026-08-06 ledger
-pivot above). It is **removed outright** — schema, backend, frontend, and this
-doc's own business rules — rather than fixed or redesigned. This followed a short
-design discussion about how Credit *should* net against Outstanding (a "spend it at
-payment time" wallet model was floated); the resolution was simpler than any of
-that: there is no Credit concept anymore.
-
-**What changes, concretely:**
-- `LedgerEntry` drops its `type` column and the `LedgerType` enum (`DEPOSIT`/
-  `CREDIT`) entirely — a `LedgerEntry` row only ever represents a Deposit now.
-  `POST /api/me/ledger/credits` and `createCredit()` no longer exist.
-- **Rule 4's formula collapses from three numbers to one.** The old
-  `Outstanding`/`Credit balance`/`Payable` split — `Payable = max(0, Outstanding −
-  Credit balance)` — is gone. There is only **`Outstanding`** now:
-  `max(0, totalCharges − approvedDeposits)`. Every place that read `.payable` reads
-  `.outstanding` instead (the Pay button, payment-intent locking, the admin
-  dashboard's `outstandingTotal`/flagged-flats check, escalation).
-- **Rule 7's "Add credit" bullet is removed.** Only the Pay flow (payment intent →
-  UPI QR/deep-link → screenshot → pending Deposit) remains as a way to affect the
-  balance.
-- The resident Dashboard's three summary cards (Outstanding/Credit/Payable) become
-  **one card: Outstanding.** The ledger table below it only ever shows Deposit rows
-  (no `Type` column — there's nothing left to distinguish). The admin Payment
-  Proofs queue's `Type` column is gone for the same reason.
-- `docs/data-model.md`'s `LedgerEntry` section and `docs/payments.md` were updated
-  in place to describe the current (Deposit-only) contract; this section is the
-  historical record of *why*, following this file's usual pattern of pivots as
-  dated addenda rather than rewritten history.
-
-### Addendum (2026-08-07, same day): per-record settlement status, derived via FIFO
-
-Confirmed against a plain-text settlement spec: residents and admins need visibility
-into *which specific months* are paid/partially paid/unpaid, not just the flat's one
-aggregate Outstanding number. This is **additive to, not a reversal of**, the
-2026-08-06 ledger pivot — the Pay flow, payment validation (`0 < amount <=
-Outstanding`, no overpayment, no credit fallback), and the "resident never selects
-which records to pay" rule (rule 6) are all unchanged. What's new is a read-time
-*display* layer on top of the existing aggregate model.
-
-**The rule**: each `MaintenanceRecord` has a derived status —
-`UNPAID` (0 settled), `PARTIALLY_SETTLED` (0 < settled < `amount`), or `PAID` (settled
-== `amount`) — computed by sorting a flat's records oldest-to-newest by `period` and
-FIFO-filling them from the flat's `approvedDeposits` total (the same number
-`computeFlatBalances` already produces), completing the oldest record before any
-money reaches a newer one.
-
-**Derived, not stored — deliberately.** The obvious reading of "update each touched
-record's settled amount... every time a payment is approved" would add a
-`settledAmount` column to `MaintenanceRecord`, mutated inside `approveLedgerEntry`.
-Rejected in favor of a pure function (`ledger.service.ts`'s
-`computeRecordSettlements`) run fresh on every read, for three reasons: (1) it matches
-this project's existing non-functional principle that a resident's balance is
-"computed fresh... never stored as a running total" — a stored, mutated column is
-exactly the kind of state the 2026-08-06 pivot removed once already (the old
-`PaymentStatus` column); (2) FIFO-fill-from-the-front is provably order-independent —
-allocating deposits A-then-B yields the same final per-record state as B-then-A or one
-lump sum of A+B — so the *only* input the computation ever needs is the flat's current
-`approvedDeposits` total, never a history of which deposit paid which record; (3) it
-needs no migration or backfill for already-approved deposits on existing flats (e.g.
-the seeded test accounts with real Outstanding balances) — it's correct retroactively
-for free, and stays correct even if a future feature un-approves or deletes a Deposit,
-since there's nothing to unwind.
-
-**Escalation updated to match (rule 8, above)**: `getFlaggedFlats` now computes each
-flagged flat's settlements and uses the oldest **non-`PAID`** record's `dueDate`
-(instead of the literal oldest record's), and `overdueRecordCount` now counts only
-overdue records that aren't already `PAID`. Without this fix, a flat that had already
-settled its oldest months but still owed a newer one would be flagged (or not) off a
-stale, already-paid due date instead of the actual open item.
-
-**What did NOT change**: the `LedgerEntry`/Deposit schema, the Pay flow's amount
-validation, and the payment-intent lock/QR/deep-link mechanism are all exactly as the
-2026-08-06/07 pivots left them. (Rule 4's Outstanding formula *did* later change again,
-same day — see the "Credit re-introduced" addendum immediately below — but only to
-fold in Credit; `computeRecordSettlements` itself, and everything in this section,
-stayed exactly as described here.) `computeRecordSettlements` is purely additive — a
-new derived view for Maintenance Book and escalation to read, nothing more. Full
-contract: `docs/maintenance-records.md`, `docs/payments.md`, `docs/admin-dashboard.md`.
-
-### Addendum (2026-08-07, same day): Credit re-introduced
-
-Confirmed against a plain-text credit-allocation spec, discussed before implementing.
-This **reverses** the "Pivot (2026-08-07): Credit removed from the system entirely"
-section above — Credit exists again — but in a genuinely different shape than either
-the original (pre-removal) design or what was removed, not a simple restoration.
-
-**What Credit is now**: a committee-approved adjustment against a flat's balance (e.g.
-a repair cost or common-work expense the owner wants settled against maintenance).
-Resident-submitted (amount + a **required** reason note — unlike a Deposit's
-self-explanatory amount+screenshot, an arbitrary discretionary adjustment needs
-context for the committee to evaluate it), same `PENDING`/`APPROVED`/`REJECTED` review
-flow as a Deposit. **The one real difference in validation**: a Deposit is capped at
-`0 < amount <= Outstanding`; a Credit is only checked `amount > 0` — a resident can
-request more credit than they currently owe (`createCredit`, `InvalidAmountError` on
-`<= 0`, no upper bound).
-
-**How it affects balances — allocation-based, not a separately-netted number.** The
-pre-removal design (§ "Pivot (2026-08-06): resident view moves to a transaction
-ledger", historical, above) computed a `Credit balance` as its own sum and subtracted
-it from Outstanding to get `Payable`. This is different: Deposit-money and
-Credit-money are simply pooled into one lump sum and fed through the *same*
-`computeRecordSettlements` FIFO fill already built for the payment-settlement spec
-(§ above) — money is fungible in that fill, so the function itself needed no Credit
-awareness at all, just a bigger number:
-
-```
-approvedFunds = approvedDeposits + approvedCredits
-Outstanding      = max(0, totalCharges - approvedFunds)
-Available Credit = max(0, approvedFunds - totalCharges)
-```
-
-Exactly one of `Outstanding`/`Available Credit` is ever nonzero — they're the two
-sides of the same subtraction. I checked this formula against all 10 of the credit
-spec's worked cases before implementing (`computeRecordSettlements`'s existing
-oldest-first fill, `balancesFromRows` updated to also sum `type: CREDIT` rows) and
-they match exactly.
-
-**"Available Credit auto-consumed by a newly-generated due" (the spec's Case 9) needed
-no new code.** Since settlement is derived fresh on every read (not stored — the same
-architectural choice made for the payment-settlement addendum, § above), the next time
-anything reads a flat's settlements after a new `MaintenanceRecord` exists, the FIFO
-fill just reruns against a larger record set with the same `approvedFunds` total — any
-leftover naturally lands on the new record. No "consumption trigger" to build. This is
-the second time this derive-fresh design has paid for itself for free; see the payment
-addendum above for the first (order-independence of FIFO fill).
-
-**Schema**: `LedgerEntry.type: LedgerType` (`DEPOSIT | CREDIT`) is back — the exact
-enum/column the 2026-08-07 removal dropped, re-added by a new migration
-(`20260807170000_readd_credit`) that backfills every existing row to `DEPOSIT` (every
-row that existed before this migration was, unambiguously, a Deposit). Nothing else
-about `LedgerEntry` needed to change — `note`/`fileUrl` were already
-optional-at-the-schema-level, fitting Credit's needs without any further schema work.
-
-**Addendum (2026-08-07, later the same day): proof attachment made mandatory for
-Credit.** Initially shipped with `note` as the only required context (no `fileUrl`,
-matching the framing that a Credit "isn't self-explanatory the way a UPI payment is"
-but stopping short of requiring evidence). Confirmed as a gap: a committee approving
-an arbitrary discretionary amount needs independent evidence (receipt, invoice, photo
-of the repair), not just a self-reported note. `POST /api/me/ledger/credits` now
-requires `proofUpload.single('file')` (same multer middleware/validation as a
-Deposit's screenshot), 400 if missing — the one remaining asymmetry with a Deposit is
-now inverted: a Deposit's proof stays *optional*, a Credit's is *mandatory*, the
-opposite of what might be assumed by analogy. `createCredit`'s `file` param is
-required (not optional, unlike `createDeposit`'s), saved via the same
-`getStorageAdapter()` call.
-
-**Escalation** (`getFlaggedFlats`) updated the same way as the payment-settlement
-addendum's fix: the settlement lump sum it feeds `computeRecordSettlements` is now
-`approvedDeposits + approvedCredits`, not just `approvedDeposits` — otherwise a flat
-whose oldest charge was settled by Credit (not a Deposit) would be wrongly flagged off
-it.
-
-**Frontend**: the resident Dashboard's Outstanding card gains a permanent
-sibling — **Available Credit**, always shown (not conditional on being nonzero, a
-deliberate choice over hiding it at ₹0, to keep the layout predictable) — plus an "Add
-credit" button opening a form (amount + required reason + required proof attachment,
-via the same `FileUploadField` the payment-intent flow already uses). The ledger
-table's Type column, dropped in the 2026-08-07 removal for having nothing left to
-distinguish, is back on both the resident Dashboard and the admin review queue
-(`PaymentProofsPage.tsx`), now genuinely distinguishing Deposit from Credit rows
-again.
-
-**What did NOT change**: the Pay flow (payment-intent lock/QR/deep-link, amount
-capped at Outstanding) is completely untouched — Credit is a separate, parallel path
-to affect the balance, not a variant of Pay. `computeRecordSettlements` itself needed
-zero code changes; only what callers pass as its lump-sum argument changed. Full
-contract: `docs/payments.md`'s "Settlement status" and new Credit sections,
-`docs/data-model.md`'s `LedgerEntry` section, `docs/admin-dashboard.md`'s
-`getFlaggedFlats` section.
-
-### Pivot (2026-08-08): admin dashboard's `totalPaid`/`paidTotal` now include Credit
-
-Confirmed, explicit reversal of the 2026-08-07 rule (§ "Credit re-introduced", above)
-that `getDashboardSummary`'s `totalPaid` — and by extension the collection-rate
-calc — deliberately excluded `approvedCredits`, on the reasoning that a Credit isn't
-collected cash. That distinction is dropped: **"Total paid" is now
-`approvedDeposits + approvedCredits`** (i.e. `approvedFunds`, the same lump sum
-`balancesFromRows` already fungibly pools for Outstanding/Available Credit), applied
-everywhere a "paid"/"collected" figure is computed on the admin dashboard:
-
-- `getDashboardSummary`'s `totalPaid` (and therefore `collectionRatePercent =
-  round(totalPaid / totalBilled * 100)`, which now also counts approved Credit as
-  "collected" for the purposes of this rate).
-- `getFlatWiseDues`'s per-flat `paidTotal` (the admin dashboard table's "Paid"
-  column, `admin-dashboard.service.ts`).
-
-**What did NOT change**: `creditTotal` (`availableCredit`, the table's separate
-"Credit" column) is untouched and remains a distinct figure from `paidTotal` —
-`paidTotal` is the cumulative funds ever approved for a flat (Deposit or Credit
-alike), while `creditTotal` is whatever of that is still unused after covering
-`totalCharges`. The resident-facing Outstanding/Available Credit formulas
-(`ledger.service.ts`'s `balancesFromRows`, rule 4) were already computed this way
-(`approvedFunds = approvedDeposits + approvedCredits`) and needed no change — only
-the admin dashboard's separately-tracked `totalPaid` aggregate had drifted from that
-convention, which this pivot corrects. Full contract:
-`docs/admin-dashboard.md`'s `getDashboardSummary`/`getFlatWiseDues` sections.
-
-### Pivot (2026-08-09): `collectionRatePercent` splits back off from `totalPaid` —
-deposits only
-
-Confirmed, **partial** reversal of the 2026-08-08 pivot immediately above — narrower
-than it looks, so read carefully what did and didn't change. `totalPaid` and
-`getFlatWiseDues`'s `paidTotal` keep the 2026-08-08 definition
-(`approvedDeposits + approvedCredits`) exactly as-is. Only `collectionRatePercent`'s
-formula changes, and it now reads a *different* input than `totalPaid`:
-
-```
-collectionRatePercent = round(totalApprovedDeposits / totalBilled * 100)
-```
-
-**Why**: `collectionRatePercent` is a society-wide headline metric an admin uses to
-judge how collection is going. Folding approved Credit into that specific number
-overstates actual cash collected — a Credit is a committee-approved adjustment (e.g. a
-repair cost settled against maintenance), not money that came in the door — and risks
-masking a real collection shortfall the committee should be chasing down, i.e. it can
-actively discourage follow-up on flats that haven't actually paid anything. This
-concern is specific to the rate as a percentage-collected signal; it doesn't apply to
-`totalPaid`/`paidTotal`, which are still meant to represent "funds ever approved for
-this flat" (Deposit or Credit alike) and stay unchanged.
-
-**Implementation**: `getDashboardSummary` (`admin-dashboard.service.ts`) now
-accumulates a separate `totalApprovedDeposits` sum (deposits only, across every flat)
-alongside the existing `totalPaid` accumulator, and computes `collectionRatePercent`
-from that instead. `totalApprovedDeposits` is a local accumulator, not a new field on
-`DashboardSummary` — the response shape is unchanged. The admin dashboard UI
-(`AdminDashboardPage.tsx`) now shows the formula as a small note directly under the
-"Collection rate" card, so the number is self-explanatory without needing to consult
-this doc. Full contract: `docs/admin-dashboard.md`'s `getDashboardSummary` section.
-
-### Addition (2026-08-11): Receipt generation and approval workflow
-
-Confirmed against a plain-text requirements doc covering five areas: an approval
-flow, receipt content, admin-configurable template settings, signature upload, and
-a rate-calculation guard. Layered on top of Phase 6's ledger approve/reject and
-Phase 8's admin dashboard/Payment Proofs UI — not a reversal of anything above.
-Full contract, endpoints, and a manually-verified transcript: `docs/receipts.md`.
-
-**Approval flow**: clicking Approve on a pending Deposit or Credit no longer
-settles it directly — it opens a receipt-validation modal showing the *exact*
-receipt that will be issued (society name/address, receipt number, resident
-name, flat number, date, amount, purpose, signatory block). Cancel takes no
-action, the entry stays `PENDING`. **Confirm and approve** is the real action —
-this is the point the entry settles *and* the receipt is issued. Reject stays a
-single-click action, no modal (nothing to validate when declining). The preview
-is guaranteed byte-for-byte identical to what's actually issued because both
-paths call the same `buildReceiptData`/`renderReceiptPdf` functions
-(`receipt.service.ts`) — the preview simply never calls `storage.save()` or
-writes to the database.
-
-**Receipt number**: `{prefix}-{flat.wing}{flat.flatNumber}-{ledgerEntryId}`,
-prefix admin-configurable (`Society.receiptNumberPrefix`, default `"RCPT"`).
-Fully computable before approval (a `LedgerEntry`'s id already exists once
-created), so the preview and the eventually-issued number can never disagree —
-no shared counter, no race condition.
-
-**Receipt content's purpose line is a generic label per type, not an itemized
-per-month breakdown** (confirmed scope decision): a Deposit's purpose is always
-"Maintenance dues payment"; a Credit's purpose is its own existing required
-`note` field. This follows directly from the ledger pivot — a Deposit was never
-tied to specific `MaintenanceRecord`s to begin with, so there's nothing to
-itemize. Amount is shown numerically and in words (`lib/number-to-words.ts`,
-Indian numbering — crore/lakh/thousand, plus paise when applicable).
-
-**Rate calculation rule — needed zero new code.** A receipt's amount must come
-from the stored `LedgerEntry.amount`/`MaintenanceRecord.amount` captured at
-creation, never recomputed from current billing settings at approval/receipt
-time. Both fields were already persisted once and never mutated afterward (true
-since the ledger pivot and arrears-billing addenda above) — so reading them
-directly for a receipt already satisfies this rule with no extra bookkeeping.
-
-**Template customization** (`GET`/`PATCH /api/admin/settings`, admin-only):
-society name (existing), society address (already on the schema, newly exposed
-via this endpoint), receipt number prefix, signatory name, signatory title,
-footer note, and an uploaded signature image. **Changes affect future receipts
-only** — an already-issued receipt's PDF is rendered and saved once, at
-approval time, and never re-rendered on a later read; there's nothing to
-retroactively "alter."
-
-**Signature upload** (`POST`/`DELETE`/`GET /api/admin/settings/signature`):
-PNG/JPEG/WEBP only (unlike proof uploads, never PDF — it's embedded as a
-picture), 2MB cap. Displays above the signatory name on every future receipt,
-replacing the blank signature line; removing it reverts to the blank line.
-Optional throughout. Stored the same way every other upload in this app is —
-via `StorageAdapter`, private/authenticated access only, `Society` stores only
-the opaque key, never the image bytes (same contract as `LedgerEntry.fileUrl`).
-Replace/remove ordering is deliberate: save the new file → point `Society` at
-it → only then delete the old one, never delete-then-save, so a failure
-mid-replace can never leave Settings referencing a file that no longer exists.
-A signature file that can't be read at render time (deleted out-of-band,
-adapter misconfigured) falls back to the blank-line rendering with a logged
-warning — a broken decorative image must never block a financial transaction
-from settling.
-
-**Two implementation judgment calls, both resolved before/during
-implementation:**
-- **`manualDeposit` (the cash/bank-transfer fallback) also issues a receipt.**
-  The written spec only describes the Approve-button flow, but a treasurer
-  taking cash needs a receipt at least as much as a UPI depositor — arguably
-  more, since there's no screenshot serving as informal proof. No preview modal
-  for this path (it's already a single-step "record what happened" action,
-  with no `PENDING` state to preview against); the receipt issues synchronously
-  as part of that one existing step.
-- **A legacy entry approved before this feature shipped has no `Receipt` row,
-  and this is never backfilled.** The download endpoint returns a plain `404`
-  ("No receipt was issued for this entry") rather than lazily fabricating one
-  under today's settings — a fabricated receipt for a transaction that never
-  actually had one issued at the time would be actively misleading.
-
-**Resident access**: widened during planning from an initial "admin-only"
-scope — residents (owner or tenant, symmetric, whoever is the entry's
-`payerId`) can view/download their own issued receipts from the Passbook
-(`GET /api/ledger-entries/:id/receipt`, shared with the admin queue, same
-admin-or-own-payer auth rule as the existing proof-file endpoint). The receipt
-*preview* stays admin-only — it's part of the approval workflow, not a
-resident-facing view.
-
-**Schema**: new `Receipt` model (1:1 with `LedgerEntry`) plus six new `Society`
-columns. See `docs/data-model.md`'s "Receipt" section for the full model and
-`docs/receipts.md` for the endpoint-by-endpoint contract.
-
-### Addendum (2026-08-17): receipt signed by Chairman & Secretary, not a treasurer
-
-Confirmed decision, following the same-day introduction of committee roles
-(Chairman/Secretary/Treasurer, each an existing `OWNER` linked from Society details
-→ Committee, each with their own uploadable signature image). The receipt's
-signatory block — previously one admin-typed name/title pair plus one uploaded
-signature image, framed as "the treasurer's signature" — now shows **two**
-signatory blocks side by side: **Chairman** and **Secretary**, using the real
-committee members' names (`Society.chairman`/`secretary`) and their own
-Committee-tab signature images (`chairmanSignatureFileKey`/
-`secretarySignatureFileKey`). The treasurer's signature image is unaffected as a
-Committee-tab record, but is no longer read anywhere in receipt rendering.
-
-Either role may be unassigned (or unsigned) — that block falls back to the same
-blank-line rendering the single signatory used to fall back to, per role
-independently, so a receipt is never blocked on both roles being filled in.
-
-`receiptSignatoryName`/`receiptSignatoryTitle` (the old free-text fields) were
-dropped outright — schema column, migration
-(`20260817172205_drop_unused_receipt_signatory_fields`), Zod schema, service, and
-client type — rather than left as dead columns, since nothing reads them anymore.
-One live society had real data in these columns at the time of removal (a stale
-manually-entered "Sanjay Gujrathi" / "Treasurer" pair); dropping it was confirmed
-explicitly before running the migration, since it's superseded by the real
-Chairman/Secretary committee data now. The admin Receipt template page dropped the
-now-inert "Signatory name"/"Signatory title" inputs, pointing instead at the
-Committee tab (the same pointer it already showed for the treasurer's signature
-upload). Full mechanism: `docs/receipts.md`'s "Addendum (2026-08-17)" section.
-
-### Addition (2026-08-18): admin Receipt Book — a register of every issued receipt
-
-Confirmed gap: an admin browsing past receipts had no dedicated view — only Payment
-Proofs' "Approved" tab, a pending-review queue repurposed for the job. Added
-`GET /api/admin/receipts` (admin-only, no query params, no pagination — same
-unbounded-list-then-client-filters convention as every other list endpoint in this
-app) plus a new "Receipt Book" page/nav item, listing every `Receipt` row for the
-society newest-first, filterable by issued-date range and free-text search
-(receipt number, flat, resident name), each row downloadable via the existing
-`GET /api/ledger-entries/:id/receipt`.
-
-Purely additive — no change to issuance (`receipt.service.ts`/`receipt-pdf.ts`),
-the approval flow, or any existing endpoint's contract. Backend lives in a new
-`server/src/features/receipts/admin/` subfolder, mirroring the `flats/`+`ledger/`
-admin/resident reorg pattern already established in this codebase. Full contract:
-`docs/receipts.md`'s "Addendum (2026-08-18)" section.
-
-### Addition (2026-08-18, same day): standalone Receipt template page removed
-
-Confirmed decision: the admin Receipt template page (`ReceiptTemplatePage.tsx`,
-`/settings/receipt-template`) is removed outright, not reduced — a whole page was
-overkill for what had shrunk to a single meaningful field once the 2026-08-17
-signatory-fields removal and the Committee-tab signature work landed. **Receipt
-number prefix** moves to Society details' Basic information tab, as a plain
-additional input alongside name/address/dates — no backend change, since `PATCH
-/api/admin/settings` already accepted `receiptNumberPrefix` before this (only
-which page sends it changed).
-
-**Footer note dropped from the UI entirely, confirmed explicitly rather than
-migrated somewhere else.** `Society.receiptFooterNote` stays on the schema,
-`updateSettingsSchema` still accepts it, and a receipt still renders it if a
-value is already stored — there is simply no admin UI left to set or change it.
-This is a real scope-narrowing decision, not an oversight: revisit if a society
-actually needs to configure one.
-
-No route/nav/backend deletion beyond the frontend page itself: `App.tsx`'s
-`/settings/receipt-template` route and `DashboardLayout.tsx`'s "Receipt template"
-nav item are removed; `settings-service.ts`, `society-settings.schemas.ts`, and
-`society-settings-shared.ts` (server) are untouched. Full contract:
-`docs/receipts.md`'s "Addendum (2026-08-18, same day)" section.
-
-### Addition (2026-08-18, same day): Payment Proofs dashboard-only + proof-filtered; Receipt Book stays the complete register
-
-Confirmed, two-part change to `PaymentProofsPage.tsx` — settled after a real
-discrepancy investigation against the live "Pukharaj Soc F Building" data (see
-below), not a guess.
-
-**Dashboard-only access.** `/payment-proofs` is no longer a sidebar nav item
-(`DashboardLayout.tsx`) — same treatment as `/flats`/`/tenants`/`/flat-dues`,
-reached only via the "N payment proofs pending review" tile on
-`AdminDashboardPage.tsx`. Still a real, deep-linkable route.
-
-**Pending and Approved tabs only show entries with an actual proof attached**
-(`fileUrl` non-null) — a manually-marked-paid entry (`manualDeposit`, cash/bank
-transfer, no screenshot by design) or a Deposit submitted through the lower-level
-no-file-required primitive has nothing to review/display, so it's excluded rather
-than shown as "No file attached". **Rejected stays unfiltered** — a rejected
-submission is worth keeping visible regardless of whether it had a proof.
-`AdminDashboardPage.tsx`'s pending-count tile applies the same `fileUrl` filter, so
-the tile's number and the page it links to never disagree.
-
-**Receipt Book is deliberately NOT filtered the same way, and must never be** — it
-is the complete register of every issued `Receipt`, including `manualDeposit`'s
-(which legitimately have no proof; a cash payment still gets a real receipt). This
-was checked directly against production data, which briefly showed a real
-discrepancy: `approvedWithProof` (8) vs. actual `Receipt` rows (6) for one live
-society. Root cause: 2 approved entries (a Deposit and a Credit) had a proof
-attached but were approved on 2026-08-09, *before* the Receipt Generation &
-Approval Workflow shipped (2026-08-11) — no receipt-issuing code existed yet at
-that moment, so no `Receipt` row was ever created for them, and per the existing
-"never backfilled" rule (2026-08-11 section, above), none ever will be. Both were
-deleted at the admin's explicit request (confirmed they understood this raises the
-affected flats' Outstanding by the deleted amounts), logged via a new
-`DELETE_LEGACY_UNRECEIPTED_ENTRY` `AuditLog` action for traceability — 27 further
-legacy entries with no proof and no receipt from the same pre-2026-08-11 window
-were left untouched (out of scope for that cleanup). After the deletion,
-`approvedWithProof` and `Receipt` count matched exactly (6 = 6) for that society —
-confirming the *rule* (proof-having and receipt-having coincide for everything
-approved since 2026-08-11) rather than the two figures being independently
-computed and coincidentally equal.
-
-**The general lesson, not just this one cleanup**: "entries with proof" and
-"entries with a receipt" are two different questions that happen to mostly
-overlap going forward (every approval since 2026-08-11 issues a receipt
-regardless of proof) — they are not the same set by definition, and a future
-`manualDeposit` (proof-less, but receipted) will always appear in Receipt Book
-without appearing in Payment Proofs' Approved tab. That is expected, not a bug to
-chase — Approved answers "what can I review a screenshot for," Receipt Book
-answers "what was ever collected."
-
-Confirmed: not every society can accept UPI (some collection accounts are
-UPI-less bank accounts only), so `Society.upiVpa` — required since the Phase 1
-review — is now **optional**, and an admin may instead configure
-`Society.bankAccountNumber` + `Society.bankIfsc` from Settings → Society
-details. **UPI always takes precedence** when both are configured — a resident
-never sees both a QR code and bank details, only one or the other.
-
-`ledger.service.ts`'s `buildPaymentIntentResult` (the single place a payment
-intent's QR/link/bank-details are built, backing both `GET`/`POST
-/api/me/ledger/deposits/intent`) picks the method: UPI if `upiVpa` is set;
-otherwise bank transfer if both `bankAccountNumber` and `bankIfsc` are set;
-otherwise throws `PaymentMethodNotConfiguredError` (`409`) — a
-society-configuration gap distinct from a resident input error. The frontend's
-`PayIntentPanel` (`ResidentDashboardOverview.tsx`) branches on the response's
-`paymentMethod` field: a `'BANK_TRANSFER'` intent shows the account number and
-IFSC in place of the QR image (on every device — there's no UPI app to
-deep-link into) and swaps the guideline copy to instruct an NEFT/IMPS/RTGS
-transfer instead of scanning a QR. The screenshot-upload/submit/cancel step
-that follows is unchanged either way.
-
-**Bank fields are validated as a pair, not individually.** A lone account
-number with no IFSC (or vice versa) is meaningless to a resident trying to
-pay, so `society-settings.service.ts`'s `updateSocietySettings` checks the
-*merged final state* (this PATCH's fields layered onto whatever's already
-stored) and throws `IncompleteBankDetailsError` (`400`) if exactly one ends up
-set — checked against the merged state rather than the request body alone,
-since a PATCH may legitimately touch only one of the two fields (e.g. fixing a
-typo in the IFSC while the account number, already saved, is left untouched).
-No schema-level "at least one payment method configured" constraint exists —
-Prisma can't express "A or (B and C)" — so that's enforced only where it
-matters: payment-intent creation, via `PaymentMethodNotConfiguredError` above.
-
-Full contract: `docs/payments.md`'s "Payment method: UPI or bank transfer,
-UPI takes precedence" section; schema: `docs/data-model.md`'s `Society`
-section.
-
-### Pivot (2026-08-20): Credit removed again, Deposit cap lifted — overpayment becomes Available Credit
-
-Confirmed decision, following a short discussion about whether a separate
-"Add Credit" control was pulling its weight when the ordinary Pay flow could
-achieve the same outcome. Credit (the resident-initiated "request a
-committee-approved adjustment" feature, most recently described in the
-"Credit re-introduced" addendum above) is **removed a third time** —
-`LedgerEntry.type`/`LedgerType` are gone again (migration
-`20260820191542_remove_credit_type_final`), `POST /api/me/ledger/credits` no
-longer exists, and `CreditBookPage.tsx` (the page it moved to during the
-resident-dashboard restructure) is deleted outright. Unlike the first
-removal (2026-08-07), this one isn't expected to reverse: the reason Credit
-existed — letting a resident's payment exceed what's currently billed and
-have the excess tracked as `Available Credit` — is now achieved for free by
-a smaller, more targeted change described below, so there's no remaining gap
-for a future Credit feature to fill.
-
-**The actual change: Deposit's amount cap against Outstanding is lifted.**
-`createDeposit`/`createOrReplacePaymentIntent` (`ledger-shared.ts`'s
-`resident-ledger-service.ts`) validated `0 < amount <= outstanding`; this
-collapses to just `amount > 0`. A resident may now lock/submit a payment for
-more than they currently owe. Nothing else needed to change to make this
-safe: `balancesFromRows`'s formula was already `outstanding = max(0,
-totalCharges - approvedDeposits)` / `availableCredit = max(0, approvedDeposits
-- totalCharges)` — the two sides of one subtraction — so an approved
-overpayment already turned into `Available Credit` automatically, the same
-mechanism that used to require a resident to separately *request* Credit now
-kicks in from ordinary payment behavior. `computeRecordSettlements`'s FIFO
-fill needed zero code changes either, for the same reason it needed none for
-the original Credit-allocation spec (§ above): money is money once summed,
-regardless of which endpoint it arrived through.
-
-**What did NOT change**: `Available Credit` as a concept is untouched and
-still shown everywhere it was before — the resident Dashboard, the admin
-dashboard's per-flat `creditTotal`, `getFlatWiseDues`, `getResidentLedgerOverview`.
-Only its *source* changed — pure Deposit overpayment now, never a separately
-requested adjustment. The Pay flow's UPI/bank-transfer payment-intent
-lock/QR/deep-link mechanism, and the (already-optional) proof-upload step, are
-completely unchanged. `OtherChargesBookPage.tsx`'s own, separate Deposit cap
-was deliberately left untouched — Other Charges never had a Credit concept to
-begin with, so there was nothing to fold in there.
-
-**Frontend**: the resident Dashboard's "Available Maintenance Credit" card
-stays (always shown, same as before) but now links to `/maintenance-book`
-instead of the removed `/credit-book` — that's where the Pay flow (and,
-per this pivot, any resulting Available Credit) actually lives.
-`MaintenanceBookPage.tsx`'s Pay amount field lost its `max={outstanding}`
-constraint; when the entered amount exceeds Outstanding, an inline hint
-shows how much of it will land as Available Credit once approved, so an
-overpayment is never a silent surprise. The `Type` column (Deposit/Credit),
-including its `LedgerTypeBadge.tsx` component, is gone from the admin Payment
-Proofs queue and Receipt Book — there's nothing left to distinguish once
-every `LedgerEntry` is a Deposit, same reasoning as the 2026-08-07 removal's
-UI changes.
-
-Full contract: `docs/payments.md`'s balance-formula and Deposit-submission
-sections, `docs/data-model.md`'s `LedgerEntry` section, `docs/admin-dashboard.md`'s
-`getDashboardSummary`/`getFlatWiseDues` sections.
-
-### Addition (2026-08-21): Phase 10 production deployment — HTTPS without a purchased domain
-
-Confirmed decision, raised when closing out the last two unbuilt tracker items
-(10.1/10.2): this pilot is pre-revenue and will not have a purchased domain. That
-does **not** mean shipping without HTTPS — Let's Encrypt's only real requirement is
-a resolvable FQDN pointing at the VPS, which a free dynamic-DNS hostname (DuckDNS,
-No-IP, etc.) satisfies identically to a paid one, at zero cost. Plain HTTP-on-bare-IP
-was considered and rejected as the default: this app carries login passwords,
-session cookies, and payment-proof screenshots (often showing UPI IDs/bank details),
-and transmitting those in cleartext over the public internet is a real exposure for
-a financial app, not a theoretical one — a self-signed cert was also considered and
-rejected (trains residents to click through a browser trust warning, no better than
-plaintext for a first impression). The free-hostname path was chosen specifically
-because it closes the actual gap (encrypted transport) rather than working around it.
-
-**What was built**: `nginx`'s config mount changed from a single-file bind mount to
-a directory mount (`./nginx/conf.d`), so `scripts/enable-https.sh` can swap in
-`nginx/https.conf.template` (rendered with the real `DOMAIN`) once a certificate
-exists, without an image rebuild. A `certbot` service (official `certbot/certbot`
-image) auto-renews in the background. The base HTTP-only config
-(`nginx/conf.d/default.conf`) always serves the ACME HTTP-01 challenge path, even
-before any domain is configured — this means the first certificate can be requested
-against the stack exactly as it's already running, with no dummy-self-signed-cert
-bootstrap dance (the usual complication in nginx+certbot Docker recipes, needed only
-when an SSL server block is already active and pointing at cert files that don't
-exist yet). Full operator sequence: `DEPLOY.md` (new, root of repo).
-
-**Staying on plain HTTP remains fully supported, deliberately.** Leaving
-`DOMAIN`/`CERTBOT_EMAIL` blank in `.env` means nothing changes from before this
-addition — `COOKIE_SECURE` stays `false`, nothing requires a cert to exist. This
-was a considered choice, not an oversight: given the free-hostname path costs
-~20 minutes and removes a real security exposure, it should be the default for this
-pilot, but nothing in the stack forces it.
-
-**What did NOT get built, and remains a real gap**: database backups. There is no
-backup/restore mechanism anywhere in this project — `postgres_data` is a single
-Docker volume on one VPS with no copy elsewhere. This was flagged explicitly (in
-`DEPLOY.md` and `docs/feature-track/status.md`) rather than silently left out,
-since losing that disk loses every flat's financial history. Not in Task 10.1/10.2's
-original scope; needs its own confirmed task before this is safe to run unattended.
-
-### Addition (2026-08-21, same day): `npm test`/`npm run dev` were pointed at the same database as the live pilot
-
-Found while verifying the HTTPS work above: `server/.env`'s `DATABASE_URL` (used only
-when running the backend directly on the host, outside Docker — the deployed app's
-own `DATABASE_URL` is set separately, directly in `docker-compose.yml`'s
-`environment:` block) used the same database name, `smi_dev`, as the one the now-live
-pilot VPS actually serves from on the same Postgres instance/port. Confirmed this was
-live risk, not theoretical: two stray `Society`/`User` rows were found in the live
-`smi_dev`, traced to a `flats-tenant.service.test.ts` run that had been killed
-mid-suite before its (correctly-ordered) `afterAll` cleanup could run. Checked all 45
-test files that clean up data — no unscoped `deleteMany()`/`TRUNCATE` exists anywhere,
-so this couldn't have wiped real data outright, but nothing structurally prevented a
-future, less-careful test from doing so.
-
-**Fix**: a second database, `smi_test`, created inside the same Postgres
-container/instance (no second container, no `docker-compose.yml` change — the
-deployed app never reads `server/.env` at all). `server/.env`/`.env.example` now
-default `DATABASE_URL` to `smi_test`. Verified the isolation actually holds: ran the
-full suite twice against `smi_test` and confirmed `smi_dev`'s row counts didn't move
-either time. Full setup steps: `docs/database-setup.md`'s "Addendum (2026-08-21)".
-The two pre-existing stray rows in `smi_dev` are a separate, one-time cleanup — this
-fix only stops new ones from accumulating.
-
-### Addendum (2026-08-26): approving a Deposit is blocked outright with no committee signatures configured
-
-Confirmed decision: neither the Payment Proofs "Confirm and approve" flow nor the
-admin "Mark as paid" cash/bank-transfer fallback may approve a Deposit while the
-society has **neither** a Chairman nor a Secretary signature uploaded (Settings →
-Committee, § "Addendum (2026-08-17)" above). Both paths issue a real `Receipt`
-(§ "Addition (2026-08-11)" above) — a receipt with a fully blank signatory block
-was judged unacceptable output for a financial document, not a cosmetic gap.
-
-**Deliberately narrower than it might first look — read against the existing
-"never block a financial transaction over a missing/broken signature" rule
-(2026-08-11 section above) before assuming a conflict.** That rule was written for
-a signature that *is* configured but can't be read at render time (file deleted
-out-of-band, storage adapter misconfigured) — a genuinely different failure mode
-from *nothing ever being configured*, which is what this addendum blocks. The
-existing per-role fallback is also unchanged: either Chairman or Secretary alone
-is enough to unblock approval; a receipt with only one signatory block filled in
-still renders and issues normally, exactly as it did before this addendum — only
-the both-missing case is newly blocked.
-
-**Mechanism**: a new `SignaturesNotConfiguredError` (`server/src/shared/errors/
-errors.ts`), thrown by `receipt.service.ts`'s `assertSignaturesConfigured` —
-called from `previewReceiptPdf` (so an admin sees this before ever reaching
-"Confirm and approve") and from `prepareReceiptForEntry`, the single choke point
-both `approveLedgerEntry` and `manualDeposit` (`admin-ledger-service.ts`) call
-*before* opening their `$transaction` — so a block here has zero side effects: no
-status change, no `Receipt` row, no `AuditLog` entry. Mapped to `409` by the
-controller, same status-code family as `PaymentMethodNotConfiguredError` (a
-society-configuration gap, not a malformed request). No frontend changes were
-needed: `ReceiptApprovalModal.tsx` already renders any preview-fetch error inline
-and already keeps "Confirm and approve" disabled while no preview has loaded; the
-"Mark as paid" page already renders a `manualDeposit` error through its existing
-`ErrorBanner`. Full contract: `docs/receipts.md`'s "Addendum (2026-08-26)" section.
-
-### Addendum (2026-08-26, same day): Maintenance Book's Pay widget stays visible at ₹0 Outstanding
-
-Confirmed decision: `MaintenanceBookPage.tsx`'s Pay widget (amount field + Pay
-button) was previously gated behind `outstanding > 0` — at ₹0 Outstanding it
-disappeared entirely, showing only "Nothing outstanding right now" with no way to
-act. That blocked a real, intended use case: a resident who wants to deposit an
-advance amount now, to be settled against maintenance in a future month. This is
-not a new capability — the 2026-08-20 pivot above already made any Deposit amount
-land as `Available Credit` once it exceeds current Outstanding, auto-consumed by
-the next generated `MaintenanceRecord` via the existing FIFO settlement fill — the
-UI simply had no way to reach that path once Outstanding hit ₹0.
-
-**The fix is UI-only.** No backend change: `createOrReplacePaymentIntent` already
-only validated `amount > 0`, with no Outstanding-relative cap, since 2026-08-20.
-The widget's visibility gate (`outstanding > 0 && !intentQuery.data`) drops the
-`outstanding > 0` half — only an already-open payment intent still hides it. Two
-small UX adjustments that go with unhiding it: the amount field's pre-fill
-(previously always `String(outstanding)`) leaves the field **blank** at ₹0
-Outstanding instead of pre-filling `"0"` — a prefilled zero would otherwise
-immediately trip the existing "enter an amount greater than ₹0" validation message
-on load; and the field's label switches to **"Amount to deposit"** at ₹0
-Outstanding (**"Amount to pay"** otherwise, unchanged) so the advance-deposit
-intent is clear without adding a second, separate control. The existing "overpay →
-Available Credit" inline hint needed no change — at ₹0 Outstanding, any entered
-amount is by definition an overpayment, so the hint now does double duty as the
-advance-deposit confirmation. Full contract: `docs/payments.md`'s "Frontend —
-resident payment flow" section.
-
-### Addendum (2026-08-26, same day): "Fee Type" renamed to "Custom Fee"; empty-catalog pages warn instead of block
-
-Confirmed decisions, two related but independent changes to the Other Charges
-(Custom Bills) and Manage Finance features.
-
-**1. Display-copy rename, "Fee Type" → "Custom Fee".** User-facing text only —
-the `FeeType` Prisma model, `feeTypeId` field, `/api/admin/fee-types` /
-`/settings/fee-types` routes, React Query keys, and error class names
-(`FeeTypeNotFoundError`, `FeeTypeNotBillableError`) are all unchanged, since
-none of those are user-visible. Every string a user actually reads was
-renamed: the Settings nav item and page (`FeeTypesPage.tsx` — heading, "Add/
-Save custom fee" buttons, empty state), the Custom Bills billing form's field
-label/placeholder/table header (`OtherChargesPage.tsx`), Receipt Book's column
-header and search placeholder, the Other Charges Flat Dues and Other Charges
-Book table headers, the Charges CSV import page's help copy
-(`BulkChargesImportPage.tsx`), the public OpenAPI docs' tag/summary/
-description text (`fee-types.openapi.ts`, `other-charges.openapi.ts`), and
-every server-thrown message a user can actually see (`"Custom fee is
-required"`, `"This custom fee is not available for billing..."`, `"Custom fee
-not found"`, and the bulk-import row error `"Custom fee \"X\" not found or
-inactive"`). CSV column names (`feetypename`) are unchanged — a machine-
-readable header, not display copy.
-
-**2. The Custom Bills billing form and the Manage Finance record-entry form
-both stay reachable with an empty catalog — a warning + Settings link, not a
-block.** Originally floated as "shouldn't be accessible until configured,"
-then corrected mid-discussion to the pattern actually built: the page opens
-normally; if the relevant catalog is empty (all Custom Fees for
-`OtherChargesPage.tsx`, or the active Finance Categories for the currently
-selected Income/Expense direction on `ManageFinancePage.tsx`), a new shared
-`WarningBanner` (`client/src/components/FormField.tsx`, amber/`AlertTriangle`,
-sibling to the existing coral `ErrorBanner`) explains the gap and links
-straight to where to fix it (`/settings/fee-types` or
-`/settings/finance-categories`), and the relevant `<select>` plus the submit
-button are disabled (there's nothing valid to pick or submit anyway) — but the
-rest of the form, and the page itself, render exactly as before. On Manage
-Finance this is evaluated per selected direction, not once for the whole
-page, since Income and Expense draw from disjoint category lists
-(`fetchActiveFinanceCategories(direction)`) and one can be configured while
-the other isn't. No backend change either place — both catalogs were already
-enforced server-side via required-field validation
-(`other-charges.schemas.ts`'s `feeTypeId`, and `categoryId` client-side on
-Manage Finance); this only makes the empty-catalog case legible instead of a
-generic "required" error after the fact.
-
-### Confirmed decisions (resolved during requirements intake, 2026-08-05)
-
-- **Mid-month occupancy transition rate** (Task 4.1): for a flat's month, sum days under
-  each occupancy status (OWNER vs TENANT). Whichever status has more days sets the rate
-  for the *entire* month's single MaintenanceRecord. **On an exact tie** (only possible
-  in 28- or 30-day months), **the status active on the last day of the month wins.**
-  Example: owner-occupied Aug 1–10, tenant Aug 11–31 → tenant has majority (21 vs 10
-  days) → whole month billed at tenant rate. **Generalized during implementation**
-  (2026-08-06) beyond the owner-vs-tenant framing above, to "whichever specific party
-  — the owner, or any one tenant — occupied the most days": a tenant-to-tenant
-  turnover mid-month (Tenant A moves out, Tenant B moves in the same month) is billed
-  to whichever tenant had the majority of days, same tiebreak logic, rather than
-  needing a special case not covered by the original example. See
-  `docs/maintenance-records.md`.
-- **MaintenanceRecord due date**: generation date + 15 days (was "Invoice due date"
-  pre-pivot — same default value, now attached to the record itself).
-- **Escalation grace period**: 7 days past due date (configurable — implemented as an
-  optional `?gracePeriodDays=` query param on `GET /api/admin/dashboard/flagged-flats`,
-  Phase 8, rather than a new persisted `Society` setting; see `docs/admin-dashboard.md`).
-- **Test runner**: Vitest for both `server/` and `client/` (Task 0.1 leaves this open;
-  chosen for a single toolchain — `client/`'s React Testing Library setup needs Vitest
-  anyway).
-
-## Data model summary
-
-| Entity | Key fields | Notes |
-|---|---|---|
-| Society | name, address, upiVpa (optional), bankAccountNumber/bankIfsc (optional, added 2026-08-12), tenantRateFactor (default 1.5), defaultBaseRate (default 1500), receiptNumberPrefix (default "RCPT"), receiptFooterNote, receiptSignatureFileKey/MimeType, chairman/secretary/treasurer relations + their signature file keys (2026-08-17) | Root tenant entity. `upiVpa` was required until the 2026-08-12 bank-transfer-fallback addition; a payment intent still needs *some* payment method configured (UPI, or a complete bankAccountNumber+bankIfsc pair — UPI takes precedence), enforced at payment-intent-creation time, not the schema; `tenantRateFactor` is the configurable rule-1 multiplier, not a hardcoded constant, admin-editable via `/api/admin/settings` (2026-08-06 addendum); `defaultBaseRate` only pre-fills new-flat onboarding, not consumed by any calculation; the receipt fields (2026-08-11 addendum, `receiptSignatoryName`/`Title` dropped 2026-08-17) configure the receipt letterhead — see `docs/receipts.md` |
-| User | role (ADMIN/OWNER/TENANT), societyId | Auth identity |
-| Flat | wing, flatNumber, baseRate, ownerId, currentTenantId | |
-| OccupancyChange | flatId, tenantId, effective start/end | Drives rate calc |
-| MaintenanceRecord | flatId, period, payerType, payerId, amount, dueDate | Monthly SYSTEM charge, always implicitly "Approved," never individually paid **in the schema** — permanently contributes `amount` to its flat's `totalCharges`. A per-record settlement status (Unpaid/Partially Settled/Paid) is derived at read time via FIFO fill against the flat's approved deposits (2026-08-07 addendum), never stored on this model. `payerId` is the specific User billed (resolved at generation time), not re-derived from `Flat.currentTenantId` later |
-| LedgerEntry | flatId, payerId, amount, status, note, fileUrl, mimeType, adminNote, reviewedBy/At | Resident-created Deposit row (ledger pivot, 2026-08-06; had a `type` column distinguishing Deposit/Credit at various points in this project's history — dropped for good 2026-08-20 when Credit was removed a third and final time, see the "Pivot (2026-08-20)" addendum) — replaces PaymentProof. No link to specific MaintenanceRecords (settlement is computed against the aggregate, via `computeRecordSettlements`); only APPROVED rows count toward Outstanding/Available Credit. `fileUrl`/`mimeType` are optional at the schema level — a proof is never mandatory for a Deposit — see `docs/payments.md`. See `docs/data-model.md` |
-| Receipt | ledgerEntryId (unique), receiptNumber, fileKey, issuedAt, issuedById, societyId | Created only when a LedgerEntry is approved (2026-08-11 addendum) — `fileKey` points at an already-rendered PDF (StorageAdapter), never re-rendered on later reads. 1:1 with LedgerEntry; `receiptNumber` is derived (`prefix-flat-ledgerEntryId`), not a separate sequence. See `docs/receipts.md` |
-| NotificationLog | channel, recipient, status, linked entity | |
-| AuditLog | actor, action, entity, timestamp, note | Financial action trail |
-
-No `Invoice` entity (removed in the 2026-08-05 pivot) and no `PaymentProof` entity
-(replaced by `LedgerEntry` in the 2026-08-06 ledger pivot, above). A resident's balance
-is computed fresh from `MaintenanceRecord` + `LedgerEntry` every time, never stored as
-a running total.
-
-No schema changes are needed for resident self-service (Addition, 2026-08-06, above) —
-`User.name`/`phone`/`email` and `Flat.currentTenantId`/`OccupancyChange` already model
-everything required; only new route/controller/service logic is needed on top of the
-existing schema.
-
-## Non-functional requirements
-
-- **Correctness over scale** — 24-flat MVP; do not over-engineer for multi-tenant scale,
-  concurrency, or data volume.
-- **Idempotency mandatory** for the monthly generation job — re-running for the same
-  period must never duplicate records.
-- **Financial data isolation** — proof files and billing data never accessible
-  cross-society or to the wrong resident.
-- **Auditability** — every state-changing financial action leaves an audit trail.
-- **Low operating cost** — self-hosted VPS, no fixed third-party costs beyond email
-  (free tier sufficient at this scale).
-
-## Explicitly out of scope for this MVP (Phase 2+)
-
-- Public self-signup (open registration with no prior admin/owner action — the
-  current model only provisions accounts via admin flat onboarding or owner-added
-  tenant, both followed by the password-reset claim flow; see the "Addition
-  (2026-08-06)" section above)
-- Razorpay/payment gateway integration
-- WhatsApp Business API / automated WhatsApp sending
-- Complaints/helpdesk, notices/announcements, gate/visitor management modules
-- Per-square-foot billing (flat-rate only)
-- Facility booking, expense reports, polls, document vault
-- Multi-society admin UX
+Web app for a single residential housing society's committee: flat
+onboarding, monthly maintenance billing, UPI/bank-transfer payment
+collection with proof verification and receipt issuance, an ad-hoc charges
+pool, society-level income/expense tracking, and email/WhatsApp
+notifications.
+
+- Personas: **Admin** (committee member — onboards flats, reviews payments,
+  monitors dues), **Owner** (pays dues, manages their own contact info and
+  their flat's tenant), **Tenant** (same as owner, billed at a higher rate
+  while occupying).
+- Scale: one society, ~24 flats. Schema supports onboarding a second society
+  later; multi-society admin UX (switching, cross-society views) is out of
+  scope.
+- Deployment: self-hosted VPS via Docker Compose, HTTPS via a free
+  dynamic-DNS hostname. See `DEPLOY.md`.
 
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
 | Backend | Node.js + Express + TypeScript |
-| ORM | Prisma |
+| ORM | Prisma, `@prisma/adapter-pg` driver |
 | Database | PostgreSQL |
 | Frontend | React + Vite + TypeScript |
 | Data fetching | React Query |
-| Data tables | TanStack Table v8 (headless — `client/src/components/DataTable.tsx` is the one shared table shell every list view uses; `getCoreRowModel` only, no sorting/filtering/pagination row models, deliberately — this is a 24-flat MVP) |
+| Data tables | TanStack Table v8, headless (`client/src/components/DataTable.tsx`) |
 | Forms/validation | React Hook Form + Zod |
 | Auth | JWT (access + refresh), bcrypt |
-| Scheduling | node-cron (in-process) |
-| Email | Resend or SendGrid, behind a swappable `EmailProvider` interface |
-| QR generation | `qrcode` npm package (no external API) |
-| File upload parsing | `multer` (memory storage — buffers handed to the storage adapter, never written to disk by multer itself), content verified against a hand-rolled magic-byte sniff (`src/lib/file-signature.ts`) — not just the client-declared Content-Type — before anything is persisted (Phase 9 audit, `docs/security-audit.md`) |
-| Error handling | `express-async-errors` (imported first in `app.ts`) — Express 4 alone does not forward a rejected async-handler promise to the error middleware; without this, an uncaught throw anywhere crashes the whole process (Phase 9 audit) |
-| Rate limiting | `express-rate-limit`, applied only to `/api/auth/login` and the password-reset endpoints (`src/middleware/auth-rate-limit.ts`); requires `app.set('trust proxy', 1)` since this app always sits behind nginx |
-| Proof storage | Swappable `StorageAdapter` interface (`server/src/lib/storage`) — `local` (disk, default) implemented; `s3`/`gdrive` are named extension points, not yet built. See `docs/payments.md` |
+| Scheduling | node-cron, in-process (`server/src/jobs/`) |
+| Email | Resend, behind a swappable `EmailProvider` interface |
+| WhatsApp | Meta Cloud API, behind the same notification pipeline as Email |
+| QR generation | `qrcode` (no external API) |
+| File storage | Swappable `StorageAdapter` — local disk or S3-compatible (Cloudflare R2). See `docs/features/file-storage.md` |
+| File upload parsing | `multer` (memory storage), content verified against a magic-byte sniff, not just declared Content-Type |
+| Error handling | `express-async-errors` |
+| Rate limiting | `express-rate-limit`, on login + password-reset only |
 | Test runner | Vitest (backend and frontend) |
-| API docs | `swagger-jsdoc` + `swagger-ui-express`, spec assembled from `@openapi` JSDoc blocks in each `*.openapi.ts` file (sibling to the `*.route.ts` file it documents, kept out of the route file itself for readability — `server/src/infrastructure/openapi/openapi.ts`). Served at `/api/docs`, no auth — public by design, falls under nginx's existing `/api/` proxy. See `docs/backend-setup.md` |
-| Deployment | Docker Compose, Nginx reverse proxy, Certbot SSL |
+| API docs | `swagger-jsdoc` + `swagger-ui-express`, served at `/api/docs` |
+| Deployment | Docker Compose, Nginx reverse proxy, Certbot |
 
-## Delivery approach
-
-- 11 phases (0–10), each broken into small, independently testable tasks.
-- **TDD**: failing test first, confirm it fails, then minimal implementation to pass.
-- Each task specifies a doc file under `docs/` to create or append to — these become the
-  onboarding documentation as the project builds.
-- Cross-cutting throughout: society-scoped data isolation enforced centrally (Task 2.6's
-  shared middleware, re-audited in Task 9.1), Zod validation client + server, structured
-  error handling with no leaked internals in production, audit logging for financial
-  actions, server-side file upload validation.
-
-## Repo layout (from Task 0.1/0.2 onward)
+## Architecture
 
 ```
 server/   Express + TypeScript backend
 client/   React + Vite + TypeScript frontend
 nginx/    reverse proxy config
-docs/     living documentation, built up phase by phase
+scripts/  operational shell scripts (HTTPS setup, stack checks)
+docs/     documentation — see Documentation map below
 prisma/   schema, migrations, seed (inside server/)
 ```
 
-## Backend architecture: route / controller / service, every endpoint (from Task 2.1)
-
 ```
 server/src/
-  routes/       *.route.ts      — HTTP wiring only: path + method → controller. No logic.
-  controllers/  *.controller.ts — parses/validates the request (Zod schema lives here),
-                                  calls the service, maps the result or a thrown domain
-                                  error to an HTTP status + JSON body.
-  services/     *.service.ts    — the actual business logic. Plain functions, no Express
-                                  types (no req/res). Throws typed domain errors (e.g.
-                                  DuplicateFieldError), not HTTP status codes — the
-                                  controller decides what those mean over HTTP.
-  lib/                          — small shared helpers used across services (e.g.
-                                  prisma-errors.ts's P2002 → field-name extraction).
+  features/<name>/    One folder per business domain. Admin- and
+                       resident-facing endpoints for the same domain split
+                       into admin/ and resident/ subfolders.
+    <name>.route.ts        HTTP wiring only.
+    <name>.controller.ts   Parses/validates, calls the service, maps result
+                            or thrown domain error to HTTP.
+    <name>.service.ts      Business logic. No Express types. Throws typed
+                            domain errors, never HTTP status codes.
+    <name>.schemas.ts      Zod schemas.
+    <name>.openapi.ts      @openapi JSDoc blocks.
+  infrastructure/      Prisma client, storage adapters, email providers,
+                        logging, OpenAPI assembly.
+  shared/               Cross-feature helpers: error classes, tenant
+                        scoping, file-signature sniffing, billing math.
+  jobs/                 node-cron job definitions — thin wrappers around a
+                        feature's own service.
+  middleware/           Auth, role checks, rate limiting.
+  config/               env()/requiredEnv().
 ```
 
-Adopted starting with Task 2.1, after Task 2.1 was first built as a single fat route
-handler and then deliberately refactored into this shape. Why: Task 4.1/4.2 already
-require the equivalent split independently (a "pure function" rate calculator, a "plain
-function" generation job called from *both* a manual-trigger endpoint *and* a cron job)
-— business logic that must be callable from more than one entry point can't live inside
-a route handler. Applying the same split everywhere from Task 2.1 onward, rather than
-only where the tracker explicitly forces it, keeps the codebase consistent and makes
-every service unit-testable without HTTP (see
-`server/tests/services/admin-users.service.test.ts` vs.
-`server/tests/routes/admin-users.test.ts` for the same logic tested both ways).
+**Data flow**: request → route → controller (validates, reads
+`req.user.societyId`) → service (scopes every query via `scopedWhere()`,
+throws domain errors) → controller maps error to HTTP status. A service is
+often callable from more than one entry point (e.g. a cron job and a
+manual-trigger endpoint) — never assume HTTP-only.
 
-**Gotcha discovered building this**: Prisma 7 + `@prisma/adapter-pg` does **not** use
-the classic documented `err.meta.target: string[]` shape for P2002 (unique constraint)
-errors. Confirmed empirically by triggering a real duplicate-key insert — the actual
-field name is nested at `err.meta.driverAdapterError.cause.constraint.fields`.
-`src/lib/prisma-errors.ts`'s `getUniqueConstraintFields()` checks that path first, falls
-back to the classic shape. Any future service that needs to detect *which* field
-violated a unique constraint should use this helper, not re-derive it.
+Full depth: `docs/architecture/backend-structure.md` (route/controller/service
+pattern, Prisma gotchas) and `docs/architecture/multi-tenancy.md` (society
+isolation mechanism and why it's a plain function, not middleware).
+
+## Documentation map
+
+- **`docs/features/_index.md`** — every feature, one line each. Start here.
+- **`docs/features/_status.md`** — detailed build/scope/pending status per
+  feature.
+- **`docs/architecture/`** — cross-cutting technical design (backend
+  structure, multi-tenancy).
+- **`docs/decisions/`** — why a significant design reversal happened, kept
+  out of the feature docs so those stay current-state-only.
+- **`docs/task-status.md`** — phase-by-phase build checklist.
+- **`docs/data-model.md`** — schema reference.
+- **`docs/requirements.md`** — original intake doc; historical, `CLAUDE.md`
+  and the feature docs are authoritative where they disagree.
+- **`docs/backend-setup.md`**, **`docs/frontend-setup.md`**,
+  **`docs/database-setup.md`**, **`docs/docker-compose.md`** — local setup.
+- **`DEPLOY.md`** (repo root) — production deployment runbook.
+
+## Commands
+
+```sh
+# Backend (server/)
+npm run dev              # tsx watch, local dev server
+npm test                 # vitest run
+npm run test:watch       # vitest watch mode
+npm run lint              # eslint .
+npm run build              # tsc -p tsconfig.json
+npx prisma migrate dev    # create + apply a migration
+npx prisma generate       # regenerate the Prisma client
+
+# Frontend (client/)
+npm run dev              # vite dev server
+npm test                 # vitest run
+npm run lint               # oxlint
+npm run build              # tsc -b && vite build
+
+# Deploy (repo root)
+docker compose up -d --build            # build + start/recreate all services
+docker compose up -d --build backend    # rebuild just the backend
+docker compose up -d --build frontend   # rebuild just the frontend (required after any client/ change)
+docker compose logs -f backend          # tail backend logs
+./scripts/enable-https.sh               # one-time: request a Let's Encrypt cert
+```
+
+`server/.env` and `client/.env` are for running each side directly on the
+host; the deployed Docker stack reads the root `.env` instead — see
+`docs/docker-compose.md`.
+
+## Conventions & patterns
+
+- **TDD**: failing test first, confirm it fails, then implement.
+- **Route/controller/service split**, one feature folder per domain — see
+  Architecture above. Services never import Express types.
+- **Domain errors, not HTTP codes, from services.** A service throws a typed
+  error class (e.g. `DuplicateFieldError`); the controller decides what HTTP
+  status that means.
+- **Env config is lazy.** No central startup validation. A swappable
+  integration (email, WhatsApp, S3) gets its own `getXConfig()` called only
+  from inside that integration's own code path — an unconfigured optional
+  integration never blocks `docker compose up`.
+- **Balances and settlement status are derived, never stored.** A resident's
+  Outstanding/Available Credit and each record's paid/partial/unpaid status
+  are computed fresh on every read from the underlying rows — not cached or
+  mutated columns. See `docs/features/payments.md`.
+- **Audit logging** for every state-changing financial action
+  (`AuditLog`, distinct action names per operation type).
+- **Society-scoped queries everywhere** via `scopedWhere()` — see
+  `docs/architecture/multi-tenancy.md`.
+
+## Constraints & gotchas
+
+- **Correctness over scale.** 24-flat MVP — don't over-engineer for
+  multi-tenant scale, concurrency, or data volume.
+- **Idempotency is mandatory** for the monthly maintenance-generation job —
+  re-running for the same period must never duplicate records.
+- **Financial data isolation** — proof files and billing data must never be
+  reachable cross-society or by the wrong resident.
+- **Low operating cost** — self-hosted VPS, no fixed third-party costs
+  beyond email and (as of 2026-08-26) R2's free tier.
+- **Prisma 7 + `@prisma/adapter-pg` unique-constraint errors** don't use the
+  documented shape — see `docs/architecture/backend-structure.md`. Use
+  `getUniqueConstraintFields()`, don't re-derive it.
+- **No `Invoice`, `PaymentProof`, or `Credit` models.** Each was tried and
+  removed. Don't reintroduce any of them without reading the relevant record
+  in `docs/decisions/` first.
+
+## Current focus / active work
+
+- **Database backups are not yet built.** `postgres_data` has no
+  backup/restore mechanism. File storage (proofs/signatures/receipts) has
+  already moved to R2, which closes half the original risk; Postgres itself
+  is still a single Docker volume with no copy elsewhere. Plan:
+  `docs/decisions/0005-storage-provider-r2.md`.
+- **WhatsApp notifications are switched off** (`WHATSAPP_ENABLED=false`) —
+  the configured access token expired. Email notifications are unaffected
+  and fully live. Re-enabling needs a new token plus Meta template approval;
+  see `docs/features/notifications/`.
+
+## Do not touch / out of scope
+
+- Public self-signup (accounts are always admin- or owner-provisioned).
+- Payment gateway integration (Razorpay etc.) — UPI deep-link + manual proof
+  verification only.
+- Complaints/helpdesk, notices/announcements, gate/visitor management.
+- Per-square-foot billing (flat-rate only).
+- Facility booking, formal expense-report generation, polls, document vault.
+- Multi-society admin UX (society switching, cross-society views) — a
+  society can be onboarded at the platform level, but there's no UI to
+  manage more than one from a single admin session.

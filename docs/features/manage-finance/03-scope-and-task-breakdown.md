@@ -55,7 +55,7 @@ balance, CSV export, recurring/scheduled expenses — see
 ### Epic 5: Documentation & Tests
 | Task | Description | Effort |
 |---|---|---|
-| 5.1 | This `docs/manage-finance/` folder (already complete) | — |
+| 5.1 | This `docs/features/manage-finance/` folder (already complete) | — |
 | 5.2 | Backend tests: `finance-categories.service.test.ts`, `society-ledger.service.test.ts` (direction-mismatch, bank-reference-required-unless-cash, missing-file rejection), `admin-dashboard.service.test.ts` additions | 2.5 hours |
 | 5.3 | Frontend tests: `FinanceCategoriesPage.test.tsx`, `ManageFinancePage.test.tsx`, `AdminDashboardPage.test.tsx` additions | 1.5 hours |
 

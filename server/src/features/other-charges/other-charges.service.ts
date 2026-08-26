@@ -11,7 +11,7 @@ import { notify } from '../notifications/notification.service';
 
 // Same "billed + 15 days" convention as MaintenanceRecord.dueDate
 // (maintenance-record.service.ts's DUE_DATE_DAYS) — no per-charge custom due date
-// in v1 (docs/other-charges/05-future-scope.md).
+// in v1 (docs/features/other-charges/05-future-scope.md).
 const DUE_DATE_DAYS = 15;
 
 export class FeeTypeNotBillableError extends Error {

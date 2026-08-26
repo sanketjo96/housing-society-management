@@ -101,7 +101,7 @@ export async function upsertOwnTenant(
   } else {
     // No password field is ever collected from the owner — a real, login-capable
     // TENANT is created with a random unusable password, then handed the same
-    // password-reset mechanism Task 2.4 already built (docs/auth.md) so they can set
+    // password-reset mechanism Task 2.4 already built (docs/features/auth.md) so they can set
     // their own real password. createUser throws DuplicateFieldError itself if the
     // email's already in use — deliberately not caught here, so it propagates as-is.
     const tenant = await createUser({

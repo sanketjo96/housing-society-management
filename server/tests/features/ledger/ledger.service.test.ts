@@ -496,10 +496,10 @@ describe('ledger service', () => {
     });
   });
 
-  // docs/other-charges/ — a resident has at most one open intent at a time, across
+  // docs/features/other-charges/ — a resident has at most one open intent at a time, across
   // BOTH pools. Same-category replace still works (already covered above); a
   // DIFFERENT category is blocked, not silently replaced.
-  describe('payment intents — one at a time across pools (docs/other-charges/)', () => {
+  describe('payment intents — one at a time across pools (docs/features/other-charges/)', () => {
     it('replacing an intent for the SAME category still works unchanged', async () => {
       await createOrReplacePaymentIntent(flatId, ownerId, societyId, 10, 'MAINTENANCE');
       const replaced = await createOrReplacePaymentIntent(flatId, ownerId, societyId, 25, 'MAINTENANCE');

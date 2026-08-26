@@ -215,7 +215,7 @@ export function MaintenanceBookPage() {
     queryFn: fetchMaintenanceBook,
   });
   // Shared with OtherChargesBookPage.tsx and the (retired) Dashboard pay panel —
-  // there's only ever one intent, across both pools (docs/other-charges/).
+  // there's only ever one intent, across both pools (docs/features/other-charges/).
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
   const intentOpenForThisPool = intentQuery.data?.category === 'MAINTENANCE';
   const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'MAINTENANCE';
@@ -457,7 +457,7 @@ export function MaintenanceBookPage() {
                     onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] })}
                   />
                 )}
-                {/* docs/other-charges/ — at most one open intent at a time, across both
+                {/* docs/features/other-charges/ — at most one open intent at a time, across both
                     pools. If it's for Other Charges, this page can't start a new one
                     (server-blocked) — point at where to finish it instead. */}
                 {intentOpenForOtherPool && (

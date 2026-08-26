@@ -4,7 +4,7 @@ Everything below is **deliberately not built in v1**. Documented so the path is
 clear if a real need appears — not so it gets scheduled prematurely. Re-read
 [`01-requirements.md`](./01-requirements.md) before starting any item here to
 confirm the trigger is real, not anticipated (same discipline
-`docs/observablity/06-future-scope.md` applies to its own deferred items).
+`docs/features/observability/06-future-scope.md` applies to its own deferred items).
 
 ## 1. Bulk / Multi-Flat Billing
 **What**: select multiple flats/owners and bill the same fee to all of them in one

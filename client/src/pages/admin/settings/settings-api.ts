@@ -21,7 +21,7 @@ export interface SocietySettings {
   tenantRateFactor: number;
   defaultBaseRate: number;
   // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/receipts.md. receiptNumberPrefix is editable from the
+  // 2026-08-11) — see docs/features/receipts.md. receiptNumberPrefix is editable from the
   // Basic information tab above (2026-08-18 addendum: the standalone Receipt
   // template page was removed). receiptFooterNote has no admin UI anymore but
   // stays a valid, API-settable field — still rendered on a receipt if already set.

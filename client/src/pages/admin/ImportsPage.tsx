@@ -17,7 +17,7 @@ const FLATS_CSV_TEMPLATE =
 // rather than being buried inside the page whose table it happens to populate).
 // Named after what it imports (residents/flats), not generically "Imports" — that
 // label belongs to the submenu group. Sibling pages for the two other importers
-// sketched in docs/society-onboarding/ (Opening Balance/Other Charges, historical
+// sketched in docs/features/society-onboarding/ (Opening Balance/Other Charges, historical
 // Manage Finance) live alongside this one: BulkChargesImportPage.tsx and
 // FinanceHistoryImportPage.tsx.
 export function ImportsPage() {

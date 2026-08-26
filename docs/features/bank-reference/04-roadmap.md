@@ -2,7 +2,7 @@
 
 Principle: build bottom-up — schema and the OCR module first, since nothing else
 compiles without them, then the resident submission path, then the admin
-surfaces that read what submission produces. Unlike `docs/other-charges/`, there
+surfaces that read what submission produces. Unlike `docs/features/other-charges/`, there
 is no cross-pool balance integration to sequence around; this is a simpler,
 single-track dependency chain.
 

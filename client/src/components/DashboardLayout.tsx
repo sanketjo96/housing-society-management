@@ -29,7 +29,7 @@ import { DashboardShell, type NavEntry } from './DashboardShell';
 // exception lists filtered to only what's still owed.
 // "Manage Finance" is a submenu group (restructured 2026-08-20, was three separate
 // top-level items) — Record (/manage-finance, recording the society's own
-// income/expenditure — SocietyLedgerEntry, docs/manage-finance/), Mark Paid
+// income/expenditure — SocietyLedgerEntry, docs/features/manage-finance/), Mark Paid
 // (/mark-as-paid, the manualDeposit cash/bank-transfer fallback, delinked from
 // /payment-proofs the same day since a manualDeposit entry has no proof file and
 // never actually appeared in that page's proof-filtered tabs), and Receipt Book
@@ -58,13 +58,13 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
   },
   // A submenu group, not a standalone item — it's neither a day-to-day money
   // action nor an admin-configuration screen, it's a data-loading utility with one
-  // child per import type (docs/society-onboarding/, all three built 2026-08-21):
+  // child per import type (docs/features/society-onboarding/, all three built 2026-08-21):
   // "Resident" (Flats/Owners/Tenants roster, moved out of FlatsListPage.tsx),
   // "Charges" (Opening Balance arrears + Other Charges, Phase C), and "Finance"
   // (historical Manage Finance income/expense, Phase E — a dedicated page here
   // rather than an inline panel on ManageFinancePage.tsx, so every onboarding
   // import lives in one place). Phase A (society bootstrap) has no UI by design —
-  // see docs/society-onboarding/02-architecture.md.
+  // see docs/features/society-onboarding/02-architecture.md.
   {
     label: 'Imports',
     icon: Upload,
@@ -88,7 +88,7 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
 
 // '/other-charges-book' is deliberately not here — reached only via the Dashboard's
 // "Other Outstanding" card, same drill-down convention as the admin side's
-// non-sidebar routes above (docs/other-charges/, resident-dashboard restructure).
+// non-sidebar routes above (docs/features/other-charges/, resident-dashboard restructure).
 // '/maintenance-book' stays a sidebar item — it predates that drill-down convention
 // and gained its own Pay
 // control without moving off the sidebar.

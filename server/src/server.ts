@@ -35,7 +35,7 @@ app.listen(port, () => {
 // every seeded example are India-specific, and "the 1st of the month" needs to mean
 // the same wall-clock moment regardless of which timezone the VPS host happens to run
 // in. Task 4.3's manual-trigger endpoint exists precisely so a missed/delayed run
-// (server down at 00:05) can be caught up by hand — see docs/maintenance-records.md.
+// (server down at 00:05) can be caught up by hand — see docs/features/maintenance-records.md.
 //
 // Arrears billing: no period is passed here, so each run generates for the month that
 // just ended (previousPeriod()), not the one just starting — see
@@ -48,7 +48,7 @@ cron.schedule(
   { timezone: 'Asia/Kolkata' },
 );
 
-// Notification delivery sweep (docs/notification/) — every minute is a reasonable
+// Notification delivery sweep (docs/features/notifications/) — every minute is a reasonable
 // starting interval at this app's ~25-40 notifications/month volume (architecture.md
 // §2); adjust once real latency expectations are known. Thin job, no provider logic —
 // see notification-delivery.job.ts.

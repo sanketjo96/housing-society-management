@@ -54,7 +54,7 @@ export async function getFlatById(id: string, societyId: string) {
 // Finds an existing User by email within this society (globally-unique email, but
 // scoped-lookup keeps this consistent with every other tenant-scoping check in this
 // feature) and updates their name/phone in place; creates a new one — random unusable
-// password, then the same password-reset mechanism Task 2.4 built (docs/auth.md) — if
+// password, then the same password-reset mechanism Task 2.4 built (docs/features/auth.md) — if
 // none exists yet. Shared by admin/onboarding.service.ts's createFlat/updateFlat for
 // both owner and tenant contact fields (CLAUDE.md's "Addition (2026-08-06)":
 // onboarding a flat is one atomic action, not "create the account, then separately

@@ -135,7 +135,7 @@ export async function generateMaintenanceRecords(
   return { created: result.count, skipped: records.length - result.count };
 }
 
-// MAINTENANCE_BILL_GENERATED (docs/notification/) — createMany doesn't return the
+// MAINTENANCE_BILL_GENERATED (docs/features/notifications/) — createMany doesn't return the
 // created rows, so this re-reads every record for this period+flat set (idempotent
 // generation means that's every record that now exists for the period, whether just
 // created or already there from an earlier run) and calls notify() for each.

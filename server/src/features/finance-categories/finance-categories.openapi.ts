@@ -7,7 +7,7 @@ export {};
  * /api/admin/finance-categories:
  *   get:
  *     tags: [Finance Categories (Admin)]
- *     summary: List the society's income/expense category catalog (docs/manage-finance/)
+ *     summary: List the society's income/expense category catalog (docs/features/manage-finance/)
  *     parameters:
  *       - in: query
  *         name: includeInactive

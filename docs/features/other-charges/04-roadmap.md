@@ -2,7 +2,7 @@
 
 Principle: build bottom-up — schema and shared balance logic first, since both the
 admin and resident UI depend on the category-aware balance endpoints existing before
-either can be built meaningfully. Unlike `docs/observablity/`'s roadmap, this feature
+either can be built meaningfully. Unlike `docs/features/observability/`'s roadmap, this feature
 has no "live with it for a while before the next stage" trigger structure — it's one
 cohesive feature with a natural dependency order, not a set of independently-useful
 stages.
@@ -49,7 +49,7 @@ stages.
 (`other_charge_billed`) submitted and approved before real WhatsApp sends will
 succeed — same caveat already documented for `maintenance_bill_generated`,
 `deposit_payment_approved`, and `credit_payment_approved` in
-`docs/notification/requirements.md` §5. This is a deployment-timeline dependency,
+`docs/features/notifications/requirements.md` §5. This is a deployment-timeline dependency,
 not a code blocker: `WHATSAPP_TEST_MODE=true` lets the full pipeline (including this
 new event) be proven end-to-end with Meta's pre-approved `hello_world` sample
 template before the real one is approved. Submit the template as soon as Epic 4's

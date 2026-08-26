@@ -2,7 +2,7 @@ export type LedgerCategory = 'MAINTENANCE' | 'OTHER_CHARGE';
 
 // Shared by PaymentProofsPage (the approval queue) and ReceiptBookPage (the issued-
 // receipt register) — both need to distinguish which balance pool a row affects
-// (docs/other-charges/), independent of Type (Deposit/Credit) and Created by
+// (docs/features/other-charges/), independent of Type (Deposit/Credit) and Created by
 // (Owner/Tenant/Admin) — a single row is independently described by all three axes.
 const CATEGORY_META: Record<LedgerCategory, { className: string; label: string }> = {
   MAINTENANCE: { className: 'border border-line text-ink', label: 'Maintenance' },

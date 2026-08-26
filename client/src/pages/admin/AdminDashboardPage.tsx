@@ -12,10 +12,10 @@ interface DashboardSummary {
   outstandingTotal: number;
   pendingReviewTotal: number;
   collectionRatePercent: number;
-  // docs/other-charges/ — a fully separate pool from the maintenance figures above.
+  // docs/features/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
-  // docs/manage-finance/ — the society's own income/expenditure, unrelated to the
+  // docs/features/manage-finance/ — the society's own income/expenditure, unrelated to the
   // resident-billing figures above.
   societyTotalIncome: number;
   societyTotalExpense: number;

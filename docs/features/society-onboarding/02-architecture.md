@@ -167,7 +167,7 @@ requestPasswordReset(admin.email)   — same mechanism
 ```
 
 This is categorically different from the vulnerability class fixed in
-`docs/security-audit.md` finding 9.1 (a client-supplied `societyId`
+`docs/features/security-audit.md` finding 9.1 (a client-supplied `societyId`
 letting an *existing* ADMIN reach into another society): this endpoint
 never accepts a `societyId` referring to anything that already exists, is
 mounted outside `/api/admin/*`, and is gated by a secret no ADMIN JWT

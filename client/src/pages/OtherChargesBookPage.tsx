@@ -58,7 +58,7 @@ interface OtherChargesBookData {
 }
 
 // Mirrors MaintenanceBookPage.tsx's shape exactly — its own Outstanding, its own
-// charges list, its own Pay flow, and its own Payment History (docs/other-charges/).
+// charges list, its own Pay flow, and its own Payment History (docs/features/other-charges/).
 // Reuses GET /api/me/ledger with category=OTHER_CHARGE (no separate backend
 // endpoint, same "the data is already there" reasoning as Maintenance Book) and
 // filters client-side into the two tables this page shows (OTHER_CHARGE charges and
@@ -184,7 +184,7 @@ const BOOK_TABS: { value: BookTab; label: string }[] = [
 ];
 
 // OTHER_CHARGE-and-Deposit-history view — the structural mirror of
-// MaintenanceBookPage.tsx for the Other Charges pool (docs/other-charges/): the same
+// MaintenanceBookPage.tsx for the Other Charges pool (docs/features/other-charges/): the same
 // two summary cards, the same "Payment History" (default, home of the Pay
 // control)/"Bills" tabs, the same sortable/date-filterable charges table with a
 // derived settlement-status badge, and the same Payment History table with receipt
@@ -205,7 +205,7 @@ export function OtherChargesBookPage() {
     queryFn: fetchOtherChargesBook,
   });
   // Shared with MaintenanceBookPage.tsx — there's only ever one intent, across both
-  // pools (docs/other-charges/).
+  // pools (docs/features/other-charges/).
   const intentQuery = useQuery({ queryKey: ['payment-intent'], queryFn: fetchOpenIntent });
   const intentOpenForThisPool = intentQuery.data?.category === 'OTHER_CHARGE';
   const intentOpenForOtherPool = !!intentQuery.data && intentQuery.data.category !== 'OTHER_CHARGE';
@@ -419,7 +419,7 @@ export function OtherChargesBookPage() {
                     onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
                   />
                 )}
-                {/* docs/other-charges/ — at most one open intent at a time, across both
+                {/* docs/features/other-charges/ — at most one open intent at a time, across both
                     pools. If it's for Maintenance, this page can't start a new one
                     (server-blocked) — point at where to finish it instead. */}
                 {intentOpenForOtherPool && (

@@ -1,5 +1,5 @@
 // Admin-configurable catalog of ad-hoc fee types (Joining Fee, Transfer Fee, Fine,
-// etc.) — docs/other-charges/. A real table, not an enum, so a fee type can be added
+// etc.) — docs/features/other-charges/. A real table, not an enum, so a fee type can be added
 // without a code deploy. isActive is the only removal mechanism — never hard-deleted,
 // since a billed OtherCharge must keep a valid, named reference forever.
 import { prisma } from '../../infrastructure/prisma/client';

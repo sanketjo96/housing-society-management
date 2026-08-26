@@ -1,10 +1,10 @@
-// Phase E of docs/society-onboarding/ — bulk-imports historical society-level
+// Phase E of docs/features/society-onboarding/ — bulk-imports historical society-level
 // income/expense transactions into Manage Finance. Reuses (via
 // assertValidSocietyLedgerEntry, extracted from society-ledger.service.ts) the exact
 // same direction-matches-category and bank-reference-required-unless-cash checks
 // recordSocietyLedgerEntry already enforces, so the bulk and single-row paths can
 // never silently drift apart. Deliberately skips recordSocietyLedgerEntry's
-// mandatory-file check (Confirmed Product Decision #4, docs/society-onboarding/
+// mandatory-file check (Confirmed Product Decision #4, docs/features/society-onboarding/
 // 01-requirements.md) — legacy rows have no scanned receipt to attach retroactively
 // — auto-appending a note that flags each imported row as historical/unverified
 // instead, so it stays visibly distinct from a normal admin-entered row in every

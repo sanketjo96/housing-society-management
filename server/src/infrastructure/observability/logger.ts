@@ -23,7 +23,7 @@ export function resolveTransport(prod: boolean): pino.TransportSingleOptions | u
 }
 
 // Single entry point that calls pino() — nothing else in this codebase should import
-// `pino` directly (docs/observablity/02-architecture.md's "one entry point per
+// `pino` directly (docs/features/observability/02-architecture.md's "one entry point per
 // concern" rule, same shape as infrastructure/storage and infrastructure/email each
 // having exactly one file that touches their underlying implementation).
 //

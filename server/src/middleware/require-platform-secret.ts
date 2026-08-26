@@ -9,7 +9,7 @@ import type { NextFunction, Request, Response } from 'express';
 // Same trust model as JWT_ACCESS_SECRET: a static value only the platform operator
 // holds (never issued to a client), compared in constant time so response timing
 // can't be used to guess the secret one byte at a time. See
-// docs/society-onboarding/02-architecture.md's "Phase A" flow.
+// docs/features/society-onboarding/02-architecture.md's "Phase A" flow.
 export function requirePlatformSecret(req: Request, res: Response, next: NextFunction) {
   const expected = process.env.PLATFORM_BOOTSTRAP_SECRET;
   if (!expected) {

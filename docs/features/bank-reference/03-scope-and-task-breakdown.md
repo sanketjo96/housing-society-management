@@ -72,7 +72,7 @@ a dedicated auditor-export UI — see [`05-future-scope.md`](./05-future-scope.m
 ### Epic 7: Documentation & Tests
 | Task | Description | Effort |
 |---|---|---|
-| 7.1 | This `docs/bank-reference/` folder (already complete) | — |
+| 7.1 | This `docs/features/bank-reference/` folder (already complete) | — |
 | 7.2 | Backend tests: `bank-reference-extractor.test.ts` (pure regex cases per app), `resident-ledger.test.ts` additions (OCR-extract endpoint, submit-with-reference diffing), `admin-ledger.test.ts` (`manualDeposit` reference) | 2.5 hours |
 | 7.3 | Frontend tests: `PayIntentPanel.test.tsx`, `PaymentProofsPage.test.tsx`, `ReceiptBookPage.test.tsx` updates | 1.5 hours |
 

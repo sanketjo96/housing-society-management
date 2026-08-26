@@ -34,7 +34,7 @@ const financeCategoryFormSchema = z.object({
 type FinanceCategoryFormValues = z.infer<typeof financeCategoryFormSchema>;
 
 // Same list<->form swap pattern as FeeTypesPage.tsx — this catalog's direct
-// counterpart for the society-centric ledger (docs/manage-finance/), the one
+// counterpart for the society-centric ledger (docs/features/manage-finance/), the one
 // structural delta being the added Direction field.
 function FinanceCategoryForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();

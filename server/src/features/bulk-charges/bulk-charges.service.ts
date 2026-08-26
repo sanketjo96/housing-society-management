@@ -1,4 +1,4 @@
-// Phase C of docs/society-onboarding/ — bulk-imports one-time per-flat charges from a
+// Phase C of docs/features/society-onboarding/ — bulk-imports one-time per-flat charges from a
 // CSV, branching per row on `pool`. Every row either creates a sentinel-period
 // "Opening Balance" MaintenanceRecord (a one-time pre-go-live arrears figure) or
 // reuses billOtherCharge's exact validation/creation contract for an ad-hoc one-time
@@ -20,7 +20,7 @@ import {
 // Sorts lexicographically before every real "YYYY-MM" period, so
 // computeRecordSettlements' oldest-first FIFO fill (ledger-shared.ts) always settles
 // this record before any real month's charge — with zero changes to that function.
-// See docs/society-onboarding/02-architecture.md's Data Model section.
+// See docs/features/society-onboarding/02-architecture.md's Data Model section.
 export const OPENING_BALANCE_PERIOD = '0000-01';
 
 export interface BulkImportChargeRowError {
@@ -36,7 +36,7 @@ export interface BulkImportChargesResult {
 const REQUIRED_COLUMNS = ['wing', 'flatnumber', 'pool', 'amount'];
 const OPTIONAL_COLUMNS = ['feetypename', 'note'] as const;
 
-// MaintenanceRecord has no `note` column (docs/society-onboarding/02-architecture.md:
+// MaintenanceRecord has no `note` column (docs/features/society-onboarding/02-architecture.md:
 // "No changes to any existing model's shape") — an Opening Balance row's note goes
 // into AuditLog instead, the same place every other financial action's context
 // already lives, rather than adding a schema column just for this one import path.

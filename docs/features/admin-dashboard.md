@@ -2,7 +2,7 @@
 
 Reference for the admin-only dashboard: society-wide summary, flat-wise dues, pending
 proofs shortcut, and the overdue-flat escalation widget (rule 8). Same route/prefix
-convention as `docs/auth.md`/`docs/payments.md` — every path below is mounted under
+convention as `docs/features/auth.md`/`docs/features/payments.md` — every path below is mounted under
 `/api/`. All four endpoints/widgets are `ADMIN`-only (`requireRole(['ADMIN'])`) and
 scoped to the caller's own society throughout — no query here ever reads across
 societies.
@@ -33,7 +33,7 @@ collectionRatePercent }`, computed across every flat in the society (all periods
 just the current one). Internals: `getBalancesByFlat` fetches every `MaintenanceRecord`
 and `LedgerEntry` for the society in two bulk queries (not N+1), groups by `flatId`, and
 calls `ledger-shared.ts`'s `balancesFromRows` per flat — the exact same formula the
-resident's own Dashboard uses (`docs/payments.md`), never duplicated.
+resident's own Dashboard uses (`docs/features/payments.md`), never duplicated.
 
 - `totalBilled` = sum of every flat's `totalCharges`.
 - `totalPaid` = sum of every flat's `approvedDeposits` — every `LedgerEntry` is a
@@ -89,7 +89,7 @@ overdueRecordCount, message }`.
   pivot's version of this check used the literal oldest `MaintenanceRecord.dueDate`,
   since there was no per-charge paid/unpaid state to consult at all back then. Now
   that `ledger-shared.ts`'s `computeRecordSettlements` derives one (see
-  `docs/payments.md`'s "Settlement status" section), this endpoint fetches each
+  `docs/features/payments.md`'s "Settlement status" section), this endpoint fetches each
   flagged-candidate flat's full record set, runs the FIFO fill against that flat's
   `approvedDeposits`, and picks the oldest record whose status **isn't** `PAID`. A
   flat that already settled its oldest months but still owes a newer one is now
@@ -115,7 +115,7 @@ overdueRecordCount, message }`.
 
 No new backend endpoint — the frontend widget reuses
 `GET /api/admin/ledger-entries?status=PENDING` (the ledger pivot's renamed admin review
-endpoint, `docs/payments.md`) and shows the count, with a click-through to the
+endpoint, `docs/features/payments.md`) and shows the count, with a click-through to the
 already-built "Payment proofs" tab.
 
 ## Frontend — `client/src/pages/admin/AdminDashboardPage.tsx`

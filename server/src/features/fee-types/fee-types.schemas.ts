@@ -6,7 +6,7 @@ export const createFeeTypeSchema = z.object({
 });
 
 // Every field optional — a partial update. isActive is the only removal mechanism
-// (docs/other-charges/ — never hard-deleted, a billed OtherCharge must keep a valid
+// (docs/features/other-charges/ — never hard-deleted, a billed OtherCharge must keep a valid
 // reference forever).
 export const updateFeeTypeSchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),

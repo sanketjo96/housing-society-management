@@ -4,7 +4,7 @@ Everything below is **deliberately not built in v1**. Documented so the path is
 clear if a real need appears — not so it gets scheduled prematurely. Re-read
 [`01-requirements.md`](./01-requirements.md) before starting any item here to
 confirm the trigger is real, not anticipated (same discipline
-`docs/other-charges/05-future-scope.md` applies to its own deferred items).
+`docs/features/other-charges/05-future-scope.md` applies to its own deferred items).
 
 ## 1. Two-Person Approval Workflow
 **What**: a `PENDING`/`APPROVED` review queue for `SocietyLedgerEntry`,
@@ -27,7 +27,7 @@ direction after creation, not just toggle `isActive`.
 insufficient for.
 **Why not now**: `updateFinanceCategory` is deliberately `isActive`-only —
 matches `FeeType`'s own unresolved rename question in
-`docs/other-charges/05-future-scope.md`.
+`docs/features/other-charges/05-future-scope.md`.
 **Cost to add**: small — one more field on `updateFinanceCategorySchema`, plus
 a decision about whether changing `direction` on a category with existing
 entries should be allowed (it would silently make those entries' own
@@ -62,7 +62,7 @@ every month.
 **Trigger**: a real, demonstrated pattern of an admin re-entering the
 identical transaction every month.
 **Why not now**: this app currently has no scheduling primitive for
-*generating* financial rows — `node-cron` (`docs/notification/`) is only ever
+*generating* financial rows — `node-cron` (`docs/features/notifications/`) is only ever
 used for delivery, never for creating a charge/transaction automatically. This
 would be new infrastructure, not a small addition.
 **Cost to add**: large — a new recurrence-definition model, a cron job, and a

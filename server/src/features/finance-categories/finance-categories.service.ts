@@ -1,5 +1,5 @@
 // Admin-configurable catalog of society-level income/expense heads (Electricity,
-// Salaries, Bank Interest, ...) — docs/manage-finance/. A real table, not an enum,
+// Salaries, Bank Interest, ...) — docs/features/manage-finance/. A real table, not an enum,
 // so a category can be added without a code deploy. isActive is the only removal
 // mechanism — never hard-deleted, since a recorded SocietyLedgerEntry must keep a
 // valid, named categoryId reference forever. Deliberately separate from FeeType
@@ -64,9 +64,9 @@ export async function createFinanceCategory(
   return category;
 }
 
-// Deliberately isActive-only — no rename in v1 (docs/manage-finance/05-future-scope.md).
+// Deliberately isActive-only — no rename in v1 (docs/features/manage-finance/05-future-scope.md).
 // Renaming a category after it's been used on real entries needs its own design
-// pass, same precedent as FeeType's rename question in docs/other-charges/.
+// pass, same precedent as FeeType's rename question in docs/features/other-charges/.
 export async function updateFinanceCategory(
   id: string,
   societyId: string,

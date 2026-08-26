@@ -11,7 +11,7 @@ export {};
  *     description: >
  *       Each row's settlementStatus/settledAmount is derived fresh (FIFO fill
  *       against that flat's own Other-Charges pool) — never mixed with maintenance
- *       dues. See docs/other-charges/.
+ *       dues. See docs/features/other-charges/.
  *     responses:
  *       200: { description: OK. }
  *       401: { description: Unauthenticated }

@@ -109,7 +109,7 @@ const definition: swaggerJsdoc.Options['definition'] = {
         type: 'object',
         description:
           'A resident-created Deposit row. Only APPROVED rows count toward a flat\'s ' +
-          'Outstanding/Available Credit — see docs/payments.md.',
+          'Outstanding/Available Credit — see docs/features/payments.md.',
         properties: {
           id: { type: 'string' },
           flatId: { type: 'string' },
@@ -239,7 +239,7 @@ const definition: swaggerJsdoc.Options['definition'] = {
               category: {
                 type: 'string',
                 enum: ['MAINTENANCE', 'OTHER_CHARGE'],
-                description: 'Which balance pool this receipt is for (docs/other-charges/).',
+                description: 'Which balance pool this receipt is for (docs/features/other-charges/).',
               },
               amount: { type: 'string', description: 'Decimal, serialized as a string.' },
               note: { type: 'string', nullable: true },

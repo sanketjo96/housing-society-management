@@ -20,7 +20,7 @@ import { InvalidAmountError } from '../ledger-shared';
 
 export { InvalidAmountError, LedgerEntryAlreadyReviewedError, SignaturesNotConfiguredError };
 
-// DEPOSIT_PAYMENT_APPROVED (docs/notification/) — fired once the approval (or
+// DEPOSIT_PAYMENT_APPROVED (docs/features/notifications/) — fired once the approval (or
 // manual mark-paid) transaction has actually committed, so a notification is never
 // sent for a payment that ends up rolled back. Never lets a notification failure
 // fail the payment approval itself (requirements.md §4) — notify() only ever writes
@@ -208,7 +208,7 @@ export async function rejectLedgerEntry(
 // used by local-storage-adapter.ts) and passed explicitly into both the receipt
 // build and the eventual `create`, preserving the same "file saved before the row
 // is committed" ordering used everywhere else.
-// `category` (docs/other-charges/) — default MAINTENANCE, fully backward
+// `category` (docs/features/other-charges/) — default MAINTENANCE, fully backward
 // compatible. When OTHER_CHARGE, payerId is always flat.ownerId (matching
 // OtherCharge's own payer rule — Other Charges are always owner-billed, unlike
 // maintenance's tenant-if-occupied resolution below).

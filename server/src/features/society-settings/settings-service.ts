@@ -90,7 +90,7 @@ export async function getSocietySettings(societyId: string): Promise<SocietySett
 // request. upiVpa feeds every future QR generation directly (lib/upi.ts's
 // buildUpiDeepLink), read fresh from the Society row each time, same "no caching"
 // guarantee tenantRateFactor already has. address + the four receipt text fields
-// added 2026-08-11 for the receipt template — see docs/receipts.md.
+// added 2026-08-11 for the receipt template — see docs/features/receipts.md.
 export async function updateSocietySettings(
   societyId: string,
   input: UpdateSocietySettingsInput,

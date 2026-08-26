@@ -67,14 +67,14 @@ function App() {
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ImportsPage /></ProtectedRoute>}
               />
               {/* "Charges" child under the "Imports" submenu — Phase C of
-                  docs/society-onboarding/ (Opening Balance arrears + Other Charges
+                  docs/features/society-onboarding/ (Opening Balance arrears + Other Charges
                   bulk import, 2026-08-21). */}
               <Route
                 path="/imports/charges"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><BulkChargesImportPage /></ProtectedRoute>}
               />
               {/* "Finance" child under the "Imports" submenu — Phase E of
-                  docs/society-onboarding/ (historical Manage Finance bulk import,
+                  docs/features/society-onboarding/ (historical Manage Finance bulk import,
                   2026-08-21) — a dedicated page under Imports rather than an inline
                   panel on ManageFinancePage.tsx, so every onboarding import lives in
                   one place. */}
@@ -152,7 +152,7 @@ function App() {
               {/* "Record" child under the "Manage Finance" submenu (DashboardLayout.tsx,
                   restructured 2026-08-20 from a standalone top-level item) — the
                   primary action of recording the society's own income/expenditure
-                  (SocietyLedgerEntry, docs/manage-finance/), entirely separate from
+                  (SocietyLedgerEntry, docs/features/manage-finance/), entirely separate from
                   resident-billing LedgerEntry. */}
               <Route
                 path="/manage-finance"
@@ -167,7 +167,7 @@ function App() {
               />
               {/* Not a sidebar nav item — reached only via the "Other Charges
                   Outstanding Total" tile on AdminDashboardPage, same drill-down
-                  convention as /flat-dues above (docs/other-charges/). Deliberately
+                  convention as /flat-dues above (docs/features/other-charges/). Deliberately
                   NOT linked from /other-charges — that page is the billing action,
                   this one is the read-only per-flat dues table. */}
               <Route
@@ -181,7 +181,7 @@ function App() {
               />
               {/* Not a sidebar nav item — reached only via the resident Dashboard's
                   "Other Outstanding" card, same drill-down convention as admin's
-                  /flat-dues (docs/other-charges/). */}
+                  /flat-dues (docs/features/other-charges/). */}
               <Route
                 path="/other-charges-book"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><OtherChargesBookPage /></ProtectedRoute>}

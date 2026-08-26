@@ -4,7 +4,7 @@ Confirmed against a plain-text requirements doc covering five areas: the approva
 flow itself, receipt content, admin-configurable template settings, signature
 upload, and a rate-calculation rule guarding against recomputing a receipt's amount
 from current billing settings. Layered on top of Phase 6's ledger approve/reject
-(`docs/payments.md`) and Phase 8's admin dashboard (`docs/admin-dashboard.md`) —
+(`docs/features/payments.md`) and Phase 8's admin dashboard (`docs/features/admin-dashboard.md`) —
 neither the Pay flow, the balance formula, nor settlement status changed; only what
 happens *at the moment of approval* did. See `CLAUDE.md`'s "Addition (2026-08-11):
 Receipt generation and approval workflow" for the confirmed decisions and the two
@@ -154,7 +154,7 @@ for why the fee type actually *is* knowable there, unlike Maintenance.
 ## Template customization — `GET`/`PATCH /api/admin/settings`
 
 `Society` gained new columns, editable via the existing settings endpoints
-(`docs/maintenance-records.md`'s "Admin settings" section covers the
+(`docs/features/maintenance-records.md`'s "Admin settings" section covers the
 pre-existing `tenantRateFactor`/`defaultBaseRate` pair; these are additive):
 
 | Field | Notes |
@@ -223,7 +223,7 @@ approved, the receipt reflects what was actually billed, not today's settings.
 
 The signature image is stored as a real file via the same `StorageAdapter`
 interface every other upload in this app uses (`src/lib/storage`,
-`docs/payments.md`'s "Storage adapter" section) — private, authenticated access
+`docs/features/payments.md`'s "Storage adapter" section) — private, authenticated access
 only, never a public path. `Society.receiptSignatureFileKey` stores only the
 adapter's opaque key (same "opaque key, not a browsable URL" contract as
 `LedgerEntry.fileUrl`), not the image bytes. `GET /api/admin/settings/signature`
@@ -463,7 +463,7 @@ tied to specific records).
 
 **Why Other Charges is different, and why this is safe to add now**: an Other
 Charges Deposit is always **full settlement** — partial payment was disallowed
-on 2026-08-20 (`docs/other-charges/`). That means at the moment a Deposit is
+on 2026-08-20 (`docs/features/other-charges/`). That means at the moment a Deposit is
 approved, every `OtherCharge` row currently open for that flat is, by
 definition, exactly what this Deposit just paid off. That determinism is what
 makes a real link possible without reintroducing the pre-pivot

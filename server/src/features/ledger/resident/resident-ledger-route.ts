@@ -24,7 +24,7 @@ const verifyProofSignature = verifyFileSignature([
 export const residentLedgerRouter = Router();
 
 residentLedgerRouter.get('/api/me/ledger', requireRole(['OWNER', 'TENANT']), getMyLedgerHandler);
-// docs/other-charges/ — Dashboard's 4 summary cards (Maintenance/Other Outstanding
+// docs/features/other-charges/ — Dashboard's 4 summary cards (Maintenance/Other Outstanding
 // + Total Outstanding) in one call.
 residentLedgerRouter.get('/api/me/balances', requireRole(['OWNER', 'TENANT']), getMyBalancesHandler);
 residentLedgerRouter.get(

@@ -4,7 +4,7 @@ Principle: build bottom-up — schema first, since nothing downstream compiles
 without it, then the backend modules, then the dashboard integration that reads
 from them, then the frontend that calls both. This is a simple, single-track
 dependency chain — no cross-pool balance integration to sequence around, unlike
-`docs/other-charges/`.
+`docs/features/other-charges/`.
 
 ## Suggested Build Order
 

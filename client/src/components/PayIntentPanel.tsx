@@ -18,7 +18,7 @@ export interface PaymentIntent {
   bankAccountNumber?: string;
   bankIfsc?: string;
   createdAt: string;
-  // docs/other-charges/ — which pool this intent is locked against. A resident has
+  // docs/features/other-charges/ — which pool this intent is locked against. A resident has
   // at most one open intent at a time, across BOTH pools — a page for the other
   // pool must check this before rendering Pay/this panel (see
   // ResidentDashboardOverview.tsx / OtherChargesBookPage.tsx).
@@ -39,7 +39,7 @@ export async function fetchOpenIntent(): Promise<PaymentIntent | null> {
 // shows a QR to scan with a phone and lets the resident attach the screenshot
 // whenever they're back, even in a later session (the intent is a real DB row, not
 // just component state). Shared by the Maintenance Dashboard and the Other Charges
-// Book page (docs/other-charges/) — there's only ever one intent, so both pages
+// Book page (docs/features/other-charges/) — there's only ever one intent, so both pages
 // query/render the same underlying row; `onSubmitted` lets each caller invalidate
 // its own ledger query on success without this component needing to know which one.
 export function PayIntentPanel({

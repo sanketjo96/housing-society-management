@@ -11,7 +11,7 @@ const CHARGES_CSV_TEMPLATE =
   'A,101,OTHER_CHARGE,Water Connection,1500,\n';
 
 // The "Charges" child page under the "Imports" submenu (DashboardLayout.tsx) — Phase
-// C of docs/society-onboarding/. Each CSV row is matched to an existing flat by
+// C of docs/features/society-onboarding/. Each CSV row is matched to an existing flat by
 // wing+flatNumber (import on the "Resident" page first) and branches on `pool`:
 // MAINTENANCE_OPENING_BALANCE creates a one-time pre-go-live arrears charge that
 // always settles before every real month; OTHER_CHARGE bills an ad-hoc one-time fee

@@ -249,7 +249,7 @@ describe('admin-dashboard service', () => {
       expect(summary.collectionRatePercent).toBe(44); // round(2400/5500*100)
     });
 
-    // docs/other-charges/ — a fully separate pool: billing an Other Charge must
+    // docs/features/other-charges/ — a fully separate pool: billing an Other Charge must
     // never move outstandingTotal (maintenance-only), and totalOutstandingTotal
     // must be exactly the sum of the two independently-computed pools.
     it('otherChargesOutstandingTotal/totalOutstandingTotal stay independent of the maintenance pool', async () => {

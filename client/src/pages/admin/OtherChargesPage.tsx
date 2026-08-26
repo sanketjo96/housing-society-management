@@ -90,7 +90,7 @@ const billFormSchema = z.object({
 type BillFormInput = z.input<typeof billFormSchema>;
 type BillFormValues = z.infer<typeof billFormSchema>;
 
-// One flat at a time — no bulk billing (docs/other-charges/, a confirmed scope
+// One flat at a time — no bulk billing (docs/features/other-charges/, a confirmed scope
 // decision). Same list<->form swap pattern as FlatsListPage.tsx.
 function BillChargeForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();

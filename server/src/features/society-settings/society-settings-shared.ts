@@ -85,7 +85,7 @@ export interface SocietySettings {
   tenantRateFactor: number;
   defaultBaseRate: number;
   // Receipt template customization (Receipt Generation & Approval Workflow,
-  // 2026-08-11) — see docs/receipts.md.
+  // 2026-08-11) — see docs/features/receipts.md.
   receiptNumberPrefix: string;
   receiptFooterNote: string | null;
   // Committee-member signatures (2026-08-17) — hasXSignature flags (not the raw

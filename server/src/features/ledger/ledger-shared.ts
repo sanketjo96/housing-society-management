@@ -107,7 +107,7 @@ function otherChargeYearFilter(year?: number) {
 // Dashboard (creating a payment intent, etc). Omitted = the original all-time
 // behavior, still used by admin-dashboard.service.ts's bulk per-flat calc.
 //
-// `category` (docs/other-charges/) — default MAINTENANCE, fully backward compatible
+// `category` (docs/features/other-charges/) — default MAINTENANCE, fully backward compatible
 // with every existing call site. When OTHER_CHARGE, the charge-row source switches
 // from MaintenanceRecord to OtherCharge and the LedgerEntry query is filtered to
 // matching-category rows — two fully independent pools, never combined into one

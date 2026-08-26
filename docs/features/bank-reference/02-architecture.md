@@ -33,7 +33,7 @@ model LedgerEntry {
   // layer (DB, submission, review) — must never block a Deposit from settling,
   // same "a broken decorative image must never block a financial transaction
   // from settling" precedent as the receipt signature fallback
-  // (docs/receipts.md). Meaningful for type=DEPOSIT rows only — a Credit is a
+  // (docs/features/receipts.md). Meaningful for type=DEPOSIT rows only — a Credit is a
   // non-cash committee-approved adjustment, no bank transaction ever occurs, so
   // this stays null on every Credit row. Every reconciliation/audit query must
   // filter `type='DEPOSIT' AND status='APPROVED'` — Deposit and Credit are

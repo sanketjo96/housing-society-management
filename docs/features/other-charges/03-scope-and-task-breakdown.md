@@ -78,7 +78,7 @@ escalation extension, per-charge due dates, CSV import — see
 ### Epic 7: Documentation & Tests
 | Task | Description | Effort |
 |---|---|---|
-| 7.1 | This `docs/other-charges/` folder (already complete) | — |
+| 7.1 | This `docs/features/other-charges/` folder (already complete) | — |
 | 7.2 | Backend tests: `fee-types.service.test.ts`, `other-charges.service.test.ts`, `ledger-shared.test.ts` additions, updated `admin-dashboard.service.test.ts`/`resident-ledger-service.test.ts` for the category-scoped flows and the cross-pool intent block | 2 hours |
 | 7.3 | Frontend tests: `FeeTypesPage.test.tsx`, `OtherChargesPage.test.tsx`, `OtherChargesBookPage.test.tsx`, updates to `PaymentProofsPage.test.tsx`/`ResidentDashboardOverview.test.tsx`/`AdminDashboardPage.test.tsx` for the new cards/columns | 2 hours |
 

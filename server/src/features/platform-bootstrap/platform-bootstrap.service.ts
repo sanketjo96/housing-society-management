@@ -1,4 +1,4 @@
-// Phase A of docs/society-onboarding/ — the one genuinely new mechanism that plan
+// Phase A of docs/features/society-onboarding/ — the one genuinely new mechanism that plan
 // adds. Every other bulk-import path in that plan is a thin wrapper around an
 // existing single-row service (createFlat, billOtherCharge,
 // recordSocietyLedgerEntry); this one has no such precedent, since nothing in this
@@ -24,7 +24,7 @@ export interface BootstrapSocietyResult {
 
 // societyId is generated inside the transaction — never accepted from the caller —
 // so this endpoint can only ever create a brand-new society, never reach into an
-// existing one (the vulnerability class docs/security-audit.md finding 9.1 fixed:
+// existing one (the vulnerability class docs/features/security-audit.md finding 9.1 fixed:
 // a client-supplied societyId letting an existing ADMIN reach another society's
 // data). The admin's password is a random, unusable value (bcrypt-hashed, same
 // convention as findOrCreateUserByEmail/createUser) — the account becomes usable

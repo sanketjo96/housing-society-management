@@ -1,35 +1,34 @@
-# Feature Track
+# Feature Status Tracker
 
-A single index of every feature/capability area in this app — what's built, what
-scope it covers, and what's still pending — cutting across `docs/` **by feature**,
-not by phase. This complements
-[`../task-status.md`](../task-status.md) (the phase-by-phase, task-numbered
-checklist) rather than replacing it: that file answers "which of the original
-11 phases/tasks are done," this one answers "for a given capability, is it live,
-and what's left." Status here is derived from `docs/task-status.md`, each
-feature's own doc set, and `git log`, verified at the time this file was
-last updated (2026-08-24) — re-check against those sources if this file looks stale.
+Detailed build/scope/pending status per feature, cutting across `docs/` **by
+feature**, not by phase. For a lightweight "what exists and where's its doc"
+view, see [`_index.md`](./_index.md) instead — that's the entry point; this
+file is for tracking what's still open. Complements
+[`../task-status.md`](../task-status.md) (the phase-by-phase checklist).
+Re-check against `git log` and each feature's own doc if this looks stale.
 
 ## Summary
 
 | Feature | Docs | Status | Notes |
 |---|---|---|---|
-| Auth & Access Control | [`auth.md`](../auth.md) | ✅ Implemented | Phase 2, complete |
-| Flat & Society Onboarding | [`flats.md`](../flats.md) | ✅ Implemented | Phase 3, complete incl. 2026-08-06 resident self-service redesign |
-| Maintenance Records | [`maintenance-records.md`](../maintenance-records.md) | ✅ Implemented | Phase 4, complete incl. arrears-billing fix |
-| Payments — Ledger, QR, Bank Transfer | [`payments.md`](../payments.md) | ✅ Implemented | Phase 6, complete through the 2026-08-20 final Credit removal (Deposit cap on Outstanding lifted instead) |
-| Admin Dashboard | [`admin-dashboard.md`](../admin-dashboard.md) | ✅ Implemented | Phase 8, complete incl. 2026-08-24 Outstanding card-group consolidation |
-| Receipts — Generation & Approval | [`receipts.md`](../receipts.md) | ✅ Implemented | 2026-08-11 addition, complete incl. Chairman/Secretary signing + Receipt Book |
-| Other Charges | [`other-charges/`](../other-charges/) | ✅ Implemented | 2026-08-19, updated 2026-08-21 (partial payment disallowed); 9 items explicitly deferred, see its own future-scope doc |
-| Manage Finance | [`manage-finance/`](../manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
-| Observability | [`observablity/`](../observablity/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
+| Auth & Access Control | [`auth.md`](./auth.md) | ✅ Implemented | Phase 2, complete |
+| Flat & Society Onboarding | [`flats.md`](./flats-and-residents.md) | ✅ Implemented | Phase 3, complete incl. 2026-08-06 resident self-service redesign |
+| Maintenance Records | [`maintenance-records.md`](./maintenance-records.md) | ✅ Implemented | Phase 4, complete incl. arrears-billing fix |
+| Payments — Ledger, QR, Bank Transfer | [`payments.md`](./payments.md) | ✅ Implemented | Phase 6, complete through the 2026-08-20 final Credit removal (Deposit cap on Outstanding lifted instead) |
+| Admin Dashboard | [`admin-dashboard.md`](./admin-dashboard.md) | ✅ Implemented | Phase 8, complete incl. 2026-08-24 Outstanding card-group consolidation |
+| Receipts — Generation & Approval | [`receipts.md`](./receipts.md) | ✅ Implemented | 2026-08-11 addition, complete incl. Chairman/Secretary signing + Receipt Book |
+| Other Charges | [`other-charges/`](./other-charges/) | ✅ Implemented | 2026-08-19, updated 2026-08-21 (partial payment disallowed); 9 items explicitly deferred, see its own future-scope doc |
+| Manage Finance | [`manage-finance/`](./manage-finance/) | ✅ Implemented | 2026-08-20; society-level income/expense ledger (`SocietyLedgerEntry`), fully separate from the resident-billing `LedgerEntry` — realizes the "Society-Level Income/Expense" idea below |
+| Observability | [`observability/`](./observability/) | 🟡 Partially implemented | Stage 1 only (logging); 6 further stages deferred |
 | Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Password-reset send confirmed live 2026-08-24 (`smi.techsanket.in` verified on Resend); the 3 per-event triggers now live in the shared pipeline below, not built separately here |
-| Notifications — Event-Driven (WhatsApp + Email) | [`notification/`](../notification/) | 🟡 Email live, WhatsApp switched off | 3 events × 2 channels; Email fully working since 2026-08-24; WhatsApp disabled via `WHATSAPP_ENABLED=false` (its access token expired — needs a permanent System User token, then Meta template approval) |
-| Security & Hardening Audit | [`security-audit.md`](../security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
-| Bank Reference Capture | [`bank-reference/`](../bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
-| Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](../society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
+| Notifications — Event-Driven (WhatsApp + Email) | [`notifications/`](./notifications/) | 🟡 Email live, WhatsApp switched off | 3 events × 2 channels; Email fully working since 2026-08-24; WhatsApp disabled via `WHATSAPP_ENABLED=false` (its access token expired — needs a permanent System User token, then Meta template approval) |
+| Security & Hardening Audit | [`security-audit.md`](./security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
+| Bank Reference Capture | [`bank-reference/`](./bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
+| Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](./society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
-| Society-Level Income/Expense | [`manage-finance/`](../manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
+| Society-Level Income/Expense | [`manage-finance/`](./manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
+| File Storage | [`file-storage.md`](./file-storage.md) | ✅ Implemented | 2026-08-26; local disk (default) or S3-compatible (Cloudflare R2), swappable via `STORAGE_PROVIDER`. Live deployment cut over to R2. Nightly backup job not yet built — see Production Deployment's Pending row |
+| Committee & Signatures | [`committee-and-signatures.md`](./committee-and-signatures.md) | ✅ Implemented | Chairman/Secretary/Treasurer roles + signature uploads; approving a Deposit now blocked (409) if neither Chairman nor Secretary has a signature configured (2026-08-26) |
 
 ## Auth & Access Control
 **Status**: ✅ Implemented (Phase 2, tasks 2.1–2.8, all complete).
@@ -125,7 +124,7 @@ total, not an editable field (2026-08-21; Maintenance is unaffected and still
 allows partial payment/overpayment per payments.md rule 6). The Pay control also
 moved from the Bills tab to the Payment History tab, same as Maintenance.
 **Pending** (all explicitly deferred, see
-[`other-charges/05-future-scope.md`](../other-charges/05-future-scope.md)):
+[`other-charges/05-future-scope.md`](./other-charges/05-future-scope.md)):
 bulk/multi-flat billing, tenant-as-payer, editing/voiding a charge, Other-Charges
 Credit, escalation extended to this pool, per-charge due dates, CSV import,
 default fee amounts, hard delete of a fee type. None have a confirmed trigger.
@@ -148,7 +147,7 @@ via `POST /api/admin/society-ledger/import` (Society Onboarding's Phase E,
 2026-08-21) reuses the same row-validator so the bulk and single-row paths
 can't drift apart.
 **Pending** (all explicitly deferred, see
-[`manage-finance/05-future-scope.md`](../manage-finance/05-future-scope.md)):
+[`manage-finance/05-future-scope.md`](./manage-finance/05-future-scope.md)):
 two-person approval workflow, category rename (currently `isActive`-toggle
 only), admin-configurable opening balance (so "Net" becomes a true running bank
 balance instead of "recorded since tracking began"), CSV export,
@@ -160,7 +159,7 @@ recurring/scheduled expenses. None have a confirmed trigger.
 **Scope implemented**: structured logging via Pino, request logging, crash
 capture.
 **Pending** (see
-[`observablity/06-future-scope.md`](../observablity/06-future-scope.md)):
+[`observability/06-future-scope.md`](./observability/06-future-scope.md)):
 request correlation across features, centralized log aggregation (Grafana
 Loki), metrics (Prometheus + Grafana), distributed tracing (OpenTelemetry +
 Tempo), dashboards & on-call alerting, multi-tenant observability. No stage has
@@ -215,7 +214,7 @@ channel's retry/failure never blocks the other. No schema migration was
 needed for Email: `NotificationChannel`'s `EMAIL` value has existed, unused,
 since before `WHATSAPP` was even added. Business features (Billing/Ledger/
 Maintenance) needed zero changes to gain the Email channel — they still only
-ever call `notify(event)`. Full mechanism: `docs/notification/architecture.md`'s
+ever call `notify(event)`. Full mechanism: `docs/features/notifications/architecture.md`'s
 2026-08-24 note.
 **Pending**: WhatsApp is currently switched off entirely via
 `WHATSAPP_ENABLED=false` (2026-08-24, same day) — checking template approval
@@ -226,13 +225,13 @@ template approval even mattered. The flag stops both new WHATSAPP-channel
 rows being queued and the sweep from retrying already-queued ones, without
 affecting Email. Re-enable once a real System User token is generated and set
 in `.env`/`docker-compose.yml` — at that point Meta template approval
-(`notification/requirements.md` §5) becomes the next thing to verify.
+(`notifications/requirements.md` §5) becomes the next thing to verify.
 **Pending**: real sends do not work yet — each event's Meta message template
 needs to be submitted and approved by Meta, an account-specific external step
-this environment can't perform (`notification/requirements.md` §5). Until
+this environment can't perform (`notifications/requirements.md` §5). Until
 approved, the delivery sweep marks queued notifications `FAILED` with that
 exact reason; this does not block any other part of the app.
-[`See notification/ for the full architecture and event contracts`](../notification/)
+[`See notifications/ for the full architecture and event contracts`](./notifications/)
 
 ## Security & Hardening Audit
 **Status**: ✅ Implemented (Phase 9, tasks 9.1–9.5, all complete — a one-time
@@ -242,20 +241,20 @@ cross-tenant bug), auth rate limiting, `express-async-errors` (fixed a
 process-crashing gap), audit-trail verification (found + fixed a gap in monthly
 generation), file-upload magic-byte verification (fixed a spoofable
 Content-Type gap).
-**Pending**: none known — see [`security-audit.md`](../security-audit.md) for
+**Pending**: none known — see [`security-audit.md`](./security-audit.md) for
 full findings; a future audit pass would need its own task, not tracked here as
 pending.
 
 ## Bank Reference Capture
 **Status**: ⬜ Documented, not implemented — design complete, zero code written.
 **Scope implemented**: none. Full design exists in
-[`bank-reference/`](../bank-reference/) (requirements, architecture, task
+[`bank-reference/`](./bank-reference/) (requirements, architecture, task
 breakdown, roadmap, future scope) — OCR-assisted capture of a bank/UPI
 transaction reference on Deposit submission, server-computed provenance,
 admin-visible (not re-typed) at approval.
 **Pending**: all 7 epics — schema, OCR engine, resident submission flow, admin
 paths, resident/admin frontend surfaces, tests (~14 hours estimated, see
-[`bank-reference/03-scope-and-task-breakdown.md`](../bank-reference/03-scope-and-task-breakdown.md)).
+[`bank-reference/03-scope-and-task-breakdown.md`](./bank-reference/03-scope-and-task-breakdown.md)).
 
 ## Society Onboarding — Bootstrap & Bulk Import
 **Status**: ✅ Implemented (2026-08-21, all three phases from the original
@@ -281,7 +280,7 @@ already-shipped Resident roster import, relocated here from
 `/imports/residents`, `/imports/charges`, `/imports/finance` — sharing one
 frontend component (`CsvImportPanel.tsx`).
 **Pending**: none of the original scope — see
-[`society-onboarding/01-requirements.md`](../society-onboarding/01-requirements.md)'s
+[`society-onboarding/01-requirements.md`](./society-onboarding/01-requirements.md)'s
 "Explicitly Out of Scope (v1)" for what was deliberately deferred (a self-serve
 wizard, a real `SinkingFund` model, bulk import of catalog rows, multi-society
 admin UX).
@@ -308,8 +307,29 @@ This entry originally tracked the idea before it had a name or a doc folder —
 surfaced during the same financial-audit-readiness review that produced
 `bank-reference/`. `bank-reference/05-future-scope.md` item 2 still describes it
 as a future, undesigned item; that reference is now stale — see
-[`manage-finance/`](../manage-finance/) for the real, built feature (a
+[`manage-finance/`](./manage-finance/) for the real, built feature (a
 `SocietyLedgerEntry` model, independent of `Flat`, deliberately separate from
 the flat-scoped `LedgerEntry`). Row kept here for history rather than deleted.
 **Pending**: nothing under this name — see Manage Finance's own Pending list
 above for what's still deferred within that feature.
+
+## File Storage
+**Status**: ✅ Implemented (2026-08-26).
+**Scope implemented**: `S3StorageAdapter` (Cloudflare R2, S3-compatible)
+alongside the existing `LocalStorageAdapter`, swappable via
+`STORAGE_PROVIDER`. One-time migration script moved existing local files to
+R2 preserving their keys — live deployment cut over, 8/8 files migrated and
+read-verified.
+**Pending**: nightly backup job (Postgres dump + uploads archive → a separate
+R2 bucket) — see `docs/decisions/0005-storage-provider-r2.md` for the plan.
+No confirmed build date yet.
+
+## Committee & Signatures
+**Status**: ✅ Implemented, including a 2026-08-26 approval gate.
+**Scope implemented**: Chairman/Secretary/Treasurer role assignment,
+per-role signature image upload, dual Chairman+Secretary signing on issued
+receipts (2026-08-17). New 2026-08-26: approving a Deposit is blocked (409)
+while neither Chairman nor Secretary has a signature configured — a receipt
+is issued at approval time, and a fully blank signatory block isn't
+acceptable output.
+**Pending**: none known.

@@ -157,7 +157,7 @@ describe('AdminDashboardPage', () => {
     expect(link).toHaveAttribute('href', '/flat-dues');
   });
 
-  // docs/other-charges/ — a fully separate pool: its own card, plus a Total that
+  // docs/features/other-charges/ — a fully separate pool: its own card, plus a Total that
   // combines both, never displayed as the same figure as maintenance alone.
   it('shows the Other Charges Outstanding and Total Outstanding cards, independent of the maintenance figure', async () => {
     mockFetch();
