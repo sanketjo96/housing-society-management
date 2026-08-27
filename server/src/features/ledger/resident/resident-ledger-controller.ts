@@ -1,6 +1,11 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { ledgerAmountSchema, ledgerYearQuerySchema } from './resident-ledger-schemas';
+import {
+  balancesQuerySchema,
+  ledgerAmountSchema,
+  ledgerYearQuerySchema,
+  submitPaymentIntentSchema,
+} from './resident-ledger-schemas';
 import { getMyFlat } from '../../flats/resident/resident-flats-service';
 import {
   cancelPaymentIntent,
@@ -65,6 +70,12 @@ export async function getMyBalancesHandler(req: Request, res: Response) {
     return;
   }
 
+  const parsedQuery = balancesQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsedQuery.error.flatten() });
+    return;
+  }
+
   const flatId = await resolveMyFlatId(
     req.user.id,
     req.user.societyId,
@@ -75,7 +86,7 @@ export async function getMyBalancesHandler(req: Request, res: Response) {
     return;
   }
 
-  const balances = await getResidentBalancesSummary(flatId);
+  const balances = await getResidentBalancesSummary(flatId, parsedQuery.data.year);
   res.status(200).json(balances);
 }
 
@@ -173,6 +184,12 @@ export async function submitPaymentIntentHandler(req: Request, res: Response) {
     return;
   }
 
+  const parsed = submitPaymentIntentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
   try {
     const entry = await submitPaymentIntent(
       flatId,
@@ -184,6 +201,7 @@ export async function submitPaymentIntentHandler(req: Request, res: Response) {
         mimeType: req.file.mimetype,
         extension: path.extname(req.file.originalname),
       },
+      parsed.data.note,
     );
     res.status(201).json(entry);
   } catch (err) {

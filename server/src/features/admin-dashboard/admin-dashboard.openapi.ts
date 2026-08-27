@@ -6,7 +6,18 @@ export {};
  * /api/admin/dashboard/summary:
  *   get:
  *     tags: [Dashboard (Admin)]
- *     summary: Society-wide, all-time collection summary
+ *     summary: Society-wide collection summary, all-time or scoped to one calendar year
+ *     description: >
+ *       `year`, when given, scopes every money figure below (billed/paid/outstanding
+ *       amounts and the society income/expense/net) to that calendar year. Flat/owner/
+ *       tenant counts are a separate endpoint (/flat-dues) entirely unaffected by this
+ *       param. `availableYears` is always the full lifetime set regardless of `year`.
+ *     parameters:
+ *       - name: year
+ *         in: query
+ *         required: false
+ *         schema: { type: integer }
+ *         description: Scope every total to one calendar year; omit for all-time (the default).
  *     responses:
  *       200:
  *         description: OK.
@@ -15,11 +26,18 @@ export {};
  *             schema:
  *               type: object
  *               properties:
- *                 totalBilled: { type: number, description: Sum of every MaintenanceRecord.amount ever generated. }
- *                 totalPaid: { type: number, description: Sum of approved Deposits, society-wide. }
- *                 outstandingTotal: { type: number, description: Sum of each flat's own Outstanding. }
- *                 pendingReviewTotal: { type: number, description: Sum of amounts on still-PENDING Deposits. }
- *                 collectionRatePercent: { type: number, description: 'round(totalPaid / totalBilled * 100).' }
+ *                 totalBilled: { type: number, description: Sum of every MaintenanceRecord.amount, in-scope. }
+ *                 totalPaid: { type: number, description: Sum of approved Deposits, society-wide, in-scope. }
+ *                 outstandingTotal: { type: number, description: Sum of each flat's own Outstanding, in-scope. }
+ *                 pendingReviewTotal: { type: number, description: Sum of amounts on still-PENDING Deposits, in-scope. }
+ *                 collectionRatePercent: { type: number, description: 'round(totalPaid / totalBilled * 100), in-scope.' }
+ *                 otherChargesOutstandingTotal: { type: number }
+ *                 totalOutstandingTotal: { type: number }
+ *                 societyTotalIncome: { type: number }
+ *                 societyTotalExpense: { type: number }
+ *                 societyNetPosition: { type: number }
+ *                 availableYears: { type: array, items: { type: integer }, description: Every year with at least one charge, Deposit, or SocietyLedgerEntry, society-wide — always lifetime. }
+ *       400: { description: Invalid year, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */

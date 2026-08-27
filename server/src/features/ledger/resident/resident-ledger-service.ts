@@ -59,6 +59,10 @@ export interface LedgerRow {
   amount: number;
   status: 'APPROVED' | ProofStatus;
   note?: string | null;
+  // Only meaningful on a REJECTED DEPOSIT row — the admin's reason (rule 7 in
+  // ledger-shared.ts's neighbors), distinct from `note` above (the resident's
+  // own submitted reason).
+  adminNote?: string | null;
   // Only set on SYSTEM/OTHER_CHARGE rows — the derived per-record settlement.
   settledAmount?: number;
   settlementStatus?: RecordSettlementStatus;
@@ -182,6 +186,7 @@ export async function getLedgerForResident(
     amount: Number(e.amount),
     status: e.status,
     note: e.note,
+    adminNote: e.adminNote,
     hasReceipt: !!e.receipt,
   }));
 
@@ -196,19 +201,46 @@ export interface ResidentBalancesSummary {
   maintenance: FlatBalances;
   otherCharges: FlatBalances;
   totalOutstanding: number;
+  // Every year with at least one charge or Deposit, either pool — powers the
+  // Dashboard's year dropdown. Always the full lifetime set, regardless of
+  // whichever `year` was passed to filter the balances above.
+  availableYears: number[];
+}
+
+// Minimal-field query, both pools — just enough to derive a distinct year set,
+// not full balance computation.
+async function getResidentAvailableYears(flatId: string): Promise<number[]> {
+  const [records, otherCharges, entries] = await Promise.all([
+    prisma.maintenanceRecord.findMany({ where: { flatId }, select: { period: true } }),
+    prisma.otherCharge.findMany({ where: { flatId }, select: { dueDate: true } }),
+    prisma.ledgerEntry.findMany({ where: { flatId }, select: { createdAt: true } }),
+  ]);
+  const years = new Set<number>();
+  for (const r of records) years.add(Number(r.period.slice(0, 4)));
+  for (const c of otherCharges) years.add(c.dueDate.getFullYear());
+  for (const e of entries) years.add(e.createdAt.getFullYear());
+  return [...years].sort((a, b) => b - a);
 }
 
 // Powers the Dashboard's 4 summary cards in one cheap call — not built on
 // getLedgerForResident, which computes far more than these 2 numbers need.
-export async function getResidentBalancesSummary(flatId: string): Promise<ResidentBalancesSummary> {
-  const [maintenance, otherCharges] = await Promise.all([
-    computeFlatBalances(flatId),
-    computeFlatBalances(flatId, undefined, 'OTHER_CHARGE'),
+// `year`, when given, scopes maintenance/otherCharges/totalOutstanding to that
+// calendar year — a Dashboard-only view; the Passbook's own lifetime Outstanding
+// (what a payment intent actually locks against) is untouched by this.
+export async function getResidentBalancesSummary(
+  flatId: string,
+  year?: number,
+): Promise<ResidentBalancesSummary> {
+  const [maintenance, otherCharges, availableYears] = await Promise.all([
+    computeFlatBalances(flatId, year),
+    computeFlatBalances(flatId, year, 'OTHER_CHARGE'),
+    getResidentAvailableYears(flatId),
   ]);
   return {
     maintenance,
     otherCharges,
     totalOutstanding: maintenance.outstanding + otherCharges.outstanding,
+    availableYears,
   };
 }
 
@@ -322,6 +354,9 @@ export async function submitPaymentIntent(
   societyId: string,
   role: 'OWNER' | 'TENANT',
   file: ProofFileInput,
+  // Resident's optional freeform reason — falls back to the default status note
+  // when omitted or blank.
+  note?: string,
 ): Promise<unknown> {
   const intent = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
   if (!intent) throw new NoOpenPaymentIntentError();
@@ -339,7 +374,7 @@ export async function submitPaymentIntent(
         payerId,
         status: 'PENDING',
         amount: intent.amount,
-        note: 'UPI payment - awaiting review',
+        note: note && note.length > 0 ? note : 'UPI payment - awaiting review',
         fileUrl: saved.key,
         mimeType: file.mimeType,
         createdById: payerId,

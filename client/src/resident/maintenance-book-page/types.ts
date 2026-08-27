@@ -17,6 +17,10 @@ export interface DepositRow {
   amount: number;
   status: ApprovalStatus;
   hasReceipt: boolean;
+  // The resident's own submitted reason, if any (bank-reference/pay-modal note).
+  note?: string | null;
+  // The admin's rejection reason — only meaningful when status is 'REJECTED'.
+  adminNote?: string | null;
 }
 
 export interface LedgerResponse {
@@ -30,6 +34,8 @@ export interface LedgerResponse {
     settledAmount?: number;
     settlementStatus?: SettlementStatus;
     hasReceipt?: boolean;
+    note?: string | null;
+    adminNote?: string | null;
   }[];
   totals: { totalCharges: number; outstanding: number };
 }
@@ -37,7 +43,6 @@ export interface LedgerResponse {
 export interface MaintenanceBookData {
   chargeRows: MaintenanceRow[];
   depositRows: DepositRow[];
-  totalMaintenanceAmount: number;
   outstanding: number;
 }
 

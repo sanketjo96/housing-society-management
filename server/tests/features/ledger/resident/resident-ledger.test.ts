@@ -122,6 +122,29 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
       expect(res.body.totals.totalCharges).toBe(1000);
       expect(res.body.entries.some((e: { type: string }) => e.type === 'SYSTEM')).toBe(true);
     });
+
+    it("surfaces the admin's rejection reason on a REJECTED DEPOSIT row, distinct from the resident's own note", async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '75')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(created.status).toBe(201);
+
+      const rejected = await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/reject`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Screenshot does not match the amount' });
+      expect(rejected.status).toBe(200);
+
+      const res = await request(app)
+        .get('/api/me/ledger')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const row = res.body.entries.find((e: { id: string }) => e.id === created.body.id);
+      expect(row).toBeDefined();
+      expect(row.status).toBe('REJECTED');
+      expect(row.adminNote).toBe('Screenshot does not match the amount');
+    });
   });
 
   describe('payment intent endpoints', () => {
@@ -188,6 +211,50 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .get('/api/me/ledger/deposits/intent')
         .set('Authorization', `Bearer ${ownerToken}`);
       expect(fetched.body.intent).toBeNull();
+    });
+
+    it('submit stores the resident-provided optional note as the entry note', async () => {
+      await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 500 });
+
+      const submitted = await request(app)
+        .post('/api/me/ledger/deposits/intent/submit')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('note', 'Paying August + September together')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(submitted.status).toBe(201);
+      expect(submitted.body.note).toBe('Paying August + September together');
+    });
+
+    it('submit falls back to the default note when none is provided', async () => {
+      await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 500 });
+
+      const submitted = await request(app)
+        .post('/api/me/ledger/deposits/intent/submit')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(submitted.status).toBe(201);
+      expect(submitted.body.note).toBe('UPI payment - awaiting review');
+    });
+
+    it('submit treats a whitespace-only note the same as no note', async () => {
+      await request(app)
+        .post('/api/me/ledger/deposits/intent')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ amount: 500 });
+
+      const submitted = await request(app)
+        .post('/api/me/ledger/deposits/intent/submit')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('note', '   ')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+      expect(submitted.status).toBe(201);
+      expect(submitted.body.note).toBe('UPI payment - awaiting review');
     });
 
     it('DELETE cancels an open intent', async () => {
@@ -269,6 +336,56 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .get(`/api/ledger-entries/${uploaded.body.id}/file`)
         .set('Authorization', `Bearer ${otherOwnerToken}`);
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('GET /api/me/balances', () => {
+    it('returns lifetime maintenance/otherCharges/totalOutstanding, and availableYears', async () => {
+      const res = await request(app)
+        .get('/api/me/balances')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.maintenance.outstanding).toBe(1000); // the 2026-01 record from beforeAll
+      expect(res.body.otherCharges.outstanding).toBe(0);
+      expect(res.body.totalOutstanding).toBe(1000);
+      expect(res.body.availableYears).toContain(2026);
+    });
+
+    it('scopes maintenance outstanding to the given year; lifetime and availableYears see the full set', async () => {
+      const flat = await prisma.flat.findUniqueOrThrow({ where: { id: flatId } });
+      await prisma.maintenanceRecord.create({
+        data: {
+          flatId,
+          period: '2025-06',
+          payerType: 'OWNER',
+          amount: 500,
+          dueDate: new Date('2025-06-15'),
+          payerId: flat.ownerId,
+        },
+      });
+
+      const res2025 = await request(app)
+        .get('/api/me/balances?year=2025')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res2025.body.maintenance.outstanding).toBe(500);
+
+      const res2026 = await request(app)
+        .get('/api/me/balances?year=2026')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res2026.body.maintenance.outstanding).toBe(1000); // unaffected by the 2025 record
+
+      const resAll = await request(app)
+        .get('/api/me/balances')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(resAll.body.maintenance.outstanding).toBe(1500); // lifetime sum, both years
+      expect([...resAll.body.availableYears].sort()).toEqual([2025, 2026]);
+    });
+
+    it('rejects a non-numeric year (400)', async () => {
+      const res = await request(app)
+        .get('/api/me/balances?year=notanumber')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(400);
     });
   });
 });

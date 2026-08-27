@@ -13,6 +13,7 @@ export interface DashboardSummary {
   societyTotalIncome: number;
   societyTotalExpense: number;
   societyNetPosition: number;
+  availableYears: number[];
 }
 
 export interface FlatDues {

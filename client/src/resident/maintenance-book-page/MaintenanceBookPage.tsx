@@ -9,6 +9,7 @@ import {
   ApprovalBadge,
   type ApprovalStatus,
   dateLabel,
+  DepositNoteCell,
   ReceiptDownloadButton,
   SummaryCard,
 } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
@@ -50,11 +51,12 @@ async function fetchMaintenanceBook(): Promise<MaintenanceBookData> {
       amount: e.amount,
       status: (e.status ?? 'PENDING') as ApprovalStatus,
       hasReceipt: e.hasReceipt ?? false,
+      note: e.note,
+      adminNote: e.adminNote,
     }));
   return {
     chargeRows,
     depositRows,
-    totalMaintenanceAmount: body.totals.totalCharges,
     outstanding: body.totals.outstanding,
   };
 }
@@ -131,6 +133,13 @@ const depositColumns: ColumnDef<DepositRow, unknown>[] = [
     header: 'Status',
     meta: { align: 'right' },
     cell: ({ row }) => <ApprovalBadge status={row.original.status} />,
+  },
+  {
+    id: 'note',
+    header: 'Note',
+    cell: ({ row }) => (
+      <DepositNoteCell note={row.original.note} adminNote={row.original.adminNote} status={row.original.status} />
+    ),
   },
   {
     id: 'receipt',
@@ -264,8 +273,7 @@ export function MaintenanceBookPage() {
 
       {data && (
         <>
-          <div className="mb-5 grid grid-cols-2 gap-4">
-            <SummaryCard label="Total maintenance amount" value={data.totalMaintenanceAmount} />
+          <div className="mb-5">
             <SummaryCard
               label="Maintenance Outstanding"
               value={outstanding}

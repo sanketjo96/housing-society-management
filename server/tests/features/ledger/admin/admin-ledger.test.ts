@@ -5,6 +5,7 @@ import { prisma } from '../../../../src/infrastructure/prisma/client';
 import { createUser } from '../../../../src/features/users/admin/admin-users-service';
 import { createFlat } from '../../../../src/features/flats/admin/admin-flats-onboarding-service';
 import { login } from '../../../../src/features/auth/auth.service';
+import { manualDeposit } from '../../../../src/features/ledger/admin/admin-ledger-service';
 import { TINY_JPEG_BYTES } from '../../../fixtures/tiny-files';
 
 describe('/api/admin/ledger-entries*', () => {
@@ -282,6 +283,46 @@ describe('/api/admin/ledger-entries*', () => {
         .send({ bankReference: 'UTR-SECOND-2' });
       expect(res.status).toBe(409);
     });
+  });
+
+  describe('POST /api/admin/ledger-entries/:id/infer-bank-reference', () => {
+    it('rejects a non-admin token (403)', async () => {
+      const res = await request(app)
+        .post('/api/admin/ledger-entries/does-not-exist/infer-bank-reference')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('404s for an unknown entry', async () => {
+      const res = await request(app)
+        .post('/api/admin/ledger-entries/does-not-exist/infer-bank-reference')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('returns bankReference: null, not an error, for an entry with no proof file', async () => {
+      const manual = await manualDeposit(societyId, ownerId, flatId, 25);
+
+      const res = await request(app)
+        .post(`/api/admin/ledger-entries/${manual!.id}/infer-bank-reference`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ bankReference: null });
+    });
+
+    it('returns bankReference: null, not an error, when the proof image has no readable text', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '50')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+
+      const res = await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/infer-bank-reference`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ bankReference: null });
+    }, 20000);
   });
 
   describe('GET /api/admin/ledger-entries/:id/receipt-preview', () => {

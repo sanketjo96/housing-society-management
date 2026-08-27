@@ -86,6 +86,38 @@ export {};
 
 /**
  * @openapi
+ * /api/admin/ledger-entries/{id}/infer-bank-reference:
+ *   post:
+ *     tags: [Ledger (Admin)]
+ *     summary: OCR-infer a bank/UPI reference from the entry's own proof screenshot
+ *     description: >
+ *       Read-only assist for the /approve text box — runs self-hosted OCR (tesseract.js)
+ *       against the resident's already-uploaded proof image and applies regex heuristics
+ *       to pull out a transaction reference. Never writes bankReference itself; the admin
+ *       still reviews/edits and confirms via /approve. Always 200, even when nothing is
+ *       found (no proof, a PDF proof, or an OCR pass that finds no reference) — OCR assist
+ *       must never block the admin from typing the reference manually.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: OK — bankReference is null when nothing could be inferred.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 bankReference: { type: string, nullable: true }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: No such entry., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+
+/**
+ * @openapi
  * /api/admin/ledger-entries/{id}/reject:
  *   post:
  *     tags: [Ledger (Admin)]

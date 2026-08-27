@@ -138,6 +138,7 @@ describe('GET /api/admin/receipts', () => {
     expect(receipt.ledgerEntry.flat.wing).toBe('R');
     expect(receipt.ledgerEntry.flat.flatNumber).toBe('201');
     expect(receipt.ledgerEntry.payer.email).toBe(ownerEmail);
+    expect(receipt.ledgerEntry.bankReference).toBe('UTR-RECEIPT-LIST-1');
   });
 
   it('does not include a manually recorded deposit for a different society', async () => {

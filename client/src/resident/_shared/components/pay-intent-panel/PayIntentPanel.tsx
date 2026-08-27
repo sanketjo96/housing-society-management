@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { ErrorBanner } from '../../../../components/form-field/FormField';
 import { FileUploadField } from '../../../../components/file-upload-field/FileUploadField';
 import { authedFetch } from '../../../../lib/api';
@@ -45,6 +45,11 @@ export function PayIntentPanel({
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
+  const [note, setNote] = useState('');
+  // 'MAINTENANCE' is the plain, existing workflow — no note field. 'EXPENSE' is
+  // for a resident-fronted expense they want settled against maintenance, which
+  // needs the committee's sign-off — it gets the note field plus a clear warning.
+  const [paymentType, setPaymentType] = useState<'MAINTENANCE' | 'EXPENSE'>('MAINTENANCE');
 
   // Re-check the intent when the tab regains visibility (e.g. after a UPI app redirect).
   useEffect(() => {
@@ -61,6 +66,7 @@ export function PayIntentPanel({
     mutationFn: async () => {
       const formData = new FormData();
       if (file) formData.append('file', file);
+      if (paymentType === 'EXPENSE' && note.trim()) formData.append('note', note.trim());
       const res = await authedFetch('/api/me/ledger/deposits/intent/submit', { method: 'POST', body: formData });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not submit your payment.');
@@ -69,6 +75,8 @@ export function PayIntentPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
       setFile(null);
+      setNote('');
+      setPaymentType('MAINTENANCE');
       onSubmitted?.();
     },
   });
@@ -112,9 +120,60 @@ export function PayIntentPanel({
               : 'Scan the QR with a UPI app on your phone. Once you have a screenshot, attach it below — you can come back later if needed.'}
         </p>
 
+        {/* Maintenance-specific wording — Other Charges keeps the plain, radio-less
+            workflow untouched. */}
+        {intent.category === 'MAINTENANCE' && (
+          <div className="mb-2.5 flex flex-col gap-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+              <input
+                type="radio"
+                name="pay-intent-payment-type"
+                value="MAINTENANCE"
+                checked={paymentType === 'MAINTENANCE'}
+                onChange={() => {
+                  setPaymentType('MAINTENANCE');
+                  setNote('');
+                }}
+              />
+              Maintenance Payment
+            </label>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+              <input
+                type="radio"
+                name="pay-intent-payment-type"
+                value="EXPENSE"
+                checked={paymentType === 'EXPENSE'}
+                onChange={() => setPaymentType('EXPENSE')}
+              />
+              Expense to settle against maintenance
+            </label>
+          </div>
+        )}
+
         <div className="mb-2.5">
           <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach payment screenshot" />
         </div>
+
+        {intent.category === 'MAINTENANCE' && paymentType === 'EXPENSE' && (
+          <div className="mb-2.5">
+            <p className="mb-1.5 flex items-start gap-1.5 text-xs text-brass">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              Make sure you discuss this expense with the committee — the committee can reject this payment.
+            </p>
+            <label htmlFor="pay-intent-note" className="mb-1 block text-xs font-semibold text-ink">
+              Reason (optional)
+            </label>
+            <textarea
+              id="pay-intent-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="e.g. Paying August + September together"
+              className="w-full rounded-md border border-line px-2 py-1.5 text-sm"
+            />
+          </div>
+        )}
 
         {submitMutation.error && <ErrorBanner>{submitMutation.error.message}</ErrorBanner>}
 

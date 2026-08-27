@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
@@ -22,13 +23,22 @@ const baseBalances = {
   maintenance: { outstanding: 2200, availableCredit: 0 },
   otherCharges: { outstanding: 800 },
   totalOutstanding: 3000,
+  availableYears: [2026, 2025],
+};
+
+const balances2025 = {
+  maintenance: { outstanding: 400, availableCredit: 0 },
+  otherCharges: { outstanding: 100 },
+  totalOutstanding: 500,
+  availableYears: [2026, 2025],
 };
 
 function mockFetch(balances: unknown = baseBalances) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/api/me/balances')) {
-      return Promise.resolve({ ok: true, json: async () => balances });
+      const body = url.includes('year=2025') ? balances2025 : balances;
+      return Promise.resolve({ ok: true, json: async () => body });
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
@@ -98,7 +108,12 @@ describe('ResidentDashboardOverview', () => {
   });
 
   it('shows "Nothing outstanding right now" when totalOutstanding is 0', async () => {
-    mockFetch({ maintenance: { outstanding: 0, availableCredit: 0 }, otherCharges: { outstanding: 0 }, totalOutstanding: 0 });
+    mockFetch({
+      maintenance: { outstanding: 0, availableCredit: 0 },
+      otherCharges: { outstanding: 0 },
+      totalOutstanding: 0,
+      availableYears: [],
+    });
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
@@ -110,6 +125,53 @@ describe('ResidentDashboardOverview', () => {
 
     await waitFor(() => expect(screen.getByText(/^total outstanding$/i)).toBeInTheDocument());
     expect(screen.queryByText(/nothing outstanding right now/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a Year dropdown defaulting to "All", listing availableYears', async () => {
+    mockFetch();
+    renderPage();
+
+    const select = await screen.findByLabelText('Year');
+    expect(select).toHaveValue('ALL');
+    expect(within(select).getByRole('option', { name: 'All' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: '2026' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: '2025' })).toBeInTheDocument();
+  });
+
+  it('selecting a year re-fetches balances scoped to that year and updates the cards', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('₹3,000')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Year'), '2025');
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/me/balances?year=2025'),
+        expect.anything(),
+      );
+    });
+    await waitFor(() => expect(screen.getByText('₹500')).toBeInTheDocument());
+    expect(screen.queryByText('₹3,000')).not.toBeInTheDocument();
+  });
+
+  it('switching back to "All" re-fetches lifetime balances with no year param', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('₹3,000')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Year'), '2025');
+    await waitFor(() => expect(screen.getByText('₹500')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Year'), 'All');
+    await waitFor(() => expect(screen.getByText('₹3,000')).toBeInTheDocument());
+
+    const balancesCalls = (fetch as unknown as FetchMock).mock.calls
+      .map((c: unknown[]) => c[0] as string)
+      .filter((url: string) => url.includes('/api/me/balances'));
+    expect(balancesCalls.some((url: string) => !url.includes('year='))).toBe(true);
   });
 
   it('shows an error state when the balances request fails', async () => {

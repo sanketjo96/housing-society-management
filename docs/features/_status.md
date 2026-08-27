@@ -23,7 +23,7 @@ Re-check against `git log` and each feature's own doc if this looks stale.
 | Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Password-reset send confirmed live 2026-08-24 (`smi.techsanket.in` verified on Resend); the 3 per-event triggers now live in the shared pipeline below, not built separately here |
 | Notifications — Event-Driven (WhatsApp + Email) | [`notifications/`](./notifications/) | 🟡 Email live, WhatsApp switched off | 3 events × 2 channels; Email fully working since 2026-08-24; WhatsApp disabled via `WHATSAPP_ENABLED=false` (its access token expired — needs a permanent System User token, then Meta template approval) |
 | Security & Hardening Audit | [`security-audit.md`](./security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
-| Bank Reference Capture | [`bank-reference/`](./bank-reference/) | 🟡 Phase 1 implemented | 2026-08-27; admin types `bankReference` at approval (mandatory), built in reverse order from the original OCR-first design — see the doc's status note |
+| Bank Reference Capture | [`bank-reference/`](./bank-reference/) | 🟡 Phase 1 + partial Phase 2 | 2026-08-27; admin types `bankReference` at approval (mandatory); admin-side OCR "Infer from proof" added same day plus Receipt Book's bank-reference column — see the doc's status note |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](./society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
 | Society-Level Income/Expense | [`manage-finance/`](./manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
@@ -67,7 +67,23 @@ Credit automatically, with no separate Credit request/review path anymore) →
 admin approve/reject → manual mark-paid fallback → derived per-record settlement
 status for Maintenance Book/escalation. The Pay control (amount/QR/bank-transfer
 intent) moved from the Bills tab to the Payment History tab (2026-08-21),
-directly above the deposit list it feeds.
+directly above the deposit list it feeds. 2026-08-27: the Maintenance-pool
+`PayIntentPanel` (shared with Other Charges, which is unaffected) gained a
+"Maintenance Payment" / "Expense to settle against maintenance" radio choice —
+the former is the plain existing workflow (screenshot only, no note field);
+the latter reveals the optional reason note field plus a committee-approval
+warning ("Make sure you discuss this expense with the committee — the
+committee can reject this payment."). Purely a client-side UI gate — the note
+still rides the same `POST /api/me/ledger/deposits/intent/submit` `note`
+field built earlier the same day; no new backend field or LedgerEntry status,
+since rejection is already the existing admin reject path. Same day,
+follow-up: both book pages' Payment History table gained a "Note" column
+(`DepositNoteCell`, shared in `LedgerEntryDisplay.tsx`) — shows the resident's
+own submitted `note` when present, and for a REJECTED row, the admin's
+`adminNote` (rejection reason) instead/alongside, prefixed "Rejected: ".
+`LedgerRow.adminNote` (`resident-ledger-service.ts`) is new — `note` already
+existed on the type but was computed and returned, just never rendered
+anywhere on the resident side.
 **Pending**: no bank/UPI transaction reference captured on a Deposit — this is
 exactly the gap `bank-reference/` (below) is designed to close, not yet built.
 
@@ -87,7 +103,27 @@ Society (owners/flats/tenants counts). "Mark as Paid" is its own page/route
 reached only via its dashboard tile, not the sidebar (2026-08-20). The
 flat-wise-dues drill-down (`/flat-dues`) lists every owner rather than only
 those with a balance, with a Credit column and an explicit "Settled" indicator
-when both Outstanding and Credit are zero (2026-08-24).
+when both Outstanding and Credit are zero (2026-08-24). A Year dropdown
+(2026-08-27) scopes the Finance and Outstanding card groups to one calendar
+year or "All" (lifetime, the default) — `GET /api/admin/dashboard/summary?year=`
+filters `MaintenanceRecord`/`OtherCharge`/`LedgerEntry`/`SocietyLedgerEntry` by
+year using the same `maintenanceRecordYearFilter`/`otherChargeYearFilter`/
+`ledgerEntryYearFilter` helpers `computeFlatBalances` already had (exported from
+`ledger-shared.ts`, previously dormant — no caller ever passed a year). The
+Society card group (owners/flats/tenants counts) is a separate, always-unfiltered
+query and is never affected by the year selector. The Resident Dashboard
+(`ResidentDashboardOverview.tsx`) got the same Year dropdown the same day, via
+`GET /api/me/balances?year=`. Also 2026-08-27: `getDashboardSummary`'s `societyTotalIncome` field itself
+(not just the card) is now `societyLedgerTotals.totalIncome + totalPaid` —
+recorded society income plus approved maintenance deposits, both already
+year-scoped by the dropdown above — and `societyNetPosition` is
+`societyTotalIncome − societyTotalExpense` using that same blended figure, so
+Income and Net are internally consistent (superseding the same-day change
+that only adjusted the Income *card* client-side, leaving Net on the old
+pure-society-ledger figure). The Total Income card shows a small-font note
+("Society income recorded + paid maintenance.") clarifying the composition.
+`societyTotalExpense` is unaffected — resident billing never produces an
+expense.
 **Pending**: none known.
 
 ## Receipts — Generation & Approval
@@ -246,8 +282,9 @@ full findings; a future audit pass would need its own task, not tracked here as
 pending.
 
 ## Bank Reference Capture
-**Status**: 🟡 Phase 1 implemented (2026-08-27), built incrementally in the
-reverse order from the original design's epic plan.
+**Status**: 🟡 Phase 1 implemented (2026-08-27) plus a slice of Phase 2, same
+day, built incrementally in the reverse order from the original design's epic
+plan.
 **Scope implemented**: `LedgerEntry.bankReference` (nullable column). Admin
 must type it into `POST /api/admin/ledger-entries/:id/approve` (Zod-required,
 400 without it) while looking at the resident's already-viewable proof
@@ -257,12 +294,25 @@ original doc's "Confirmed Product Decisions": #3 (field optional at every
 layer) and #5 (admin never re-types it, resident enters it via OCR) — see the
 status note at the top of
 [`bank-reference/01-requirements.md`](./bank-reference/01-requirements.md).
-**Pending (phase 2)**: OCR-assisted pre-fill (an "infer" action next to the
-admin's text box) and the `bankReferenceSource` provenance enum — the
-resident-facing submission flow and OCR engine (Epics 2/3/5 of
+Same-day addition: `POST /api/admin/ledger-entries/:id/infer-bank-reference`,
+an admin-triggered, read-only OCR pass (`tesseract.js`, self-hosted, no paid
+API) against the entry's own proof image, regex-extracted via
+`shared/billing/bank-reference-extractor.ts`
+(GPay/PhonePe/Paytm/UTR-labeled/bare-12-digit heuristics) — surfaced as an
+"Infer from proof" button in `ReceiptApprovalModal.tsx` that pre-fills the
+(still freely editable) text box; a failed decode or empty extraction
+degrades silently to "no reference detected," never blocking approval. Also
+landed: Receipt Book (`ReceiptBookPage.tsx` + `admin-receipts-service.ts`)
+now shows a "Bank Transaction" column reading `bankReference`, replacing the
+former "Custom Fee" column (fee-type display/search dropped from this page
+only — `receipt.service.ts`'s separate purpose-line mechanism is untouched).
+**Pending (rest of phase 2)**: the resident-facing submission-time OCR-extract
+flow (Epic 3/5 of
 [`bank-reference/03-scope-and-task-breakdown.md`](./bank-reference/03-scope-and-task-breakdown.md))
-were not built; `manualDeposit` (cash/bank-transfer, admin-recorded) also
-still has no bank reference field — deliberately out of scope for phase 1.
+and the `bankReferenceSource` provenance enum (R2) were not built — the
+admin-side infer button has no provenance tracking, since the admin can edit
+the inferred value freely before approving; `manualDeposit` (cash/bank-transfer,
+admin-recorded) also still has no bank reference field.
 
 ## Society Onboarding — Bootstrap & Bulk Import
 **Status**: ✅ Implemented (2026-08-21, all three phases from the original

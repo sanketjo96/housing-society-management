@@ -209,8 +209,12 @@ describe('flats service', () => {
     });
     createdFlatIds.push(flat!.id);
 
-    const updated = await updateFlat(flat!.id, societyId, { ownerPhone: '+919000000042' });
-    expect(updated?.owner.phone).toBe('+919000000042');
+    // Phone is globally unique (schema.prisma) — derive from `suffix` like every
+    // other identifier in this file, not a hardcoded literal, so two runs (or two
+    // parallel test files) can never collide on it.
+    const phone = `+9190${Date.now() % 100000000}`;
+    const updated = await updateFlat(flat!.id, societyId, { ownerPhone: phone });
+    expect(updated?.owner.phone).toBe(phone);
   });
 
   it('returns null updating a flat scoped to a different society (tenant scoping)', async () => {

@@ -16,10 +16,9 @@ interface ReceiptListItem {
     category: LedgerCategory;
     amount: string;
     note: string | null;
+    bankReference: string | null;
     payer: { id: string; name: string; email: string };
     flat: { id: string; wing: string; flatNumber: string };
-    // Fee type name(s) this receipt settled — only populated for OTHER_CHARGE.
-    otherChargeFeeTypeNames: string[];
   };
 }
 
@@ -74,7 +73,7 @@ export function ReceiptBookPage() {
         r.receiptNumber,
         r.ledgerEntry.payer.name,
         `${r.ledgerEntry.flat.wing}-${r.ledgerEntry.flat.flatNumber}`,
-        ...r.ledgerEntry.otherChargeFeeTypeNames,
+        r.ledgerEntry.bankReference ?? '',
       ]
         .join(' ')
         .toLowerCase();
@@ -118,12 +117,12 @@ export function ReceiptBookPage() {
         cell: ({ row }) => <LedgerCategoryBadge category={row.original.ledgerEntry.category} />,
       },
       {
-        id: 'feeType',
-        header: 'Custom Fee',
+        id: 'bankReference',
+        header: 'Bank Transaction',
         cell: ({ row }) => {
-          const names = row.original.ledgerEntry.otherChargeFeeTypeNames;
-          return names.length > 0 ? (
-            <span className="text-ink">{names.join(', ')}</span>
+          const ref = row.original.ledgerEntry.bankReference;
+          return ref ? (
+            <span className="font-mono-brand text-ink">{ref}</span>
           ) : (
             <span className="text-muted">—</span>
           );
@@ -189,7 +188,7 @@ export function ReceiptBookPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Receipt #, flat, resident name, or custom fee"
+                placeholder="Receipt #, flat, resident name, or bank reference"
                 className="mt-1 block w-full rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
               />
             </label>

@@ -234,6 +234,11 @@ const definition: swaggerJsdoc.Options['definition'] = {
               },
               amount: { type: 'string', description: 'Decimal, serialized as a string.' },
               note: { type: 'string', nullable: true },
+              bankReference: {
+                type: 'string',
+                nullable: true,
+                description: 'Bank/UPI transaction reference the admin entered at approval time.',
+              },
               payer: { $ref: '#/components/schemas/ContactSummary' },
               flat: {
                 type: 'object',
@@ -242,12 +247,6 @@ const definition: swaggerJsdoc.Options['definition'] = {
                   wing: { type: 'string' },
                   flatNumber: { type: 'string' },
                 },
-              },
-              otherChargeFeeTypeNames: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'Distinct fee type name(s) this receipt settled, only for category=OTHER_CHARGE (2026-08-24 addition). Empty for MAINTENANCE, and for a legacy OTHER_CHARGE receipt approved before this shipped (never backfilled).',
               },
             },
           },

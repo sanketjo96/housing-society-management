@@ -30,9 +30,9 @@ const receipts = [
       category: 'MAINTENANCE',
       amount: '2000',
       note: null,
+      bankReference: null,
       payer: { id: 'p1', name: 'Alice Owner', email: 'alice@example.com' },
       flat: { id: 'f1', wing: 'A', flatNumber: '101' },
-      otherChargeFeeTypeNames: [],
     },
   },
   {
@@ -44,9 +44,9 @@ const receipts = [
       category: 'OTHER_CHARGE',
       amount: '500',
       note: null,
+      bankReference: 'UPI2026070512345',
       payer: { id: 'p2', name: 'Bob Tenant', email: 'bob@example.com' },
       flat: { id: 'f2', wing: 'B', flatNumber: '202' },
-      otherChargeFeeTypeNames: ['Transfer Fee'],
     },
   },
 ];
@@ -83,22 +83,22 @@ describe('ReceiptBookPage', () => {
     expect(screen.getByText('Other Charge')).toBeInTheDocument();
   });
 
-  it("shows the fee type for an Other Charges receipt, and a dash for a Maintenance one", async () => {
+  it("shows the bank transaction reference for a receipt that has one, and a dash for one that doesn't", async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('UPI2026070512345')).toBeInTheDocument());
     const maintenanceRow = screen.getByText('RCPT-A101-abc123').closest('tr') as HTMLElement;
     expect(within(maintenanceRow).getByText('—')).toBeInTheDocument();
   });
 
-  it('searches by fee type name', async () => {
+  it('searches by bank transaction reference', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByText('RCPT-A101-abc123')).toBeInTheDocument());
-    await user.type(screen.getByLabelText('Search'), 'Transfer Fee');
+    await user.type(screen.getByLabelText('Search'), 'UPI2026070512345');
 
     await waitFor(() => {
       expect(screen.queryByText('RCPT-A101-abc123')).not.toBeInTheDocument();

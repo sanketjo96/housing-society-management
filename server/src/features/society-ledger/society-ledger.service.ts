@@ -151,11 +151,18 @@ export interface SocietyLedgerTotals {
   net: number;
 }
 
-// Society-wide, all-time totals — feeds admin-dashboard.service.ts's
-// getDashboardSummary.
-export async function getSocietyLedgerTotals(societyId: string): Promise<SocietyLedgerTotals> {
+// Society-wide totals, all-time unless `year` scopes them to one calendar year
+// (by transactionDate, when the money actually moved — not createdAt) — feeds
+// admin-dashboard.service.ts's getDashboardSummary.
+export async function getSocietyLedgerTotals(
+  societyId: string,
+  year?: number,
+): Promise<SocietyLedgerTotals> {
   const entries = await prisma.societyLedgerEntry.findMany({
-    where: { societyId },
+    where: {
+      societyId,
+      ...(year ? { transactionDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {}),
+    },
     select: { direction: true, amount: true },
   });
 

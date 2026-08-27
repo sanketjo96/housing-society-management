@@ -15,6 +15,7 @@ import {
   SignaturesNotConfiguredError,
 } from './admin-ledger-service';
 import { previewReceiptPdf } from '../../receipts/receipt.service';
+import { inferBankReferenceForEntry } from './admin-ledger-ocr-service';
 
 export async function listLedgerEntriesHandler(req: Request, res: Response) {
   if (!req.user) {
@@ -97,6 +98,23 @@ export async function previewReceiptHandler(req: Request, res: Response) {
     }
     throw err;
   }
+}
+
+// OCR assist, not a source of truth — always safe to retry, never writes
+// anything. A missing/unreadable proof or an empty OCR pass is still a 200 with
+// bankReference: null, not an error.
+export async function inferBankReferenceHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const result = await inferBankReferenceForEntry(req.params.id, req.user.societyId);
+  if (!result) {
+    res.status(404).json({ error: 'Ledger entry not found' });
+    return;
+  }
+  res.status(200).json(result);
 }
 
 export async function rejectLedgerEntryHandler(req: Request, res: Response) {

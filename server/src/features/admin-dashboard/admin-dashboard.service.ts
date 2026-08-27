@@ -5,7 +5,13 @@ import {
   DEFAULT_GRACE_PERIOD_DAYS,
   isOverdue,
 } from '../../shared/billing/escalation';
-import { balancesFromRows, computeRecordSettlements } from '../ledger/ledger-shared';
+import {
+  balancesFromRows,
+  computeRecordSettlements,
+  ledgerEntryYearFilter,
+  maintenanceRecordYearFilter,
+  otherChargeYearFilter,
+} from '../ledger/ledger-shared';
 import { listFlats } from '../flats/admin/admin-flats-onboarding-service';
 import { getSocietyLedgerTotals } from '../society-ledger/society-ledger.service';
 
@@ -20,30 +26,43 @@ export interface DashboardSummary {
   // docs/features/other-charges/ — a fully separate pool from the maintenance figures above.
   otherChargesOutstandingTotal: number;
   totalOutstandingTotal: number;
-  // The society's own income/expenditure, unrelated to resident billing.
-  // "Recorded since tracking began" — not a live bank balance.
+  // Society income = recorded SocietyLedgerEntry income + approved maintenance
+  // deposits (totalPaid above) — the two real sources of money coming in.
+  // "Recorded since tracking began" — not a live bank balance. Expense is
+  // society-ledger only (resident billing never produces an expense). Net is
+  // societyTotalIncome − societyTotalExpense, so it already reflects paid
+  // maintenance too — no separate adjustment needed.
   societyTotalIncome: number;
   societyTotalExpense: number;
   societyNetPosition: number;
+  // Every year with at least one charge, Deposit, or SocietyLedgerEntry —
+  // powers the Dashboard's year dropdown. Always the full lifetime set,
+  // regardless of whichever `year` scoped the rest of this summary.
+  availableYears: number[];
 }
 
 // Fetches all flats' records/entries in two queries (not N+1), then groups by
 // flatId and runs each through balancesFromRows. `category` selects which pool:
-// MAINTENANCE reads MaintenanceRecord, OTHER_CHARGE reads OtherCharge.
-async function getBalancesByFlat(societyId: string, category: LedgerCategory = 'MAINTENANCE') {
+// MAINTENANCE reads MaintenanceRecord, OTHER_CHARGE reads OtherCharge. `year`
+// scopes both sides to one calendar year, same contract as computeFlatBalances.
+async function getBalancesByFlat(
+  societyId: string,
+  category: LedgerCategory = 'MAINTENANCE',
+  year?: number,
+) {
   const flats = await listFlats(societyId);
   const [records, entries] = await Promise.all([
     category === 'MAINTENANCE'
       ? prisma.maintenanceRecord.findMany({
-          where: { flat: { societyId } },
+          where: { flat: { societyId }, ...maintenanceRecordYearFilter(year) },
           select: { flatId: true, amount: true },
         })
       : prisma.otherCharge.findMany({
-          where: { flat: { societyId } },
+          where: { flat: { societyId }, ...otherChargeYearFilter(year) },
           select: { flatId: true, amount: true },
         }),
     prisma.ledgerEntry.findMany({
-      where: { flat: { societyId }, category },
+      where: { flat: { societyId }, category, ...ledgerEntryYearFilter(year) },
       select: { flatId: true, status: true, amount: true },
     }),
   ]);
@@ -60,14 +79,32 @@ async function getBalancesByFlat(societyId: string, category: LedgerCategory = '
   }));
 }
 
-// Society-wide, all-time totals. outstandingTotal sums each flat's own
-// Outstanding rather than one global subtraction, so an overpaid flat never
-// offsets another flat's balance.
-export async function getDashboardSummary(societyId: string): Promise<DashboardSummary> {
-  const [byFlat, byFlatOtherCharges, societyLedgerTotals] = await Promise.all([
-    getBalancesByFlat(societyId),
-    getBalancesByFlat(societyId, 'OTHER_CHARGE'),
-    getSocietyLedgerTotals(societyId),
+// Minimal-field query across every source that feeds this dashboard, society-wide
+// — just enough to derive a distinct year set, not full balance computation.
+async function getDashboardAvailableYears(societyId: string): Promise<number[]> {
+  const [records, otherCharges, entries, societyEntries] = await Promise.all([
+    prisma.maintenanceRecord.findMany({ where: { flat: { societyId } }, select: { period: true } }),
+    prisma.otherCharge.findMany({ where: { flat: { societyId } }, select: { dueDate: true } }),
+    prisma.ledgerEntry.findMany({ where: { flat: { societyId } }, select: { createdAt: true } }),
+    prisma.societyLedgerEntry.findMany({ where: { societyId }, select: { transactionDate: true } }),
+  ]);
+  const years = new Set<number>();
+  for (const r of records) years.add(Number(r.period.slice(0, 4)));
+  for (const c of otherCharges) years.add(c.dueDate.getFullYear());
+  for (const e of entries) years.add(e.createdAt.getFullYear());
+  for (const s of societyEntries) years.add(s.transactionDate.getFullYear());
+  return [...years].sort((a, b) => b - a);
+}
+
+// Society-wide totals, all-time unless `year` scopes them to one calendar year.
+// outstandingTotal sums each flat's own Outstanding rather than one global
+// subtraction, so an overpaid flat never offsets another flat's balance.
+export async function getDashboardSummary(societyId: string, year?: number): Promise<DashboardSummary> {
+  const [byFlat, byFlatOtherCharges, societyLedgerTotals, availableYears] = await Promise.all([
+    getBalancesByFlat(societyId, 'MAINTENANCE', year),
+    getBalancesByFlat(societyId, 'OTHER_CHARGE', year),
+    getSocietyLedgerTotals(societyId, year),
+    getDashboardAvailableYears(societyId),
   ]);
 
   let totalBilled = 0;
@@ -96,9 +133,10 @@ export async function getDashboardSummary(societyId: string): Promise<DashboardS
     collectionRatePercent,
     otherChargesOutstandingTotal,
     totalOutstandingTotal: outstandingTotal + otherChargesOutstandingTotal,
-    societyTotalIncome: societyLedgerTotals.totalIncome,
+    societyTotalIncome: societyLedgerTotals.totalIncome + totalPaid,
     societyTotalExpense: societyLedgerTotals.totalExpense,
-    societyNetPosition: societyLedgerTotals.net,
+    societyNetPosition: societyLedgerTotals.totalIncome + totalPaid - societyLedgerTotals.totalExpense,
+    availableYears,
   };
 }
 

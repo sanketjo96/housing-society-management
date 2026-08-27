@@ -20,6 +20,29 @@ export function ApprovalBadge({ status }: { status: ApprovalStatus }) {
   );
 }
 
+// A DEPOSIT row's note column — the admin's rejection reason takes priority when
+// the payment was rejected (the more urgent piece of info), with the resident's
+// own submitted reason shown alongside/instead for context.
+export function DepositNoteCell({
+  note,
+  adminNote,
+  status,
+}: {
+  note?: string | null;
+  adminNote?: string | null;
+  status: ApprovalStatus;
+}) {
+  const showRejection = status === 'REJECTED' && !!adminNote;
+  if (!showRejection && !note) return <span className="text-muted">—</span>;
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {showRejection && <span className="text-xs font-semibold text-coral">Rejected: {adminNote}</span>}
+      {note && <span className="text-xs text-muted">{note}</span>}
+    </div>
+  );
+}
+
 export function dateLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }

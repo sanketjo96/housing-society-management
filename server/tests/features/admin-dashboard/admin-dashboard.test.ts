@@ -81,6 +81,8 @@ describe('/api/admin/dashboard/*', () => {
   afterAll(async () => {
     await prisma.ledgerEntry.deleteMany({ where: { flatId: { in: createdFlatIds } } });
     await prisma.maintenanceRecord.deleteMany({ where: { flatId: { in: createdFlatIds } } });
+    await prisma.societyLedgerEntry.deleteMany({ where: { societyId } });
+    await prisma.societyLedgerCategory.deleteMany({ where: { societyId } });
     await prisma.flat.deleteMany({ where: { id: { in: createdFlatIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
     const allUserIds = await prisma.user
@@ -108,6 +110,125 @@ describe('/api/admin/dashboard/*', () => {
       expect(res.body.outstandingTotal).toBe(1000);
       expect(res.body.totalBilled).toBe(1000);
       expect(res.body.collectionRatePercent).toBe(0);
+      expect(res.body.availableYears).toContain(2026);
+    });
+
+    it('rejects a malformed year (400)', async () => {
+      const res = await request(app)
+        .get('/api/admin/dashboard/summary?year=not-a-number')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+    });
+
+    it('scopes outstandingTotal/totalBilled and society Finance totals to the given year; counts/availableYears stay untouched', async () => {
+      // A second flat's charge, and a society-level income entry, both dated 2025 —
+      // distinct from the shared 2026-01 fixture above.
+      const flat2025 = await createFlat({
+        societyId,
+        wing: 'R',
+        flatNumber: '102',
+        baseRate: 500,
+        ownerName: 'Dashboard 2025 Owner',
+        ownerEmail: `dash-2025-owner-${suffix}@example.com`,
+      });
+      createdFlatIds.push(flat2025!.id);
+      await prisma.maintenanceRecord.create({
+        data: {
+          flatId: flat2025!.id,
+          period: '2025-06',
+          payerType: 'OWNER',
+          amount: 700,
+          dueDate: new Date('2025-06-15'),
+          payerId: flat2025!.ownerId,
+        },
+      });
+
+      const category = await prisma.societyLedgerCategory.create({
+        data: { societyId, name: `Dash Year Test ${suffix}`, direction: 'INCOME' },
+      });
+      await prisma.societyLedgerEntry.create({
+        data: {
+          societyId,
+          categoryId: category.id,
+          recordedById: (await prisma.user.findFirstOrThrow({ where: { role: 'ADMIN', societyId } })).id,
+          direction: 'INCOME',
+          amount: 5000,
+          transactionDate: new Date('2025-03-01'),
+          paymentMethod: 'CASH',
+        },
+      });
+
+      const res2025 = await request(app)
+        .get('/api/admin/dashboard/summary?year=2025')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res2025.body.outstandingTotal).toBe(700); // only the 2025-06 charge
+      expect(res2025.body.totalBilled).toBe(700);
+      expect(res2025.body.societyTotalIncome).toBe(5000);
+
+      const res2026 = await request(app)
+        .get('/api/admin/dashboard/summary?year=2026')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res2026.body.outstandingTotal).toBe(1000); // unaffected by the 2025 data
+      expect(res2026.body.societyTotalIncome).toBe(0);
+
+      const resAll = await request(app)
+        .get('/api/admin/dashboard/summary')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(resAll.body.outstandingTotal).toBe(1700); // lifetime sum, both years
+      expect(resAll.body.societyTotalIncome).toBe(5000);
+      expect([...resAll.body.availableYears]).toEqual(expect.arrayContaining([2025, 2026]));
+      // Same lifetime availableYears regardless of which year was asked for.
+      expect([...res2025.body.availableYears]).toEqual([...resAll.body.availableYears]);
+    });
+
+    it('societyTotalIncome/societyNetPosition include approved maintenance deposits, not just SocietyLedgerEntry income', async () => {
+      const before = await request(app)
+        .get('/api/admin/dashboard/summary')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const flat = await createFlat({
+        societyId,
+        wing: 'R',
+        flatNumber: '103',
+        baseRate: 1000,
+        ownerName: 'Dashboard Income Owner',
+        ownerEmail: `dash-income-owner-${suffix}@example.com`,
+      });
+      createdFlatIds.push(flat!.id);
+      await prisma.maintenanceRecord.create({
+        data: {
+          flatId: flat!.id,
+          period: '2026-03',
+          payerType: 'OWNER',
+          amount: 1000,
+          dueDate: new Date('2026-03-15'),
+          payerId: flat!.ownerId,
+        },
+      });
+      await prisma.ledgerEntry.create({
+        data: {
+          flatId: flat!.id,
+          payerId: flat!.ownerId,
+          status: 'APPROVED',
+          amount: 1000,
+          reviewedAt: new Date(),
+          createdById: flat!.ownerId,
+          createdByType: 'OWNER',
+        },
+      });
+
+      const after = await request(app)
+        .get('/api/admin/dashboard/summary')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      // societyTotalIncome moved by exactly the new approved deposit — the
+      // SocietyLedgerEntry-only figure (societyTotalExpense) is untouched.
+      expect(after.body.societyTotalIncome).toBe(before.body.societyTotalIncome + 1000);
+      expect(after.body.totalPaid).toBe(before.body.totalPaid + 1000);
+      expect(after.body.societyTotalExpense).toBe(before.body.societyTotalExpense);
+      // Net = societyTotalIncome (already inclusive of paid maintenance) − expense.
+      expect(after.body.societyNetPosition).toBe(after.body.societyTotalIncome - after.body.societyTotalExpense);
+      expect(after.body.societyNetPosition).toBe(before.body.societyNetPosition + 1000);
     });
   });
 

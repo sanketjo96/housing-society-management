@@ -67,15 +67,17 @@ export function computeRecordSettlements(
   return result;
 }
 
-function maintenanceRecordYearFilter(year?: number) {
+// Exported for reuse by admin-dashboard.service.ts, which needs the same
+// per-year scoping but across a whole society's flats rather than one.
+export function maintenanceRecordYearFilter(year?: number) {
   return year ? { period: { startsWith: `${year}-` } } : {};
 }
 
-function ledgerEntryYearFilter(year?: number) {
+export function ledgerEntryYearFilter(year?: number) {
   return year ? { createdAt: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {};
 }
 
-function otherChargeYearFilter(year?: number) {
+export function otherChargeYearFilter(year?: number) {
   return year ? { dueDate: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) } } : {};
 }
 

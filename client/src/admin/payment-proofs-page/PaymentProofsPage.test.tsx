@@ -210,6 +210,61 @@ describe('PaymentProofsPage', () => {
     expect(confirmButton).toBeEnabled();
   });
 
+  it('"Infer from proof" pre-fills the bank reference field from OCR', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      if (url.includes('/infer-bank-reference')) {
+        return Promise.resolve({ ok: true, json: async () => ({ bankReference: 'UTR999888777' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    await screen.findByRole('dialog', { name: /confirm receipt/i });
+
+    await user.click(screen.getByRole('button', { name: /infer from proof/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/ledger-entries/entry-1/infer-bank-reference'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    await waitFor(() => expect(screen.getByLabelText(/bank.*upi reference/i)).toHaveValue('UTR999888777'));
+  });
+
+  it('"Infer from proof" shows a message and leaves the field blank when nothing is detected', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      if (url.includes('/infer-bank-reference')) {
+        return Promise.resolve({ ok: true, json: async () => ({ bankReference: null }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    await screen.findByRole('dialog', { name: /confirm receipt/i });
+
+    await user.click(screen.getByRole('button', { name: /infer from proof/i }));
+
+    await waitFor(() => expect(screen.getByText(/no reference detected/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/bank.*upi reference/i)).toHaveValue('');
+  });
+
   it('rejects an entry with a reason', async () => {
     const fetchMock = fetch as unknown as FetchMock;
     let rejectBody: string | undefined;

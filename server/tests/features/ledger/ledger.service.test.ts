@@ -132,6 +132,16 @@ describe('ledger service', () => {
       expect(balances.approvedDeposits).toBe(0);
       expect(balances.outstanding).toBe(2000);
     });
+
+    it('scopes totalCharges/outstanding to the given year — both fixture records are 2026', async () => {
+      const scoped = await computeFlatBalances(flatId, 2026);
+      expect(scoped.totalCharges).toBe(2000);
+      expect(scoped.outstanding).toBe(2000);
+
+      const otherYear = await computeFlatBalances(flatId, 2025);
+      expect(otherYear.totalCharges).toBe(0);
+      expect(otherYear.outstanding).toBe(0);
+    });
   });
 
   // Pure-function coverage of the FIFO settlement spec's worked test cases (Cases

@@ -147,6 +147,35 @@ describe('MaintenanceBookPage', () => {
     await waitFor(() => expect(screen.getByText(/no payments yet/i)).toBeInTheDocument());
   });
 
+  it("shows the resident's own note on a Deposit row when present, and a dash otherwise", async () => {
+    mockFetch({
+      ...ledger,
+      entries: ledger.entries.map((e) =>
+        e.id === 'dep-1' ? { ...e, note: 'Settling Sep repair expense with committee' } : e,
+      ),
+    });
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText('Settling Sep repair expense with committee')).toBeInTheDocument(),
+    );
+  });
+
+  it('shows the rejection reason (not the resident note) on a REJECTED Deposit row', async () => {
+    mockFetch({
+      ...ledger,
+      entries: ledger.entries.map((e) =>
+        e.id === 'dep-1'
+          ? { ...e, status: 'REJECTED', note: 'My reason', adminNote: 'Screenshot unreadable' }
+          : e,
+      ),
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Rejected: Screenshot unreadable')).toBeInTheDocument());
+    expect(screen.getByText('My reason')).toBeInTheDocument();
+  });
+
   it('switches to the Bills tab: shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
     mockFetch();
     renderPage();
@@ -227,14 +256,13 @@ describe('MaintenanceBookPage', () => {
     await waitFor(() => expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument());
   });
 
-  it('shows "Total maintenance amount" and "Maintenance Outstanding" cards from the lifetime totals, regardless of active tab', async () => {
+  it('shows the "Maintenance Outstanding" card from the lifetime totals, regardless of active tab, with no "Total maintenance amount" card', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/total maintenance amount/i)).toBeInTheDocument());
-    expect(screen.getByText('₹6,500')).toBeInTheDocument();
-    expect(screen.getByText(/^maintenance outstanding$/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/^maintenance outstanding$/i)).toBeInTheDocument());
     expect(screen.getAllByText('₹1,100').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/total maintenance amount/i)).not.toBeInTheDocument();
   });
 
   it('has no year selector', async () => {
@@ -270,6 +298,98 @@ describe('MaintenanceBookPage', () => {
     const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
     expect(submitButton).toBeEnabled();
+  });
+
+  it('defaults to "Maintenance Payment" with no note field or committee warning shown', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+
+    expect(await screen.findByLabelText('Maintenance Payment')).toBeChecked();
+    expect(screen.getByLabelText('Expense to settle against maintenance')).not.toBeChecked();
+    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/discuss this expense with the committee/i)).not.toBeInTheDocument();
+  });
+
+  it('selecting "Expense to settle against maintenance" reveals the note field and a committee-approval warning', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
+
+    expect(screen.getByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/discuss this expense with the committee/i)).toBeInTheDocument();
+    expect(screen.getByText(/committee can reject this payment/i)).toBeInTheDocument();
+  });
+
+  it('switching back to "Maintenance Payment" hides the note field and drops any typed note', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
+    await user.type(screen.getByLabelText(/reason \(optional\)/i), 'Society repair reimbursement');
+    await user.click(screen.getByLabelText('Maintenance Payment'));
+
+    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
+
+    // Switching to Expense again confirms the note was actually cleared, not just hidden.
+    await user.click(screen.getByLabelText('Expense to settle against maintenance'));
+    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('');
+  });
+
+  it('sends the note only when "Expense to settle against maintenance" is selected', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
+
+    const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
+    await user.type(screen.getByLabelText(/reason \(optional\)/i), 'Aug + Sep combined');
+    await user.click(screen.getByRole('button', { name: /submit payment/i }));
+
+    await waitFor(() => {
+      const submitCall = (fetch as unknown as FetchMock).mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes('/api/me/ledger/deposits/intent/submit'),
+      );
+      expect(submitCall).toBeDefined();
+      const body = submitCall![1].body as FormData;
+      expect(body.get('note')).toBe('Aug + Sep combined');
+    });
+  });
+
+  it('omits the note entirely for the default "Maintenance Payment" workflow', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+
+    const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
+    await user.click(screen.getByRole('button', { name: /submit payment/i }));
+
+    await waitFor(() => {
+      const submitCall = (fetch as unknown as FetchMock).mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes('/api/me/ledger/deposits/intent/submit'),
+      );
+      expect(submitCall).toBeDefined();
+      const body = submitCall![1].body as FormData;
+      expect(body.get('note')).toBeNull();
+    });
   });
 
   it('accepts a Pay amount above Outstanding and shows the Available Credit hint (2026-08-20 pivot — no longer capped)', async () => {

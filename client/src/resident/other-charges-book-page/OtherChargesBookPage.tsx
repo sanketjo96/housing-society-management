@@ -9,6 +9,7 @@ import {
   ApprovalBadge,
   type ApprovalStatus,
   dateLabel,
+  DepositNoteCell,
   ReceiptDownloadButton,
   SummaryCard,
 } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
@@ -50,6 +51,8 @@ async function fetchOtherChargesBook(): Promise<OtherChargesBookData> {
       amount: e.amount,
       status: (e.status ?? 'PENDING') as ApprovalStatus,
       hasReceipt: e.hasReceipt ?? false,
+      note: e.note,
+      adminNote: e.adminNote,
     }));
   return {
     chargeRows,
@@ -126,6 +129,13 @@ const depositColumns: ColumnDef<DepositRow, unknown>[] = [
     header: 'Status',
     meta: { align: 'right' },
     cell: ({ row }) => <ApprovalBadge status={row.original.status} />,
+  },
+  {
+    id: 'note',
+    header: 'Note',
+    cell: ({ row }) => (
+      <DepositNoteCell note={row.original.note} adminNote={row.original.adminNote} status={row.original.status} />
+    ),
   },
   {
     id: 'receipt',

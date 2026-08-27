@@ -156,6 +156,28 @@ describe('OtherChargesBookPage', () => {
     await waitFor(() => expect(screen.getByText(/no payments yet/i)).toBeInTheDocument());
   });
 
+  it("shows the resident's own note on a Deposit row when present", async () => {
+    mockFetch({
+      ...ledger,
+      entries: ledger.entries.map((e) => (e.id === 'dep-1' ? { ...e, note: 'Paying the transfer fee' } : e)),
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Paying the transfer fee')).toBeInTheDocument());
+  });
+
+  it('shows the rejection reason on a REJECTED Deposit row', async () => {
+    mockFetch({
+      ...ledger,
+      entries: ledger.entries.map((e) =>
+        e.id === 'dep-1' ? { ...e, status: 'REJECTED', adminNote: 'Amount mismatch' } : e,
+      ),
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Rejected: Amount mismatch')).toBeInTheDocument());
+  });
+
   it('switches to the Bills tab: shows only OTHER_CHARGE rows, each with its own settlement status and fee type', async () => {
     mockFetch();
     renderPage();
@@ -272,6 +294,23 @@ describe('OtherChargesBookPage', () => {
     });
 
     expect(await screen.findByText(/locked/i)).toBeInTheDocument();
+  });
+
+  // The "Maintenance Payment" / "Expense to settle against maintenance" radios
+  // (and the note field they gate) are Maintenance-only wording — Other Charges
+  // keeps the plain, radio-less workflow.
+  it('never shows the payment-type radios or note field for an Other Charges payment', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('Amount to pay')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+
+    await screen.findByText(/locked/i);
+    expect(screen.queryByLabelText('Maintenance Payment')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Expense to settle against maintenance')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
   });
 
   it('shows a notice instead of the Pay button on the Payment History tab when the open intent is for Maintenance', async () => {

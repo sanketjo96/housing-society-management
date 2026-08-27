@@ -43,6 +43,7 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           maintenance: { outstanding: 0, availableCredit: 0 },
           otherCharges: { outstanding: 0 },
           totalOutstanding: 0,
+          availableYears: [],
         }),
       });
     }
@@ -71,6 +72,7 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           societyTotalIncome: 0,
           societyTotalExpense: 0,
           societyNetPosition: 0,
+          availableYears: [],
         }),
       });
     }

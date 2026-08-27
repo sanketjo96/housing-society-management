@@ -32,6 +32,53 @@ export {};
 
 /**
  * @openapi
+ * /api/me/balances:
+ *   get:
+ *     tags: [My Ledger]
+ *     summary: The caller's Dashboard summary — Maintenance/Other Charges Outstanding + Available Credit
+ *     description: >
+ *       Powers the Resident Dashboard's summary cards. `year`, when given, scopes
+ *       maintenance/otherCharges/totalOutstanding to that calendar year — a
+ *       Dashboard-only view; it never affects what a payment intent actually locks
+ *       against (that's always the real, lifetime Outstanding). `availableYears` is
+ *       always the full lifetime set, regardless of which year (if any) was asked for.
+ *     parameters:
+ *       - name: year
+ *         in: query
+ *         required: false
+ *         schema: { type: integer }
+ *         description: Scope the returned balances to one calendar year; omit for lifetime (the default).
+ *     responses:
+ *       200:
+ *         description: OK.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 maintenance:
+ *                   type: object
+ *                   properties:
+ *                     totalCharges: { type: number }
+ *                     approvedDeposits: { type: number }
+ *                     outstanding: { type: number }
+ *                     availableCredit: { type: number }
+ *                 otherCharges:
+ *                   type: object
+ *                   properties:
+ *                     totalCharges: { type: number }
+ *                     approvedDeposits: { type: number }
+ *                     outstanding: { type: number }
+ *                     availableCredit: { type: number }
+ *                 totalOutstanding: { type: number }
+ *                 availableYears: { type: array, items: { type: integer }, description: Every year with at least one charge or Deposit, either pool. }
+ *       400: { description: Invalid year, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: No flat associated with the caller's account., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+
+/**
+ * @openapi
  * /api/me/ledger/deposits/intent:
  *   get:
  *     tags: [My Ledger]
@@ -106,6 +153,7 @@ export {};
  *             required: [file]
  *             properties:
  *               file: { type: string, format: binary }
+ *               note: { type: string, maxLength: 500, description: "Optional freeform reason for the payment, shown to the admin and back to the resident. Falls back to a default status note when blank." }
  *     responses:
  *       201:
  *         description: Deposit created, status PENDING.

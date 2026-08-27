@@ -12,6 +12,24 @@
 > `POST /api/admin/ledger-entries/:id/approve` only — every other
 > requirement/decision below still describes the eventual target shape of
 > this feature, not what's deployed today).
+>
+> **Addendum (2026-08-27): admin-side OCR-assisted infer, plus R9.** A slice of
+> phase 2 landed — not the full resident-submission-time flow (Epic 3/5), but
+> `POST /api/admin/ledger-entries/:id/infer-bank-reference`: read-only,
+> admin-triggered, runs self-hosted OCR (`tesseract.js`) against the entry's
+> own already-uploaded proof image and regex-extracts a reference
+> (`shared/billing/bank-reference-extractor.ts`), never writing anything —
+> the admin still reviews and confirms via `/approve`, same as decision #5.
+> Wired into `ReceiptApprovalModal.tsx` as an "Infer from proof" button next
+> to the text box; never blocks — an OCR/decode failure or an empty
+> extraction just leaves the field for manual entry, matching decision #2's
+> precedent. `bankReferenceSource` (R2) is still not built — this addition
+> has no provenance tracking, since the admin can freely edit whatever gets
+> inferred before approving. R9 (Receipt Book column + search) also landed
+> the same day: `ReceiptBookPage.tsx`'s "Custom Fee" column was replaced with
+> a "Bank Transaction" column reading `bankReference`, and the fee-type
+> search/display was dropped from this page entirely (still used elsewhere —
+> `receipt.service.ts`'s purpose-line generation is untouched).
 
 ## Context
 - App: Society management system (24 flats, 2 personas — Admin, Resident)

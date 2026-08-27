@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken } from '../../lib/auth-token';
@@ -32,7 +33,13 @@ const summary = {
   societyTotalIncome: 5000,
   societyTotalExpense: 3200,
   societyNetPosition: 1800,
+  availableYears: [2026, 2025],
 };
+
+// Distinct figures from `summary` above, returned only when the request asks for
+// year=2025 — lets a test tell "the year-scoped fetch happened" apart from "the
+// lifetime one did."
+const summary2025 = { ...summary, outstandingTotal: 700, societyTotalIncome: 1200 };
 
 const flatDues = [
   {
@@ -57,7 +64,8 @@ function mockFetch(overrides: Partial<{ pendingProofsCount: number }> = {}) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string) => {
     if (url.includes('/api/admin/dashboard/summary')) {
-      return Promise.resolve({ ok: true, json: async () => summary });
+      const body = url.includes('year=2025') ? summary2025 : summary;
+      return Promise.resolve({ ok: true, json: async () => body });
     }
     if (url.includes('/api/admin/dashboard/flat-dues')) {
       return Promise.resolve({ ok: true, json: async () => flatDues });
@@ -82,6 +90,16 @@ describe('AdminDashboardPage', () => {
   afterEach(() => {
     setAccessToken(null);
     vi.unstubAllGlobals();
+  });
+
+  it('shows Total Income (already inclusive of paid maintenance, per the backend) with an explanatory note', async () => {
+    mockFetch();
+    renderPage();
+
+    // The backend's societyTotalIncome is already societyLedgerTotals.totalIncome +
+    // totalPaid — the card just displays it as-is, no client-side arithmetic.
+    await waitFor(() => expect(screen.getByText('₹5,000')).toBeInTheDocument());
+    expect(screen.getByText('Society income recorded + paid maintenance.')).toBeInTheDocument();
   });
 
   it('shows the summary cards', async () => {
@@ -283,6 +301,72 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText('Total Owners').nextSibling).toHaveTextContent('2');
     expect(screen.getByText('Total Tenants').nextSibling).toHaveTextContent('1');
     expect(screen.getByText('Total Flats').nextSibling).toHaveTextContent('2');
+  });
+
+  it('shows a Year dropdown defaulting to "All", listing availableYears', async () => {
+    mockFetch();
+    renderPage();
+
+    const select = await screen.findByLabelText('Year');
+    expect(select).toHaveValue('ALL');
+    expect(within(select).getByRole('option', { name: 'All' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: '2026' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: '2025' })).toBeInTheDocument();
+  });
+
+  it('selecting a year re-fetches the summary scoped to that year, and Finance/Outstanding cards update', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Year'), '2025');
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/dashboard/summary?year=2025'),
+        expect.anything(),
+      );
+    });
+    await waitFor(() => expect(screen.getByText('₹700')).toBeInTheDocument());
+    expect(screen.queryByText('₹2,700')).not.toBeInTheDocument();
+  });
+
+  it('switching back to "All" re-fetches the lifetime summary with no year param', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Year'), '2025');
+    await waitFor(() => expect(screen.getByText('₹700')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Year'), 'All');
+    await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+
+    const summaryCalls = (fetch as unknown as FetchMock).mock.calls
+      .map((c: unknown[]) => c[0] as string)
+      .filter((url: string) => url.includes('/api/admin/dashboard/summary'));
+    expect(summaryCalls.some((url: string) => !url.includes('year='))).toBe(true);
+  });
+
+  it('the year selection never affects Total Owners/Flats/Tenants — flat-dues is never fetched with a year param', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('Total Flats')).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText('Year'), '2025');
+    await waitFor(() => expect(screen.getByText('₹700')).toBeInTheDocument());
+
+    expect(screen.getByText('Total Owners').nextSibling).toHaveTextContent('2');
+    expect(screen.getByText('Total Tenants').nextSibling).toHaveTextContent('1');
+    expect(screen.getByText('Total Flats').nextSibling).toHaveTextContent('2');
+
+    const duesCalls = (fetch as unknown as FetchMock).mock.calls
+      .map((c: unknown[]) => c[0] as string)
+      .filter((url: string) => url.includes('/api/admin/dashboard/flat-dues'));
+    expect(duesCalls.every((url: string) => !url.includes('year='))).toBe(true);
   });
 
   it('shows an error state when a request fails', async () => {

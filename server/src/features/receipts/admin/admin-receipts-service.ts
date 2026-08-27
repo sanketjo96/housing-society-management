@@ -13,21 +13,13 @@ export async function listReceipts(societyId: string) {
           category: true,
           amount: true,
           note: true,
+          bankReference: true,
           ...LEDGER_ENTRY_LIST_INCLUDE,
-          // Fee type(s) an OTHER_CHARGE receipt covered; empty for MAINTENANCE.
-          settledOtherCharges: { select: { feeType: { select: { name: true } } } },
         },
       },
     },
     orderBy: { issuedAt: 'desc' },
   });
 
-  // Flatten to plain distinct name strings rather than pushing the raw nested shape.
-  return receipts.map(({ ledgerEntry: { settledOtherCharges, ...ledgerEntry }, ...receipt }) => ({
-    ...receipt,
-    ledgerEntry: {
-      ...ledgerEntry,
-      otherChargeFeeTypeNames: [...new Set(settledOtherCharges.map((c) => c.feeType.name))],
-    },
-  }));
+  return receipts;
 }

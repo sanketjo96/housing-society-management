@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
 import { SummaryCard } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
 import { authedFetch } from '../../lib/api';
 
@@ -7,10 +8,11 @@ interface BalancesSummary {
   maintenance: { outstanding: number; availableCredit: number };
   otherCharges: { outstanding: number };
   totalOutstanding: number;
+  availableYears: number[];
 }
 
-async function fetchMyBalances(): Promise<BalancesSummary> {
-  const res = await authedFetch('/api/me/balances');
+async function fetchMyBalances(year?: number): Promise<BalancesSummary> {
+  const res = await authedFetch(`/api/me/balances${year ? `?year=${year}` : ''}`);
   if (!res.ok) throw new Error('Could not load your balances.');
   return res.json();
 }
@@ -18,9 +20,16 @@ async function fetchMyBalances(): Promise<BalancesSummary> {
 // Pure navigation hub: 4 summary cards, one per balance pool. Maintenance
 // Outstanding and Available Credit link to /maintenance-book (where Pay lives),
 // Other Outstanding to /other-charges-book. Total Outstanding has no drill-down —
-// it's the sum of the other two.
+// it's the sum of the other two. 'ALL' means no year filter — lifetime figures,
+// the same as before this dropdown existed.
 export function ResidentDashboardOverview() {
-  const { data, isLoading, isError } = useQuery({ queryKey: ['my-balances'], queryFn: fetchMyBalances });
+  const [selectedYear, setSelectedYear] = useState<'ALL' | number>('ALL');
+  const year = selectedYear === 'ALL' ? undefined : selectedYear;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['my-balances', year],
+    queryFn: () => fetchMyBalances(year),
+  });
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -35,6 +44,25 @@ export function ResidentDashboardOverview() {
 
       {data && (
         <>
+          <div className="mb-4 flex items-center justify-end gap-2">
+            <label htmlFor="resident-dashboard-year" className="text-xs font-semibold text-muted">
+              Year
+            </label>
+            <select
+              id="resident-dashboard-year"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+              className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+            >
+              <option value="ALL">All</option>
+              {data.availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="mb-5 grid grid-cols-2 gap-4">
             <SummaryCard
               label="Total Outstanding"

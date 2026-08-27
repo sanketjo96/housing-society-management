@@ -2,12 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Building2, IndianRupee, ReceiptText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authedFetch } from '../../lib/api';
 import type { DashboardSummary, FlatDues, PendingProofsResponse } from './types';
 
-async function fetchSummary(): Promise<DashboardSummary> {
-  const res = await authedFetch('/api/admin/dashboard/summary');
+async function fetchSummary(year?: number): Promise<DashboardSummary> {
+  const res = await authedFetch(`/api/admin/dashboard/summary${year ? `?year=${year}` : ''}`);
   if (!res.ok) throw new Error('Could not load the dashboard summary.');
   return res.json();
 }
@@ -76,8 +77,17 @@ function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: s
 }
 
 // Society-wide headline numbers only; per-flat dues live at /flat-dues.
+// 'ALL' means no year filter — every Finance/Outstanding figure is lifetime.
+// Flat/owner/tenant counts (Society card group) are never affected either way —
+// they come from duesQuery below, which never takes a year.
 export function AdminDashboardPage() {
-  const summaryQuery = useQuery({ queryKey: ['admin-dashboard-summary'], queryFn: fetchSummary });
+  const [selectedYear, setSelectedYear] = useState<'ALL' | number>('ALL');
+  const year = selectedYear === 'ALL' ? undefined : selectedYear;
+
+  const summaryQuery = useQuery({
+    queryKey: ['admin-dashboard-summary', year],
+    queryFn: () => fetchSummary(year),
+  });
   const duesQuery = useQuery({ queryKey: ['admin-dashboard-flat-dues'], queryFn: fetchFlatDues });
   const pendingProofsQuery = useQuery({
     queryKey: ['admin-dashboard-pending-proofs-count'],
@@ -120,11 +130,31 @@ export function AdminDashboardPage() {
 
       {summaryQuery.data && duesQuery.data && (
         <>
+          <div className="mb-5 flex items-center justify-end gap-2">
+            <label htmlFor="dashboard-year" className="text-xs font-semibold text-muted">
+              Year
+            </label>
+            <select
+              id="dashboard-year"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+              className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+            >
+              <option value="ALL">All</option>
+              {summaryQuery.data.availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <CardGroup icon={IndianRupee} title="Finance">
             <SummaryCard
               label="Total Income"
               value={`₹${summaryQuery.data.societyTotalIncome.toLocaleString('en-IN')}`}
               accent="teal"
+              note="Society income recorded + paid maintenance."
             />
             <SummaryCard
               label="Total Expense"
