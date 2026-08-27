@@ -51,21 +51,33 @@ export {};
  * /api/admin/ledger-entries/{id}/approve:
  *   post:
  *     tags: [Ledger (Admin)]
- *     summary: Approve a pending Deposit or Credit
+ *     summary: Approve a pending Deposit
  *     description: >
  *       Settles the entry (it now counts toward the flat's balance) and issues its
  *       receipt in the same step — the receipt is created here, never re-rendered later.
+ *       Phase 1 of docs/features/bank-reference/: the admin must supply the bank/UPI
+ *       transaction reference (looked up from the resident's proof) to approve at all.
  *     parameters:
  *       - name: id
  *         in: path
  *         required: true
  *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bankReference]
+ *             properties:
+ *               bankReference: { type: string }
  *     responses:
  *       200:
  *         description: Approved.
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/LedgerEntry' }
+ *       400: { description: Missing or empty bankReference., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: No such entry., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

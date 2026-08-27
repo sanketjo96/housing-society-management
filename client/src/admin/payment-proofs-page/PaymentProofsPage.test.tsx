@@ -144,13 +144,15 @@ describe('PaymentProofsPage', () => {
     );
   });
 
-  it('Confirm and approve in the modal settles the entry', async () => {
+  it('Confirm and approve in the modal settles the entry, sending the typed bank reference', async () => {
     const fetchMock = fetch as unknown as FetchMock;
-    fetchMock.mockImplementation((url: string) => {
+    let approveBody: string | undefined;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes('/receipt-preview')) {
         return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
       }
       if (url.includes('/approve')) {
+        approveBody = init?.body as string;
         return Promise.resolve({ ok: true, json: async () => ({ ...depositEntry, status: 'APPROVED' }) });
       }
       return Promise.resolve({ ok: true, json: async () => [depositEntry] });
@@ -167,6 +169,7 @@ describe('PaymentProofsPage', () => {
     await user.click(screen.getByRole('button', { name: /^approve$/i }));
     await screen.findByRole('dialog', { name: /confirm receipt/i });
 
+    await user.type(screen.getByLabelText(/bank.*upi reference/i), 'UTR123456789');
     await user.click(screen.getByRole('button', { name: /confirm and approve/i }));
 
     await waitFor(() => {
@@ -175,12 +178,36 @@ describe('PaymentProofsPage', () => {
         expect.objectContaining({ method: 'POST' }),
       );
     });
+    expect(JSON.parse(approveBody!)).toEqual({ bankReference: 'UTR123456789' });
 
     // Approval also issues a real Receipt — Receipt Book's cached list must be
     // invalidated too, or a 30s-fresh cache would silently miss it.
     await waitFor(() =>
       expect(queryClient.getQueryState(['admin-receipts'])?.isInvalidated).toBe(true),
     );
+  });
+
+  it('Confirm and approve stays disabled until a bank reference is typed', async () => {
+    const fetchMock = fetch as unknown as FetchMock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/receipt-preview')) {
+        return Promise.resolve({ ok: true, blob: async () => new Blob(['%PDF-fake']) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [depositEntry] });
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByText('A-101')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    await screen.findByRole('dialog', { name: /confirm receipt/i });
+
+    const confirmButton = await screen.findByRole('button', { name: /confirm and approve/i });
+    await waitFor(() => expect(confirmButton).toBeDisabled());
+
+    await user.type(screen.getByLabelText(/bank.*upi reference/i), 'UTR123456789');
+    expect(confirmButton).toBeEnabled();
   });
 
   it('rejects an entry with a reason', async () => {

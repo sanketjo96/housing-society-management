@@ -26,12 +26,13 @@ export function ReceiptApprovalModal({
   entryId: string;
   residentName: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (bankReference: string) => void;
   isConfirming: boolean;
   confirmError?: string;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [bankReference, setBankReference] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +82,23 @@ export function ReceiptApprovalModal({
         )}
       </div>
 
+      <div className="mb-4">
+        <label htmlFor="bank-reference-input" className="mb-1 block text-xs font-semibold text-ink">
+          Bank / UPI reference <span className="text-coral">*</span>
+        </label>
+        <input
+          id="bank-reference-input"
+          value={bankReference}
+          onChange={(e) => setBankReference(e.target.value)}
+          placeholder="e.g. UTR / UPI transaction ID"
+          className="w-full rounded-md border border-line px-2 py-1.5 text-sm"
+        />
+        <p className="mt-1 text-xs text-muted">
+          Look at the resident's proof screenshot — "View proof" in the table row — and enter the transaction
+          reference.
+        </p>
+      </div>
+
       {confirmError && (
         <p role="alert" className="mb-2 text-xs text-coral">
           {confirmError}
@@ -97,8 +115,8 @@ export function ReceiptApprovalModal({
         </button>
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={isConfirming || !previewUrl}
+          onClick={() => onConfirm(bankReference)}
+          disabled={isConfirming || !previewUrl || !bankReference.trim()}
           className="rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
         >
           {isConfirming ? 'Approving…' : 'Confirm and approve'}

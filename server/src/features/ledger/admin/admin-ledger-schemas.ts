@@ -6,6 +6,7 @@ export const ledgerListQuerySchema = z.object({
   createdByType: z.enum(['OWNER', 'TENANT', 'ADMIN']).optional(),
 });
 export const rejectLedgerSchema = z.object({ reason: z.string().min(1).optional() });
+export const approveLedgerSchema = z.object({ bankReference: z.string().trim().min(1) });
 export const manualDepositSchema = z.object({
   flatId: z.string().min(1),
   amount: z.coerce.number().positive(),

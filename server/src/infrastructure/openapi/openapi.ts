@@ -109,6 +109,7 @@ const definition: swaggerJsdoc.Options['definition'] = {
           note: { type: 'string', nullable: true },
           fileUrl: { type: 'string', nullable: true },
           mimeType: { type: 'string', nullable: true },
+          bankReference: { type: 'string', nullable: true },
           adminNote: { type: 'string', nullable: true },
           reviewedBy: { type: 'string', nullable: true },
           reviewedAt: { type: 'string', format: 'date-time', nullable: true },

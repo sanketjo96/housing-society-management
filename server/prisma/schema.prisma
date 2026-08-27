@@ -346,6 +346,13 @@ model LedgerEntry {
   fileUrl  String?
   mimeType String?
 
+  // Bank/UPI transaction reference — phase 1 (docs/features/bank-reference/):
+  // admin-typed at approval time, required by Zod on the approve request but
+  // nullable here so historical rows and any other code path are unaffected.
+  // Phase 2 adds OCR-assisted pre-fill + a bankReferenceSource provenance enum;
+  // not needed yet since every phase-1 value is manual entry by definition.
+  bankReference String?
+
   // Admin's rejection reason (rule 7) — distinct from `note` above.
   adminNote  String?
   reviewedAt DateTime?

@@ -23,7 +23,7 @@ Re-check against `git log` and each feature's own doc if this looks stale.
 | Notifications — Email | `auth.md` (send mechanism) + `task-status.md` Phase 7 | 🟡 Partially implemented | Password-reset send confirmed live 2026-08-24 (`smi.techsanket.in` verified on Resend); the 3 per-event triggers now live in the shared pipeline below, not built separately here |
 | Notifications — Event-Driven (WhatsApp + Email) | [`notifications/`](./notifications/) | 🟡 Email live, WhatsApp switched off | 3 events × 2 channels; Email fully working since 2026-08-24; WhatsApp disabled via `WHATSAPP_ENABLED=false` (its access token expired — needs a permanent System User token, then Meta template approval) |
 | Security & Hardening Audit | [`security-audit.md`](./security-audit.md) | ✅ Implemented | Phase 9, one-time audit, 5 findings fixed |
-| Bank Reference Capture | [`bank-reference/`](./bank-reference/) | ⬜ Documented, not implemented | Full design ready; 0 of 7 epics (~14h) built |
+| Bank Reference Capture | [`bank-reference/`](./bank-reference/) | 🟡 Phase 1 implemented | 2026-08-27; admin types `bankReference` at approval (mandatory), built in reverse order from the original OCR-first design — see the doc's status note |
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](./society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
 | Society-Level Income/Expense | [`manage-finance/`](./manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
@@ -246,15 +246,23 @@ full findings; a future audit pass would need its own task, not tracked here as
 pending.
 
 ## Bank Reference Capture
-**Status**: ⬜ Documented, not implemented — design complete, zero code written.
-**Scope implemented**: none. Full design exists in
-[`bank-reference/`](./bank-reference/) (requirements, architecture, task
-breakdown, roadmap, future scope) — OCR-assisted capture of a bank/UPI
-transaction reference on Deposit submission, server-computed provenance,
-admin-visible (not re-typed) at approval.
-**Pending**: all 7 epics — schema, OCR engine, resident submission flow, admin
-paths, resident/admin frontend surfaces, tests (~14 hours estimated, see
-[`bank-reference/03-scope-and-task-breakdown.md`](./bank-reference/03-scope-and-task-breakdown.md)).
+**Status**: 🟡 Phase 1 implemented (2026-08-27), built incrementally in the
+reverse order from the original design's epic plan.
+**Scope implemented**: `LedgerEntry.bankReference` (nullable column). Admin
+must type it into `POST /api/admin/ledger-entries/:id/approve` (Zod-required,
+400 without it) while looking at the resident's already-viewable proof
+screenshot — the approve button in `ReceiptApprovalModal.tsx` stays disabled
+until filled. This deliberately **supersedes**, for phase 1 only, two of the
+original doc's "Confirmed Product Decisions": #3 (field optional at every
+layer) and #5 (admin never re-types it, resident enters it via OCR) — see the
+status note at the top of
+[`bank-reference/01-requirements.md`](./bank-reference/01-requirements.md).
+**Pending (phase 2)**: OCR-assisted pre-fill (an "infer" action next to the
+admin's text box) and the `bankReferenceSource` provenance enum — the
+resident-facing submission flow and OCR engine (Epics 2/3/5 of
+[`bank-reference/03-scope-and-task-breakdown.md`](./bank-reference/03-scope-and-task-breakdown.md))
+were not built; `manualDeposit` (cash/bank-transfer, admin-recorded) also
+still has no bank reference field — deliberately out of scope for phase 1.
 
 ## Society Onboarding — Bootstrap & Bulk Import
 **Status**: ✅ Implemented (2026-08-21, all three phases from the original

@@ -163,9 +163,41 @@ describe('/api/admin/ledger-entries*', () => {
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR123456789' });
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('APPROVED');
+      expect(res.body.bankReference).toBe('UTR123456789');
+    });
+
+    it('returns 400 and never approves when bankReference is missing', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '50')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+
+      const res = await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+
+      const entry = await prisma.ledgerEntry.findUnique({ where: { id: created.body.id } });
+      expect(entry!.status).toBe('PENDING');
+    });
+
+    it('returns 400 when bankReference is whitespace-only', async () => {
+      const created = await request(app)
+        .post('/api/me/ledger/deposits')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .field('amount', '50')
+        .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+
+      const res = await request(app)
+        .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: '   ' });
+      expect(res.status).toBe(400);
     });
 
     it('returns 409 and never approves when the society has no signatures configured', async () => {
@@ -216,7 +248,8 @@ describe('/api/admin/ledger-entries*', () => {
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${unsignedAdminToken}`);
+        .set('Authorization', `Bearer ${unsignedAdminToken}`)
+        .send({ bankReference: 'UTR-UNSIGNED-1' });
       expect(res.status).toBe(409);
 
       const entry = await prisma.ledgerEntry.findUnique({ where: { id: created.body.id } });
@@ -240,11 +273,13 @@ describe('/api/admin/ledger-entries*', () => {
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR-SECOND-1' });
 
       const res = await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR-SECOND-2' });
       expect(res.status).toBe(409);
     });
   });
@@ -292,7 +327,8 @@ describe('/api/admin/ledger-entries*', () => {
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR-PREVIEW-1' });
 
       const res = await request(app)
         .get(`/api/admin/ledger-entries/${created.body.id}/receipt-preview`)
@@ -323,7 +359,8 @@ describe('/api/admin/ledger-entries*', () => {
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR-DL-OWNER-1' });
 
       const res = await request(app)
         .get(`/api/ledger-entries/${created.body.id}/receipt`)
@@ -340,7 +377,8 @@ describe('/api/admin/ledger-entries*', () => {
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       await request(app)
         .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ bankReference: 'UTR-DL-ADMIN-1' });
 
       const res = await request(app)
         .get(`/api/ledger-entries/${created.body.id}/receipt`)

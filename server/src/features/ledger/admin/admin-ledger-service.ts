@@ -78,7 +78,16 @@ export async function listPendingLedgerEntries(
 // Approving settles the entry and issues its receipt in one step. The receipt PDF
 // is rendered and saved before the transaction opens; the Receipt row is created
 // inside the same transaction as the status change so the two never disagree.
-export async function approveLedgerEntry(id: string, societyId: string, adminId: string) {
+export async function approveLedgerEntry(
+  id: string,
+  societyId: string,
+  adminId: string,
+  // Optional here — required only at the Zod/controller boundary
+  // (approveLedgerSchema). ~15 existing tests call this service directly and
+  // don't exercise the bank-reference requirement; that requirement belongs
+  // to the HTTP API shape, not this function's business logic.
+  bankReference?: string,
+) {
   const entry = await prisma.ledgerEntry.findFirst({
     where: { id, flat: { societyId } },
     include: {
@@ -111,7 +120,12 @@ export async function approveLedgerEntry(id: string, societyId: string, adminId:
   const { updated, receiptId } = await prisma.$transaction(async (tx) => {
     const updated = await tx.ledgerEntry.update({
       where: { id },
-      data: { status: 'APPROVED', reviewedById: adminId, reviewedAt: issuedAt },
+      data: {
+        status: 'APPROVED',
+        reviewedById: adminId,
+        reviewedAt: issuedAt,
+        bankReference: bankReference ?? null,
+      },
       include: LEDGER_ENTRY_LIST_INCLUDE,
     });
     if (openOtherCharges.ids.length > 0) {

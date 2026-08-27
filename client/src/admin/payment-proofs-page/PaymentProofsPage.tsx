@@ -93,8 +93,11 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
 
   // Fired by ReceiptApprovalModal's "Confirm and approve", not the Approve button itself.
   const approveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, { method: 'POST' });
+    mutationFn: async (bankReference: string) => {
+      const res = await authedFetch(`/api/admin/ledger-entries/${entry.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ bankReference }),
+      });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not approve this entry.');
       return body;
@@ -174,7 +177,7 @@ function EntryActionsCell({ entry }: { entry: LedgerEntryListItem }) {
           entryId={entry.id}
           residentName={entry.payer.name}
           onCancel={() => setShowApprovalModal(false)}
-          onConfirm={() => approveMutation.mutate()}
+          onConfirm={(bankReference) => approveMutation.mutate(bankReference)}
           isConfirming={approveMutation.isPending}
           confirmError={(approveMutation.error as Error | null)?.message}
         />

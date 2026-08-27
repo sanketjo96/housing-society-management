@@ -120,7 +120,8 @@ describe('GET /api/admin/receipts', () => {
 
     const approved = await request(app)
       .post(`/api/admin/ledger-entries/${created.body.id}/approve`)
-      .set('Authorization', `Bearer ${adminToken}`);
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ bankReference: 'UTR-RECEIPT-LIST-1' });
     expect(approved.status).toBe(200);
 
     const res = await request(app)

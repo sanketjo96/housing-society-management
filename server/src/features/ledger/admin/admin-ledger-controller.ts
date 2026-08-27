@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import {
+  approveLedgerSchema,
   ledgerListQuerySchema,
   manualDepositSchema,
   rejectLedgerSchema,
@@ -37,8 +38,19 @@ export async function approveLedgerEntryHandler(req: Request, res: Response) {
     return;
   }
 
+  const parsed = approveLedgerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
   try {
-    const entry = await approveLedgerEntry(req.params.id, req.user.societyId, req.user.id);
+    const entry = await approveLedgerEntry(
+      req.params.id,
+      req.user.societyId,
+      req.user.id,
+      parsed.data.bankReference,
+    );
     if (!entry) {
       res.status(404).json({ error: 'Ledger entry not found' });
       return;

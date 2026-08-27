@@ -1,5 +1,18 @@
 # Bank Reference Capture — Requirements
 
+> **Status (2026-08-27): Phase 1 live, built incrementally, in the opposite
+> order from this doc's original design.** The admin now types
+> `bankReference` themselves at approval time, looking at the resident's
+> proof screenshot, and cannot approve without it — this **supersedes
+> decisions #3 ("optional at every layer") and #5 ("admin never re-types
+> it") below, for phase 1 only**. OCR-assisted pre-fill (what decisions #1/#2
+> and requirements R3–R5 describe) plus the `bankReferenceSource` provenance
+> enum (R2) are phase 2, not yet built — deferred rather than abandoned. See
+> `LedgerEntry.bankReference` (nullable column, required by Zod on
+> `POST /api/admin/ledger-entries/:id/approve` only — every other
+> requirement/decision below still describes the eventual target shape of
+> this feature, not what's deployed today).
+
 ## Context
 - App: Society management system (24 flats, 2 personas — Admin, Resident)
 - A financial-audit-readiness review of the schema (model-by-model, against the six
