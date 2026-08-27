@@ -68,12 +68,16 @@ admin approve/reject → manual mark-paid fallback → derived per-record settle
 status for Maintenance Book/escalation. The Pay control (amount/QR/bank-transfer
 intent) moved from the Bills tab to the Payment History tab (2026-08-21),
 directly above the deposit list it feeds. 2026-08-27: the Maintenance-pool
-`PayIntentPanel` (shared with Other Charges, which is unaffected) gained a
-"Maintenance Payment" / "Expense to settle against maintenance" radio choice —
-the former is the plain existing workflow (screenshot only, no note field);
-the latter reveals the optional reason note field plus a committee-approval
+`PayIntentPanel` (shared with Other Charges, which is unaffected — no note
+field or radios there at all, only the screenshot control) gained a
+"Maintenance Payment" / "Expense to settle against maintenance" radio choice.
+Revised same day: the optional reason note field is now always shown and
+freely editable for a Maintenance payment regardless of which radio is
+selected (originally it was gated behind "Expense to settle against
+maintenance" only) — the radio choice now solely gates the committee-approval
 warning ("Make sure you discuss this expense with the committee — the
-committee can reject this payment."). Purely a client-side UI gate — the note
+committee can reject this payment."), shown only for "Expense to settle
+against maintenance". Purely a client-side UI gate — the note
 still rides the same `POST /api/me/ledger/deposits/intent/submit` `note`
 field built earlier the same day; no new backend field or LedgerEntry status,
 since rejection is already the existing admin reject path. Same day,

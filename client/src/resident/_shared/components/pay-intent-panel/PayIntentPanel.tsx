@@ -46,9 +46,10 @@ export function PayIntentPanel({
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState('');
-  // 'MAINTENANCE' is the plain, existing workflow — no note field. 'EXPENSE' is
-  // for a resident-fronted expense they want settled against maintenance, which
-  // needs the committee's sign-off — it gets the note field plus a clear warning.
+  // The note field itself is always available for a Maintenance payment,
+  // freely editable regardless of which radio is picked. 'EXPENSE' only gates
+  // the committee-approval warning — a resident-fronted expense they want
+  // settled against maintenance needs the committee's sign-off.
   const [paymentType, setPaymentType] = useState<'MAINTENANCE' | 'EXPENSE'>('MAINTENANCE');
 
   // Re-check the intent when the tab regains visibility (e.g. after a UPI app redirect).
@@ -66,7 +67,7 @@ export function PayIntentPanel({
     mutationFn: async () => {
       const formData = new FormData();
       if (file) formData.append('file', file);
-      if (paymentType === 'EXPENSE' && note.trim()) formData.append('note', note.trim());
+      if (note.trim()) formData.append('note', note.trim());
       const res = await authedFetch('/api/me/ledger/deposits/intent/submit', { method: 'POST', body: formData });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not submit your payment.');
@@ -130,10 +131,7 @@ export function PayIntentPanel({
                 name="pay-intent-payment-type"
                 value="MAINTENANCE"
                 checked={paymentType === 'MAINTENANCE'}
-                onChange={() => {
-                  setPaymentType('MAINTENANCE');
-                  setNote('');
-                }}
+                onChange={() => setPaymentType('MAINTENANCE')}
               />
               Maintenance Payment
             </label>
@@ -154,12 +152,14 @@ export function PayIntentPanel({
           <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach payment screenshot" />
         </div>
 
-        {intent.category === 'MAINTENANCE' && paymentType === 'EXPENSE' && (
+        {intent.category === 'MAINTENANCE' && (
           <div className="mb-2.5">
-            <p className="mb-1.5 flex items-start gap-1.5 text-xs text-brass">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              Make sure you discuss this expense with the committee — the committee can reject this payment.
-            </p>
+            {paymentType === 'EXPENSE' && (
+              <p className="mb-1.5 flex items-start gap-1.5 text-xs text-brass">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                Make sure you discuss this expense with the committee — the committee can reject this payment.
+              </p>
+            )}
             <label htmlFor="pay-intent-note" className="mb-1 block text-xs font-semibold text-ink">
               Reason (optional)
             </label>

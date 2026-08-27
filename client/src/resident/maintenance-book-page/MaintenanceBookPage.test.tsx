@@ -300,7 +300,7 @@ describe('MaintenanceBookPage', () => {
     expect(submitButton).toBeEnabled();
   });
 
-  it('defaults to "Maintenance Payment" with no note field or committee warning shown', async () => {
+  it('defaults to "Maintenance Payment", with the note field already shown and no committee warning', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
@@ -310,11 +310,11 @@ describe('MaintenanceBookPage', () => {
 
     expect(await screen.findByLabelText('Maintenance Payment')).toBeChecked();
     expect(screen.getByLabelText('Expense to settle against maintenance')).not.toBeChecked();
-    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
     expect(screen.queryByText(/discuss this expense with the committee/i)).not.toBeInTheDocument();
   });
 
-  it('selecting "Expense to settle against maintenance" reveals the note field and a committee-approval warning', async () => {
+  it('selecting "Expense to settle against maintenance" adds the committee-approval warning, keeping the note field as-is', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
@@ -328,32 +328,32 @@ describe('MaintenanceBookPage', () => {
     expect(screen.getByText(/committee can reject this payment/i)).toBeInTheDocument();
   });
 
-  it('switching back to "Maintenance Payment" hides the note field and drops any typed note', async () => {
+  it('keeps a typed note when switching between "Maintenance Payment" and "Expense to settle against maintenance"', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
     await screen.findByLabelText('Amount to pay');
     await user.click(screen.getByRole('button', { name: /^pay$/i }));
-    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
     await user.type(screen.getByLabelText(/reason \(optional\)/i), 'Society repair reimbursement');
-    await user.click(screen.getByLabelText('Maintenance Payment'));
 
-    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
-
-    // Switching to Expense again confirms the note was actually cleared, not just hidden.
     await user.click(screen.getByLabelText('Expense to settle against maintenance'));
-    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('');
+    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('Society repair reimbursement');
+    // The committee warning appears, but the note itself is untouched by the switch.
+    expect(screen.getByText(/discuss this expense with the committee/i)).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Maintenance Payment'));
+    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('Society repair reimbursement');
+    expect(screen.queryByText(/discuss this expense with the committee/i)).not.toBeInTheDocument();
   });
 
-  it('sends the note only when "Expense to settle against maintenance" is selected', async () => {
+  it('sends the note regardless of which payment-type radio is selected', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
     await screen.findByLabelText('Amount to pay');
     await user.click(screen.getByRole('button', { name: /^pay$/i }));
-    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
 
     const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
@@ -370,7 +370,7 @@ describe('MaintenanceBookPage', () => {
     });
   });
 
-  it('omits the note entirely for the default "Maintenance Payment" workflow', async () => {
+  it('omits the note when left blank, regardless of payment type', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
