@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { app } from './app';
 import { env } from './config/env';
 import { logger } from './infrastructure/observability';
+import { runWeeklyDatabaseBackup } from './jobs/database-backup.job';
 import { runMonthlyMaintenanceGeneration } from './jobs/monthly-maintenance-generation.job';
 import { deliverPendingNotifications } from './jobs/notification-delivery.job';
 
@@ -39,3 +40,14 @@ cron.schedule(
 cron.schedule('* * * * *', () => {
   void deliverPendingNotifications();
 });
+
+// Database backup — 02:30 every Sunday, Asia/Kolkata. Logs and moves on if
+// BACKUP_S3_* isn't configured yet (docs/decisions/0005-storage-provider-r2.md) —
+// never blocks startup or any other job.
+cron.schedule(
+  '30 2 * * 0',
+  () => {
+    void runWeeklyDatabaseBackup();
+  },
+  { timezone: 'Asia/Kolkata' },
+);

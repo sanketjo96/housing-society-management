@@ -49,6 +49,17 @@ services:
       S3_REGION: ${S3_REGION:-auto}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      # Weekly Postgres backup job (src/jobs/database-backup.job.ts, Sundays 02:30
+      # IST) — src/infrastructure/backup/backup-s3.config.ts. Deliberately a SEPARATE
+      # bucket + credential from S3_* above (docs/decisions/0005-storage-provider-r2.md):
+      # the live-file credential has delete access, so it must never also be able to
+      # reach backup copies. Read lazily, only when the job actually runs — leaving
+      # these unset just logs a failed run each week, never blocks anything else.
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
       # Phase 7's swappable EmailProvider (src/lib/email) — defaults to logging reset
       # links instead of sending (no account needed) unless EMAIL_PROVIDER=resend and
       # the two Resend vars below are set in the root .env. APP_BASE_URL builds the

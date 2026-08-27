@@ -80,8 +80,10 @@ docker run --rm -v smi_uploads_data:/app/uploads \
 Verify object count and a byte-for-byte read-back match before flipping
 `STORAGE_PROVIDER=s3` on the live `backend` service.
 
-## Not yet built
+## Database backups
 
-A nightly backup job (Postgres dump + a copy of anything still on
-`uploads_data`) pushed to a separate R2 bucket. No automated database backup
-mechanism exists yet — see `docs/decisions/0005-storage-provider-r2.md`.
+A separate concern from this file — see `docs/decisions/0005-storage-provider-r2.md`
+and `server/src/infrastructure/backup/`. Weekly `pg_dump`, gzipped, pushed to
+a **separate** R2 bucket/credential from the one this page describes (so the
+live-file credential's delete access can never reach backup copies). Live as
+of 2026-08-27.

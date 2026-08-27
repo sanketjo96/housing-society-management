@@ -27,7 +27,7 @@ Re-check against `git log` and each feature's own doc if this looks stale.
 | Society Onboarding — Bootstrap & Bulk Import | [`society-onboarding/`](./society-onboarding/) | ✅ Implemented | 2026-08-21; distinct from "Flat & Society Onboarding" above (per-flat, Phase 3) — this is platform-level: creating a brand-new `Society`+first `ADMIN`, plus bulk-importing a client's historical arrears/charges/finance data |
 | Production Deployment | [`DEPLOY.md`](../../DEPLOY.md) | ✅ Implemented | 2026-08-21; HTTPS via a free dynamic-DNS hostname, not a purchased domain — see DEPLOY.md and `CLAUDE.md`'s "Addition (2026-08-21)" |
 | Society-Level Income/Expense | [`manage-finance/`](./manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
-| File Storage | [`file-storage.md`](./file-storage.md) | ✅ Implemented | 2026-08-26; local disk (default) or S3-compatible (Cloudflare R2), swappable via `STORAGE_PROVIDER`. Live deployment cut over to R2. Nightly backup job not yet built — see Production Deployment's Pending row |
+| File Storage | [`file-storage.md`](./file-storage.md) | ✅ Implemented | 2026-08-26; local disk (default) or S3-compatible (Cloudflare R2), swappable via `STORAGE_PROVIDER`. Live deployment cut over to R2. Weekly DB backup job built and live 2026-08-27 (separate R2 bucket/credential) |
 | Committee & Signatures | [`committee-and-signatures.md`](./committee-and-signatures.md) | ✅ Implemented | Chairman/Secretary/Treasurer roles + signature uploads; approving a Deposit now blocked (409) if neither Chairman nor Secretary has a signature configured (2026-08-26) |
 
 ## Auth & Access Control
@@ -296,10 +296,11 @@ against a free dynamic-DNS hostname (DuckDNS or similar) instead, since Let's
 Encrypt only requires a resolvable FQDN, not a registrar-purchased one. Plain HTTP
 (no `DOMAIN` set) remains fully supported — nothing else in the stack requires TLS.
 Full sequence: [`DEPLOY.md`](../../DEPLOY.md).
-**Pending**: database backups — there is no backup/restore mechanism anywhere in
-this stack (`postgres_data` is a single Docker volume on one VPS, no copy
-elsewhere). Not in Task 10.1/10.2's original scope; flagged in `DEPLOY.md` as a
-follow-up, no confirmed trigger yet.
+**Resolved 2026-08-27**: database backups. Weekly `pg_dump` job
+(`server/src/infrastructure/backup/`, `src/jobs/database-backup.job.ts`,
+Sundays 02:30 IST) live against a real, separate R2 bucket/credential
+(`BACKUP_S3_*`) — verified with a real manual run. See File Storage's row
+below and `docs/decisions/0005-storage-provider-r2.md`.
 
 ## Society-Level Income/Expense
 **Status**: ✅ Implemented, via the Manage Finance feature above (2026-08-20).
@@ -320,9 +321,9 @@ alongside the existing `LocalStorageAdapter`, swappable via
 `STORAGE_PROVIDER`. One-time migration script moved existing local files to
 R2 preserving their keys — live deployment cut over, 8/8 files migrated and
 read-verified.
-**Pending**: nightly backup job (Postgres dump + uploads archive → a separate
-R2 bucket) — see `docs/decisions/0005-storage-provider-r2.md` for the plan.
-No confirmed build date yet.
+**Pending**: nothing — weekly Postgres backup job (separate R2
+bucket/credential from live file storage) built and confirmed live
+2026-08-27. See `docs/decisions/0005-storage-provider-r2.md`.
 
 ## Committee & Signatures
 **Status**: ✅ Implemented, including a 2026-08-26 approval gate.

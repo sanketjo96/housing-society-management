@@ -176,11 +176,6 @@ host; the deployed Docker stack reads the root `.env` instead — see
 
 ## Current focus / active work
 
-- **Database backups are not yet built.** `postgres_data` has no
-  backup/restore mechanism. File storage (proofs/signatures/receipts) has
-  already moved to R2, which closes half the original risk; Postgres itself
-  is still a single Docker volume with no copy elsewhere. Plan:
-  `docs/decisions/0005-storage-provider-r2.md`.
 - **WhatsApp notifications are switched off** (`WHATSAPP_ENABLED=false`) —
   the configured access token expired. Email notifications are unaffected
   and fully live. Re-enabling needs a new token plus Meta template approval;

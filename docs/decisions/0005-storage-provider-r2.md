@@ -1,7 +1,7 @@
 # 0005 — Cloudflare R2 for file storage and (planned) backups
 
-**Status**: Accepted for file storage (built, live). Backup job: planned, not
-yet built.
+**Status**: Accepted for file storage (built, live). Backup job: built and
+live (2026-08-27), weekly instead of nightly (see below).
 
 ## Context
 
@@ -29,28 +29,53 @@ that same credential could also touch backups, a bug or compromised key
 could destroy both the live files and their disaster-recovery copies in one
 stroke.
 
-## Decision: in-process backup job (planned)
+## Decision: in-process backup job
 
-When built, the nightly backup job runs as an in-process `node-cron` job
-inside the `backend` container, not a host-cron shell script. Reasons:
-reuses the same S3 client already added for live storage (no second tool
-like `aws-cli`/`rclone` needed just for uploading); needs no host-level
-crontab entry living outside the Docker image — a backup mechanism that
-depends on undocumented host state is a weaker guarantee than one that ships
-entirely inside `docker compose up`.
+The backup job runs as an in-process `node-cron` job inside the `backend`
+container (`src/jobs/database-backup.job.ts`, Sundays 02:30 Asia/Kolkata —
+see below for why weekly, not nightly), not a host-cron shell script.
+Reasons: reuses the same `@aws-sdk/client-s3` already added for live storage
+(no second tool like `aws-cli`/`rclone` needed just for uploading); needs no
+host-level crontab entry living outside the Docker image — a backup
+mechanism that depends on undocumented host state is a weaker guarantee than
+one that ships entirely inside `docker compose up`.
 
-Plan: nightly `pg_dump` (plain SQL, gzipped) plus a tar of whatever's still
-on `uploads_data`, both pushed to the backups bucket under a date-stamped key
-(`postgres/YYYY-MM-DD.sql.gz`, `uploads/YYYY-MM-DD.tar.gz`). Retention via R2
-lifecycle rules configured directly in the dashboard (delete after N days),
-not hand-rolled deletion code — zero risk of a buggy rotation routine
-deleting backups still needed.
+Implementation: `pg_dump` (plain SQL, `--no-owner --no-privileges`, so a
+restore never fails on GRANT/OWNER statements for a role that doesn't exist
+at the restore target), gzipped in-process, pushed to the backups bucket
+under a date-stamped key (`postgres/YYYY-MM-DD.sql.gz`) —
+`src/infrastructure/backup/`. `pg_dump` itself ships in the runtime image via
+`postgresql16-client` (pinned to match `postgres:16-alpine` in
+`docker-compose.yml`, not the plain `postgresql-client` package, which pulls
+in whatever major Alpine currently defaults to). Retention via R2 lifecycle
+rules configured directly in the dashboard (delete after N days), not
+hand-rolled deletion code — zero risk of a buggy rotation routine deleting
+backups still needed.
+
+**Weekly, not nightly**: the original plan (above) was nightly. Revised to
+weekly at the operator's request — deliberate tradeoff for a 24-flat MVP
+where financial state changes slowly enough that a week of exposure is
+acceptable, in exchange for a simpler operational cadence to watch.
+
+**Uploads not included**: the original plan also called for a
+`uploads/YYYY-MM-DD.tar.gz` of `uploads_data`. Dropped once file storage
+itself moved to R2 (above) — with `STORAGE_PROVIDER=s3` live, `uploads_data`
+no longer holds durable data (new files go straight to R2), so a second copy
+of it would just be redundant with R2's own durability. Postgres is the only
+thing left that still needs this job.
 
 ## Consequences
 
-- Moving live storage to R2 already closes half the original gap for free —
-  proofs/signatures/receipts are durably off-VPS now. Postgres itself still
-  has no backup until the job above is built.
-- Accepted residual limitation once the backup job exists: nightly
-  granularity, no continuous point-in-time recovery. Deliberate tradeoff at
-  this scale, not an oversight.
+- Moving live storage to R2 closed half the original gap; the backup job
+  closes the other half. Both are now live — proofs/signatures/receipts and
+  weekly Postgres dumps are durably off-VPS. `BACKUP_S3_*` is filled in on
+  the live deployment, pointing at a second bucket (`smidbbackup`) with its
+  own token, confirmed 2026-08-27 with a real manual run
+  (`postgres/2026-08-27.sql.gz`, R2-verified).
+- One bug found during that verification: `DATABASE_URL` carries Prisma's
+  `?schema=public` query param, which `pg_dump`/libpq rejects outright.
+  Fixed by stripping the query string before invoking `pg_dump` — safe since
+  pg_dump dumps every schema by default and this app only uses `public`.
+- Accepted residual limitation: weekly granularity, no continuous
+  point-in-time recovery. Deliberate tradeoff at this scale, not an
+  oversight.
