@@ -50,6 +50,17 @@ function FileDownloadButton({ entryId }: { entryId: string }) {
   );
 }
 
+// OCR assist against a fresh upload, before the entry exists — read-only, never
+// blocks: a failed call or a null result just leaves the field for manual entry.
+async function inferBankReferenceFromFile(file: File): Promise<string | null> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await authedFetch('/api/admin/society-ledger/ocr-extract', { method: 'POST', body: formData });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body.bankReference ?? null;
+}
+
 // One form with a direction toggle, submitted as FormData (includes a file).
 function RecordEntryForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -61,6 +72,8 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
   const [bankReference, setBankReference] = useState('');
   const [note, setNote] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [isInferring, setIsInferring] = useState(false);
+  const [inferMessage, setInferMessage] = useState<string | null>(null);
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
     queryKey: ['admin-finance-categories-active', direction],
@@ -198,11 +211,47 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
         </select>
       </Field>
 
-      <Field label={bankReferenceRequired ? 'Bank/transaction reference' : 'Bank/transaction reference (optional)'}>
+      <div className="mb-3.5">
+        <span className="mb-1.5 block text-xs font-semibold text-muted">Proof (bill, invoice, or receipt)</span>
+        <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach a bill, invoice, or receipt" />
+      </div>
+
+      <div className="mb-3.5">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="block text-xs font-semibold text-muted">
+            {bankReferenceRequired ? 'Bank/transaction reference' : 'Bank/transaction reference (optional)'}
+          </span>
+          {bankReferenceRequired && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!file) return;
+                setInferMessage(null);
+                setIsInferring(true);
+                inferBankReferenceFromFile(file)
+                  .then((value) => {
+                    if (value) {
+                      setBankReference(value);
+                    } else {
+                      setInferMessage('No reference detected — enter it manually.');
+                    }
+                  })
+                  .finally(() => setIsInferring(false));
+              }}
+              disabled={isInferring || !file}
+              className="border-none bg-transparent p-0 text-xs font-semibold text-teal disabled:cursor-default disabled:opacity-60"
+            >
+              {isInferring ? 'Inferring…' : 'Infer from proof'}
+            </button>
+          )}
+        </div>
         <input
           type="text"
           value={bankReference}
-          onChange={(e) => setBankReference(e.target.value)}
+          onChange={(e) => {
+            setBankReference(e.target.value);
+            setInferMessage(null);
+          }}
           disabled={!bankReferenceRequired}
           className={inputClass}
           placeholder={bankReferenceRequired ? 'UTR / cheque number / transaction ID' : 'Not applicable for cash'}
@@ -210,11 +259,10 @@ function RecordEntryForm({ onDone }: { onDone: () => void }) {
         {bankReferenceRequired && !isBankReferenceValid && bankReference.length === 0 && (
           <ErrMsg>A reference is required unless payment method is Cash.</ErrMsg>
         )}
-      </Field>
-
-      <div className="mb-3.5">
-        <span className="mb-1.5 block text-xs font-semibold text-muted">Proof (bill, invoice, or receipt)</span>
-        <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach a bill, invoice, or receipt" />
+        {inferMessage && <p className="mt-1 text-xs text-muted">{inferMessage}</p>}
+        {bankReferenceRequired && !file && (
+          <p className="mt-1 text-xs text-muted">Attach the proof above to enable "Infer from proof".</p>
+        )}
       </div>
 
       <Field label="Note (optional)">

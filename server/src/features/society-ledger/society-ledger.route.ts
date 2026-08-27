@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   bulkImportSocietyLedgerEntriesHandler,
   getSocietyLedgerEntryFileHandler,
+  inferSocietyLedgerBankReferenceHandler,
   listSocietyLedgerEntriesHandler,
   recordSocietyLedgerEntryHandler,
 } from './society-ledger.controller';
@@ -18,6 +19,15 @@ societyLedgerRouter.post(
   proofUpload.single('file'),
   verifyFileSignature(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
   recordSocietyLedgerEntryHandler,
+);
+// Read-only OCR assist against a fresh upload, before the entry even exists —
+// never writes anything, the admin still confirms/edits via the create form.
+societyLedgerRouter.post(
+  '/api/admin/society-ledger/ocr-extract',
+  requireRole(['ADMIN']),
+  proofUpload.single('file'),
+  verifyFileSignature(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+  inferSocietyLedgerBankReferenceHandler,
 );
 // Historical bulk import — no file involved, bulk-imported rows skip the
 // mandatory-proof rule.

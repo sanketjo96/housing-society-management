@@ -181,7 +181,17 @@ under Settings; admin dashboard's Finance card group (Total Income/Expense/Net)
 computed independently of the resident-billing figures. Bulk historical import
 via `POST /api/admin/society-ledger/import` (Society Onboarding's Phase E,
 2026-08-21) reuses the same row-validator so the bulk and single-row paths
-can't drift apart.
+can't drift apart. 2026-08-27: the "Record a transaction" form gained an
+"Infer from proof" button next to the bank/transaction reference field —
+`POST /api/admin/society-ledger/ocr-extract` (admin-only, read-only) runs the
+same self-hosted OCR + regex-extraction (`society-ledger-ocr-service.ts`,
+reusing `infrastructure/ocr/tesseract-ocr-engine.ts` and
+`shared/billing/bank-reference-extractor.ts` from `bank-reference/`) against
+the freshly-selected file before the entry even exists, since there's nothing
+stored yet to read back — distinct from the Deposit-approval infer endpoint,
+which reads an already-uploaded file by entry id. Hidden entirely when payment
+method is Cash (the reference field itself is inapplicable then); disabled
+until a proof file is attached.
 **Pending** (all explicitly deferred, see
 [`manage-finance/05-future-scope.md`](./manage-finance/05-future-scope.md)):
 two-person approval workflow, category rename (currently `isActive`-toggle

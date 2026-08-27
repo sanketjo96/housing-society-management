@@ -42,6 +42,40 @@ export {};
  *       400: { description: Invalid input, non-positive amount, missing/inactive category, direction mismatch, missing bank reference, or missing file. }
  *       401: { description: Unauthenticated }
  *       403: { description: Caller is not an ADMIN. }
+ * /api/admin/society-ledger/ocr-extract:
+ *   post:
+ *     tags: [Manage Finance (Admin)]
+ *     summary: OCR-infer a bank/transaction reference from a fresh proof upload, before the entry exists
+ *     description: >
+ *       Read-only assist for the "Record a transaction" form's bank/transaction
+ *       reference field — runs self-hosted OCR (tesseract.js) against the file the
+ *       admin is about to attach and applies the same regex heuristics as the
+ *       Deposit-approval infer button. Never writes anything; the admin still
+ *       reviews/edits and submits via POST /api/admin/society-ledger. Always 200,
+ *       even when nothing is found (a PDF proof, an unreadable image, or an OCR
+ *       pass with no match) — OCR assist must never block the admin from typing
+ *       the reference manually.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: OK — bankReference is null when nothing could be inferred.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 bankReference: { type: string, nullable: true }
+ *       400: { description: Missing file, or its content doesn't match an allowed type. }
+ *       401: { description: Unauthenticated }
+ *       403: { description: Caller is not an ADMIN. }
  * /api/admin/society-ledger/import:
  *   post:
  *     tags: [Manage Finance (Admin)]

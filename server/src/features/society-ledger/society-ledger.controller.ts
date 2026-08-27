@@ -11,6 +11,7 @@ import {
   recordSocietyLedgerEntry,
 } from './society-ledger.service';
 import { bulkImportSocietyLedgerEntries } from './society-ledger-bulk-import-service';
+import { inferBankReferenceFromUpload } from './society-ledger-ocr-service';
 
 export async function listSocietyLedgerEntriesHandler(req: Request, res: Response) {
   if (!req.user) {
@@ -60,6 +61,24 @@ export async function recordSocietyLedgerEntryHandler(req: Request, res: Respons
     }
     throw err;
   }
+}
+
+// OCR assist, not a source of truth — read-only, never writes anything, safe to
+// retry. A missing/unreadable proof or an empty OCR pass is still a 200 with
+// bankReference: null, not an error — the admin can always type it manually.
+export async function inferSocietyLedgerBankReferenceHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: 'A file is required' });
+    return;
+  }
+
+  const result = await inferBankReferenceFromUpload(req.file.buffer, req.file.mimetype);
+  res.status(200).json(result);
 }
 
 export async function bulkImportSocietyLedgerEntriesHandler(req: Request, res: Response) {
