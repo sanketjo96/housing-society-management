@@ -29,6 +29,7 @@ Re-check against `git log` and each feature's own doc if this looks stale.
 | Society-Level Income/Expense | [`manage-finance/`](./manage-finance/) | ✅ Implemented via Manage Finance | Was tracked here as an idea; built 2026-08-20 as Manage Finance (see above) — row kept for history |
 | File Storage | [`file-storage.md`](./file-storage.md) | ✅ Implemented | 2026-08-26; local disk (default) or S3-compatible (Cloudflare R2), swappable via `STORAGE_PROVIDER`. Live deployment cut over to R2. Weekly DB backup job built and live 2026-08-27 (separate R2 bucket/credential) |
 | Committee & Signatures | [`committee-and-signatures.md`](./committee-and-signatures.md) | ✅ Implemented | Chairman/Secretary/Treasurer roles + signature uploads; approving a Deposit now blocked (409) if neither Chairman nor Secretary has a signature configured (2026-08-26) |
+| Vehicle Finder | [`vehicle-finder/`](./vehicle-finder/) | ✅ Implemented | 2026-08-28; resident vehicle registration + plate-number lookup (flat, occupant name, phone number on a match); manual search only — camera/OCR scan-assist was built and rolled back the same day, see the doc's Confirmed Product Decisions |
 
 ## Auth & Access Control
 **Status**: ✅ Implemented (Phase 2, tasks 2.1–2.8, all complete).
@@ -327,6 +328,78 @@ and the `bankReferenceSource` provenance enum (R2) were not built — the
 admin-side infer button has no provenance tracking, since the admin can edit
 the inferred value freely before approving; `manualDeposit` (cash/bank-transfer,
 admin-recorded) also still has no bank reference field.
+
+## Vehicle Finder
+**Status**: ✅ Implemented and deployed (2026-08-28). An OCR scan-assist was
+also built same-day, tested against a real device photo, and rolled back
+same-day — see `vehicle-finder/05-future-scope.md`'s item 5. Manual
+plate-text search is the shipped state.
+**Scope implemented (backend)**: `Vehicle` model (migration
+`20260828072422_add_vehicle`, `@@unique([societyId, plateNumber])`),
+`shared/vehicles/normalize-plate.ts`, resident self-service
+`POST/GET/DELETE /api/me/vehicles[/:id]` (`features/vehicles/resident/`,
+create-and-catch-P2002 duplicate handling same as `createFeeType`), and the
+search endpoint `GET /api/vehicles/search` (`features/vehicles/lookup/`)
+returning the matching flat's wing/flat number plus the registrant's name
+and phone number on a hit, `{found:false}` on a miss — a pure read, no
+`AuditLog` or any other row written, per
+[`vehicle-finder/01-requirements.md`](./vehicle-finder/01-requirements.md)'s
+Confirmed Product Decision #1. Tenancy-end cleanup (R8) is wired into all
+three places an occupancy can end: `resident-flats-service.ts`'s
+`removeOwnTenant`, `admin-flats-tenancy-service.ts`'s `removeTenant`, and
+`flat-shared.ts`'s `applyOccupancy` (the combined flat-edit form's
+"revert to owner-occupied" path, shared by `PUT /api/me/flat` and the
+admin's flat update) — a departing tenant's vehicles are deleted in the same
+transaction as the occupancy close, on every path. Test coverage:
+`normalize-plate.test.ts`, `resident-vehicles.service.test.ts`,
+`vehicle-lookup.service.test.ts`, `tenancy-cleanup.test.ts` (all three
+cleanup sites), all under `server/tests/features/vehicles/` — 559/559 server
+tests passing, `npm run build`/`lint` clean. Migration applied to the live
+`smi_dev` database (no `prisma/` folder ships in the backend image, so this
+ran from the host against the exposed `localhost:5432`, then
+`docker compose up -d --build backend`).
+**Scope implemented (frontend)**: `MyDetailsPage.tsx` gains a two-tab layout
+("My Info" — existing content, unchanged and default-active; "Vehicle Info" —
+`VehicleInfoTab.tsx`, a register form plus a `DataTable.tsx` list with a
+delete action, React Query `invalidateQueries`-driven refetch after
+register/delete). A standalone `VehicleFinderPage.tsx`
+(`client/src/resident/vehicle-finder-page/`) provides the plate-search UI —
+plain text input + submit, a `tel:` link on the occupant's phone number
+(opens the dialer directly on mobile), result card on a hit, plain "not
+found" message on a miss — routed at `/vehicle-finder` and reachable by
+every role (`ADMIN`/`OWNER`/`TENANT`), unlike almost every other route in
+this app. Nav entries added to both `ADMIN_NAV_ITEMS` and
+`RESIDENT_NAV_ITEMS` in `DashboardLayout.tsx`. A test-only bug was found and
+fixed along the way (not a production bug): the "Vehicle Info tab" test
+mock's GET handler returned the live mutable vehicles array by reference
+instead of a snapshot, letting a later POST's in-place push leak into an
+in-flight GET's response and double-count a row — fixed by returning
+`[...vehicles]`.
+**OCR scan-assist — built, then rolled back, same day (2026-08-28)**: a
+camera-icon control inside the search input captured a plate photo and ran
+it through `ocr.ts` (client-side `tesseract.js`, WASM, never uploaded) +
+`extract-plate.ts` (regex match against the Indian HSRP plate shape). Tested
+against a real device photo before shipping any wider and it failed: the
+photo's EXIF orientation was never corrected before handing it to tesseract
+(a normal, sideways-stored phone photo read as pure noise), and even after
+manually correcting orientation and cropping to just the plate, tesseract's
+generic `eng` model still couldn't get a clean read against the embossed
+plate font. Rolled back same day — `ocr.ts`/`extract-plate.ts` deleted, the
+scan control removed from `VehicleFinderPage.tsx`, `tesseract.js` dropped
+from the client's dependencies (server-side `tesseract.js`, used by
+bank-reference OCR, is unrelated and untouched). Full detail:
+[`vehicle-finder/01-requirements.md`](./vehicle-finder/01-requirements.md)'s
+second 2026-08-28 addendum,
+[`vehicle-finder/02-architecture.md`](./vehicle-finder/02-architecture.md)'s
+OCR Scan-to-Search section, and
+[`vehicle-finder/05-future-scope.md`](./vehicle-finder/05-future-scope.md)'s
+item 5. 217/217 client tests passing (post-rollback), `npm run
+build`/`lint` clean.
+**Pending**: nothing known for the manual-search scope described above;
+future-scope items (rate limiting, audit logging, opt-out, visitor/gate
+integration, and OCR scan-assist itself if revisited with real preprocessing)
+remain deliberately deferred — see
+[`vehicle-finder/05-future-scope.md`](./vehicle-finder/05-future-scope.md).
 
 ## Society Onboarding — Bootstrap & Bulk Import
 **Status**: ✅ Implemented (2026-08-21, all three phases from the original

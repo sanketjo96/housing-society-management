@@ -25,6 +25,8 @@ import { financeCategoriesRouter } from './features/finance-categories/finance-c
 import { societyLedgerRouter } from './features/society-ledger/society-ledger.route';
 import { platformBootstrapRouter } from './features/platform-bootstrap/platform-bootstrap.route';
 import { bulkChargesRouter } from './features/bulk-charges/bulk-charges.route';
+import { residentVehiclesRouter } from './features/vehicles/resident/resident-vehicles.route';
+import { vehicleLookupRouter } from './features/vehicles/lookup/vehicle-lookup.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 
 export const app = express();
@@ -67,6 +69,8 @@ app.use(adminUsersRouter);
 app.use(authRouter);
 app.use(adminFlatsRouter);
 app.use(residentFlatsRouter);
+app.use(residentVehiclesRouter);
+app.use(vehicleLookupRouter);
 app.use(residentLedgerRouter);
 app.use(adminReceiptsRouter);
 app.use(maintenanceRecordsRouter);

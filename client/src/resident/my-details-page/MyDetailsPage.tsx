@@ -1,13 +1,21 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Home, Save, User } from 'lucide-react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { OccupancyFields, OwnerDetailsFields } from '../../components/flat-fields-form/FlatFieldsForm';
 import { Divider, ErrMsg, ErrorBanner, Field, inputClass, SectionHeader } from '../../components/form-field/FormField';
 import { useAuth } from '../../context/AuthContext';
 import { authedFetch } from '../../lib/api';
+import { VehicleInfoTab } from './VehicleInfoTab';
 import type { MyFlat } from './types';
+
+const TABS = [
+  { value: 'info', label: 'My Info' },
+  { value: 'vehicles', label: 'Vehicle Info' },
+] as const;
+type Tab = (typeof TABS)[number]['value'];
 
 // 403/404 both mean "nothing to show" — the profile section still works regardless.
 async function fetchMyFlat(): Promise<MyFlat | null> {
@@ -218,6 +226,7 @@ function MyFlatForm({ flat }: { flat: MyFlat }) {
 
 export function MyDetailsPage() {
   const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>('info');
   const {
     data: flat,
     isLoading,
@@ -228,31 +237,54 @@ export function MyDetailsPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="m-0 mb-6 font-display text-xl text-ink">My details</h1>
 
-      {isLoading && <p className="text-sm text-muted">Loading…</p>}
-      {isError && (
-        <p role="alert" className="text-sm text-coral">
-          Could not load your flat.
-        </p>
+      <div className="mb-4 flex gap-2" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.value}
+            onClick={() => setTab(t.value)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ${
+              tab === t.value ? 'bg-teal text-white' : 'border border-line text-ink'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'info' && (
+        <>
+          {isLoading && <p className="text-sm text-muted">Loading…</p>}
+          {isError && (
+            <p role="alert" className="text-sm text-coral">
+              Could not load your flat.
+            </p>
+          )}
+
+          {flat && user?.role === 'OWNER' && <MyFlatForm flat={flat} />}
+
+          {flat && user?.role === 'TENANT' && (
+            <div className="rounded-2xl border border-line bg-white p-6">
+              <FlatDetailsSection flat={flat} />
+              <Divider />
+              <ProfileSection />
+            </div>
+          )}
+
+          {!isLoading && !flat && !isError && (
+            <div className="rounded-2xl border border-line bg-white p-6">
+              <ProfileSection />
+              <p className="mt-4 text-sm text-muted">
+                No flat is linked to your account yet — contact your society admin.
+              </p>
+            </div>
+          )}
+        </>
       )}
 
-      {flat && user?.role === 'OWNER' && <MyFlatForm flat={flat} />}
-
-      {flat && user?.role === 'TENANT' && (
-        <div className="rounded-2xl border border-line bg-white p-6">
-          <FlatDetailsSection flat={flat} />
-          <Divider />
-          <ProfileSection />
-        </div>
-      )}
-
-      {!isLoading && !flat && !isError && (
-        <div className="rounded-2xl border border-line bg-white p-6">
-          <ProfileSection />
-          <p className="mt-4 text-sm text-muted">
-            No flat is linked to your account yet — contact your society admin.
-          </p>
-        </div>
-      )}
+      {tab === 'vehicles' && <VehicleInfoTab />}
     </div>
   );
 }

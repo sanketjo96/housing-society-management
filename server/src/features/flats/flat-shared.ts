@@ -119,6 +119,11 @@ export async function applyOccupancy(
         data: { effectiveEnd: new Date() },
       }),
       prisma.flat.update({ where: { id: flatId }, data: { currentTenantId: null } }),
+      // Vehicle Finder (docs/features/vehicle-finder/): a departed tenant's vehicles
+      // must stop surfacing against a flat they no longer occupy — same rule as
+      // removeOwnTenant/removeTenant, this is the third (combined-form) path that
+      // ends a tenancy.
+      prisma.vehicle.deleteMany({ where: { userId: openOccupancy.tenantId } }),
     ]);
   }
 }

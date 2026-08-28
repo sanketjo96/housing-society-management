@@ -126,6 +126,9 @@ export async function removeOwnTenant(flatId: string, societyId: string, ownerId
   const [, updatedFlat] = await prisma.$transaction([
     prisma.occupancyChange.update({ where: { id: openOccupancy.id }, data: { effectiveEnd: now } }),
     prisma.flat.update({ where: { id: flatId }, data: { currentTenantId: null } }),
+    // Vehicle Finder (docs/features/vehicle-finder/): a departed tenant's vehicles
+    // must stop surfacing against a flat they no longer occupy.
+    prisma.vehicle.deleteMany({ where: { userId: openOccupancy.tenantId } }),
   ]);
   return updatedFlat;
 }

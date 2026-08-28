@@ -57,6 +57,13 @@ enum CreatedByType {
   ADMIN
 }
 
+// Vehicle Finder (docs/features/vehicle-finder/). No OCR, no audit logging in v1 —
+// see that doc's Confirmed Product Decisions.
+enum VehicleType {
+  TWO_WHEELER
+  FOUR_WHEELER
+}
+
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
 // see CLAUDE.md out-of-scope list). Modeled as an enum now so adding a channel later
 // is a one-line change, not a migration to a previously-untyped string column.
@@ -166,6 +173,7 @@ model Society {
   feeTypes             FeeType[]
   financeCategories    SocietyLedgerCategory[]
   societyLedgerEntries SocietyLedgerEntry[]
+  vehicles             Vehicle[]
 }
 
 model User {
@@ -199,6 +207,7 @@ model User {
   paymentIntents               PaymentIntent[]
   refreshTokens                RefreshToken[]
   passwordResetTokens          PasswordResetToken[]
+  vehicles                     Vehicle[]
 
   @@index([societyId])
 }
@@ -287,6 +296,36 @@ model OccupancyChange {
 
   @@index([flatId])
   @@index([tenantId])
+}
+
+// Vehicle Finder (docs/features/vehicle-finder/). Owned by the User who registered
+// it, not by Flat directly — a vehicle must stop surfacing the moment its
+// registrant's tenancy/ownership ends, and User already carries that relation to
+// Flat (ownedFlats/currentTenantFlats). Deleting a Vehicle row on tenancy-end is a
+// service-level responsibility (resident-flats-service.ts's removeOwnTenant,
+// admin-flats-tenancy-service.ts's removeTenant), not a DB constraint — there is
+// no ON DELETE CASCADE from a User's flat relation to a Vehicle, since a User row
+// itself is never deleted when a tenancy ends, only detached from the Flat.
+// societyId is denormalized (not reached only via a User->Flat join), same
+// tradeoff already accepted for MaintenanceRecord/LedgerEntry — the uniqueness
+// constraint and scopedWhere() both need it directly on this row. plateNumber is
+// always stored normalized (shared/vehicles/normalize-plate.ts), never raw input.
+model Vehicle {
+  id          String      @id @default(cuid())
+  plateNumber String
+  type        VehicleType
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([societyId, plateNumber])
+  @@index([societyId])
+  @@index([userId])
 }
 
 // One row per flat per calendar month — always a SYSTEM ledger entry, implicitly

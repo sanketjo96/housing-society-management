@@ -51,17 +51,53 @@ function renderPage() {
   );
 }
 
+interface VehicleLike {
+  id: string;
+  plateNumber: string;
+  type: 'TWO_WHEELER' | 'FOUR_WHEELER';
+  createdAt: string;
+}
+
+// Vehicles is a mutable list (not a fixed response) so a test can register/delete
+// and see the list actually change on the query-invalidation refetch that follows.
 function mockAuthAndFlat(
   user: typeof ownerUser | typeof tenantUser,
   flatResponse: { ok: boolean; status?: number; json: () => Promise<unknown> },
+  initialVehicles: VehicleLike[] = [],
 ) {
+  const vehicles = [...initialVehicles];
   const fetchMock = fetch as unknown as FetchMock;
-  fetchMock.mockImplementation((url: string) => {
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('/api/auth/refresh')) {
       return Promise.resolve({ ok: true, json: async () => ({ accessToken: 'fake-token' }) });
     }
     if (url.includes('/api/auth/me')) {
       return Promise.resolve({ ok: true, json: async () => user });
+    }
+    const vehiclesMatch = url.match(/\/api\/me\/vehicles(?:\/(.+))?$/);
+    if (vehiclesMatch) {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      const vehicleId = vehiclesMatch[1];
+      if (method === 'DELETE' && vehicleId) {
+        const idx = vehicles.findIndex((v) => v.id === vehicleId);
+        if (idx >= 0) vehicles.splice(idx, 1);
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      if (method === 'POST') {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        const created: VehicleLike = {
+          id: `v-${vehicles.length + 1}`,
+          plateNumber: body.plateNumber,
+          type: body.type,
+          createdAt: new Date().toISOString(),
+        };
+        vehicles.push(created);
+        return Promise.resolve({ ok: true, json: async () => created });
+      }
+      // A snapshot copy, not the live array — react-query may call this
+      // lazily enough that a later push() onto `vehicles` would otherwise
+      // leak into a GET response that had already "started" earlier.
+      return Promise.resolve({ ok: true, json: async () => [...vehicles] });
     }
     if (url.includes('/api/me/flat')) {
       return Promise.resolve(flatResponse);
@@ -186,5 +222,57 @@ describe('MyDetailsPage', () => {
 
     await waitFor(() => expect(screen.getByText(/no flat is linked/i)).toBeInTheDocument());
     expect(screen.getByLabelText(/your full name/i)).toBeInTheDocument();
+  });
+
+  describe('Vehicle Info tab', () => {
+    it('shows the register form and an empty list when switched to', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByRole('tab', { name: /vehicle info/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('tab', { name: /vehicle info/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/plate number/i)).toBeInTheDocument());
+      expect(screen.getByText(/no vehicles registered yet/i)).toBeInTheDocument();
+    });
+
+    it('registers a vehicle and shows it in the list', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: /vehicle info/i }));
+      await user.type(await screen.findByLabelText(/plate number/i), 'MH12AB1234');
+      await user.click(screen.getByRole('button', { name: /add vehicle/i }));
+
+      await waitFor(() => expect(screen.getByText('MH12AB1234')).toBeInTheDocument());
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/me/vehicles'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('deletes a listed vehicle', async () => {
+      mockAuthAndFlat(ownerUser, { ok: true, json: async () => ownerOccupiedFlat }, [
+        { id: 'veh-1', plateNumber: 'MH12CD5678', type: 'FOUR_WHEELER', createdAt: new Date().toISOString() },
+      ]);
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: /vehicle info/i }));
+      await waitFor(() => expect(screen.getByText('MH12CD5678')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /delete vehicle/i }));
+
+      await waitFor(() => expect(screen.queryByText('MH12CD5678')).not.toBeInTheDocument());
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/me/vehicles/veh-1'),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
   });
 });
