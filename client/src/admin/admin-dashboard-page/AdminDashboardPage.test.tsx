@@ -188,7 +188,7 @@ describe('AdminDashboardPage', () => {
 
     // Links to the read-only flat-wise dues table, not the /other-charges billing
     // page (deliberately unlinked from the Dashboard card, per the admin nav
-    // restructure — that page is reached via the sidebar's "Custom Bills" instead).
+    // restructure — that page is reached via the sidebar's "Other Charges" instead).
     const link = await screen.findByRole('link', { name: /other charges outstanding total/i });
     expect(link).toHaveAttribute('href', '/other-charges-dues');
   });

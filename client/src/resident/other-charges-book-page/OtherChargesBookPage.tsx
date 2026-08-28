@@ -91,12 +91,18 @@ function SortableHeader({
   activeKey,
   dir,
   onSort,
+  align,
 }: {
   label: string;
   sortKey: SortKey;
   activeKey: SortKey;
   dir: SortDir;
   onSort: (key: SortKey) => void;
+  // The button is a flex container, which — unlike plain text — doesn't
+  // honor the header cell's `text-align: right` (DataTable.tsx's `meta.align`)
+  // on its own; it needs to fill the cell and justify its own content to
+  // line up with right-aligned numeric values below it.
+  align?: 'right';
 }) {
   const active = sortKey === activeKey;
   const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
@@ -104,7 +110,7 @@ function SortableHeader({
     <button
       type="button"
       onClick={() => onSort(sortKey)}
-      className={`flex items-center gap-1 bg-transparent p-0 font-semibold ${active ? 'text-ink' : 'text-muted'}`}
+      className={`flex items-center gap-1 bg-transparent p-0 font-semibold ${align === 'right' ? 'w-full justify-end' : ''} ${active ? 'text-ink' : 'text-muted'}`}
     >
       {label} <Icon size={12} />
     </button>
@@ -150,7 +156,7 @@ const depositColumns: ColumnDef<DepositRow, unknown>[] = [
 
 const BOOK_TABS: { value: BookTab; label: string }[] = [
   { value: 'PAYMENTS', label: 'Payment History' },
-  { value: 'BILLS', label: 'Bills' },
+  { value: 'BILLS', label: 'Charges' },
 ];
 
 // Structural mirror of MaintenanceBookPage.tsx for the Other Charges pool, except
@@ -233,7 +239,14 @@ export function OtherChargesBookPage() {
       {
         id: 'amount',
         header: () => (
-          <SortableHeader label="Amount" sortKey="amount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+          <SortableHeader
+            label="Amount"
+            sortKey="amount"
+            activeKey={sortKey}
+            dir={sortDir}
+            onSort={handleSort}
+            align="right"
+          />
         ),
         meta: { align: 'right' },
         cell: ({ row }) => (

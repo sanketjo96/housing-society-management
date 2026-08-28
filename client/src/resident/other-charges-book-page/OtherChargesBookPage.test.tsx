@@ -99,8 +99,8 @@ function mockFetch(ledgerBody: unknown = ledger, openIntent: unknown = null) {
   });
 }
 
-async function goToBillsTab(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('tab', { name: 'Bills' }));
+async function goToChargesTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('tab', { name: 'Charges' }));
 }
 
 function rowTexts() {
@@ -130,15 +130,15 @@ describe('OtherChargesBookPage', () => {
     );
   });
 
-  it('shows Payment History and Bills tabs, defaulting to Payment History', async () => {
+  it('shows Payment History and Charges tabs, defaulting to Payment History', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Payment History' })).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: 'Payment History' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: 'Charges' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByText('+₹4,000')).toBeInTheDocument();
-    expect(screen.queryByText('Transfer Fee')).not.toBeInTheDocument(); // Bills table is hidden
+    expect(screen.queryByText('Transfer Fee')).not.toBeInTheDocument(); // Charges table is hidden
   });
 
   it('the Payment History tab shows only DEPOSIT rows, with a receipt button where hasReceipt is set', async () => {
@@ -178,14 +178,14 @@ describe('OtherChargesBookPage', () => {
     await waitFor(() => expect(screen.getByText('Rejected: Amount mismatch')).toBeInTheDocument());
   });
 
-  it('switches to the Bills tab: shows only OTHER_CHARGE rows, each with its own settlement status and fee type', async () => {
+  it('switches to the Charges tab: shows only OTHER_CHARGE rows, each with its own settlement status and fee type', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
 
-    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Charges' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Joining Fee')).toBeInTheDocument();
     expect(screen.getByText('Transfer Fee')).toBeInTheDocument();
     expect(screen.getByText('Fine')).toBeInTheDocument();
@@ -202,7 +202,7 @@ describe('OtherChargesBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
     expect(rowTexts().map((r) => r[0])).toEqual(['Transfer Fee', 'Fine', 'Joining Fee']);
   });
@@ -212,7 +212,7 @@ describe('OtherChargesBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /billed on/i }));
 
@@ -224,7 +224,7 @@ describe('OtherChargesBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /^amount/i }));
 
@@ -237,7 +237,7 @@ describe('OtherChargesBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Transfer Fee')).toBeInTheDocument());
     await user.type(screen.getByLabelText('From'), '2026-02-01');
 
@@ -248,12 +248,12 @@ describe('OtherChargesBookPage', () => {
     });
   });
 
-  it('shows an empty state on the Bills tab when there are no charges billed', async () => {
+  it('shows an empty state on the Charges tab when there are no charges billed', async () => {
     mockFetch({ entries: [], totals: { totalCharges: 0, outstanding: 0 } });
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText(/no charges billed yet/i)).toBeInTheDocument());
   });
 

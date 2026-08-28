@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Banknote, BookText, Building2, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Upload, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, Car, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Upload, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell';
@@ -9,7 +9,7 @@ import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell
 // but not sidebar items — reached only via dashboard tiles (read-only drill-downs).
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/other-charges', label: 'Custom Bills', icon: BadgeIndianRupee },
+  { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
   { to: '/resident-ledger', label: 'Resident Book', icon: Users },
   {
     label: 'Manage Finance',
@@ -40,6 +40,8 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/settings/finance-categories', label: 'Finance Categories', icon: ListTree },
     ],
   },
+  // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
+  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
 ];
 
 // '/other-charges-book' is reached only via the Dashboard's "Other Outstanding" card.
@@ -47,6 +49,7 @@ const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },
   { to: '/my-details', label: 'My Details', icon: User },
+  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
 ];
 
 export function DashboardLayout() {

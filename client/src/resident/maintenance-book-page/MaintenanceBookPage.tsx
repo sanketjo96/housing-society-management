@@ -95,12 +95,18 @@ function SortableHeader({
   activeKey,
   dir,
   onSort,
+  align,
 }: {
   label: string;
   sortKey: SortKey;
   activeKey: SortKey;
   dir: SortDir;
   onSort: (key: SortKey) => void;
+  // The button is a flex container, which — unlike plain text — doesn't
+  // honor the header cell's `text-align: right` (DataTable.tsx's `meta.align`)
+  // on its own; it needs to fill the cell and justify its own content to
+  // line up with right-aligned numeric values below it.
+  align?: 'right';
 }) {
   const active = sortKey === activeKey;
   const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
@@ -108,7 +114,7 @@ function SortableHeader({
     <button
       type="button"
       onClick={() => onSort(sortKey)}
-      className={`flex items-center gap-1 bg-transparent p-0 font-semibold ${active ? 'text-ink' : 'text-muted'}`}
+      className={`flex items-center gap-1 bg-transparent p-0 font-semibold ${align === 'right' ? 'w-full justify-end' : ''} ${active ? 'text-ink' : 'text-muted'}`}
     >
       {label} <Icon size={12} />
     </button>
@@ -154,13 +160,14 @@ const depositColumns: ColumnDef<DepositRow, unknown>[] = [
 
 const BOOK_TABS: { value: BookTab; label: string }[] = [
   { value: 'PAYMENTS', label: 'Payment History' },
-  { value: 'BILLS', label: 'Bills' },
+  { value: 'BILLS', label: 'Charges' },
 ];
 
 // Two tabs: "Payment History" (default — Pay control + Deposit history) and
-// "Bills" (charges table + date filters, no Pay control). Status on the Bills
-// table is a derived Unpaid/Partially settled/Paid badge (FIFO-filled server-side
-// across records oldest-first). Lifetime view — only Bills' date filter narrows it.
+// "Charges" (charges table + date filters, no Pay control). Status on the
+// Charges table is a derived Unpaid/Partially settled/Paid badge (FIFO-filled
+// server-side across records oldest-first). Lifetime view — only the Charges
+// tab's date filter narrows it.
 export function MaintenanceBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -248,13 +255,22 @@ export function MaintenanceBookPage() {
     () => [
       {
         id: 'date',
-        header: () => <SortableHeader label="Date" sortKey="date" activeKey={sortKey} dir={sortDir} onSort={handleSort} />,
+        header: () => (
+          <SortableHeader label="Billed on" sortKey="date" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+        ),
         cell: ({ row }) => <span className="font-mono-brand text-ink">{periodLabel(row.original.period)}</span>,
       },
       {
         id: 'amount',
         header: () => (
-          <SortableHeader label="Amount" sortKey="amount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+          <SortableHeader
+            label="Amount"
+            sortKey="amount"
+            activeKey={sortKey}
+            dir={sortDir}
+            onSort={handleSort}
+            align="right"
+          />
         ),
         meta: { align: 'right' },
         cell: ({ row }) => (

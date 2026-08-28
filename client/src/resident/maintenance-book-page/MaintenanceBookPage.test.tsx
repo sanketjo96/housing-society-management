@@ -99,8 +99,8 @@ function mockFetch(ledgerBody: unknown = ledger, openIntent: unknown = null) {
   });
 }
 
-async function goToBillsTab(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('tab', { name: 'Bills' }));
+async function goToChargesTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('tab', { name: 'Charges' }));
 }
 
 // Opens the Pay modal from the "You owe ₹X" row — Step 1 (radios + amount +
@@ -127,15 +127,15 @@ describe('MaintenanceBookPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows Payment History and Bills tabs, defaulting to Payment History', async () => {
+  it('shows Payment History and Charges tabs, defaulting to Payment History', async () => {
     mockFetch();
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Payment History' })).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: 'Payment History' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: 'Charges' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByText('+₹4,000')).toBeInTheDocument();
-    expect(screen.queryByText('Mar 2026')).not.toBeInTheDocument(); // Bills table is hidden
+    expect(screen.queryByText('Mar 2026')).not.toBeInTheDocument(); // Charges table is hidden
   });
 
   it('the Payment History tab shows DEPOSIT rows with a receipt button where hasReceipt is set', async () => {
@@ -182,14 +182,14 @@ describe('MaintenanceBookPage', () => {
     expect(screen.getByText('My reason')).toBeInTheDocument();
   });
 
-  it('switches to the Bills tab: shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
+  it('switches to the Charges tab: shows only SYSTEM charges, not Deposit/Credit rows, each with its own settlement status', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
 
-    expect(screen.getByRole('tab', { name: 'Bills' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Charges' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Mar 2026')).toBeInTheDocument();
     expect(screen.getByText('Jan 2026')).toBeInTheDocument();
     expect(screen.getByText('Feb 2026')).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     expect(rowTexts().map((r) => r[0])).toEqual(['Mar 2026', 'Feb 2026', 'Jan 2026']);
   });
@@ -216,9 +216,9 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /^date/i }));
+    await user.click(screen.getByRole('button', { name: /billed on/i }));
 
     await waitFor(() => expect(rowTexts().map((r) => r[0])).toEqual(['Jan 2026', 'Feb 2026', 'Mar 2026']));
   });
@@ -228,7 +228,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /^amount/i }));
 
@@ -242,7 +242,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     await user.type(screen.getByLabelText('From'), '2026-02-01');
 
@@ -253,12 +253,12 @@ describe('MaintenanceBookPage', () => {
     });
   });
 
-  it('shows an empty state on the Bills tab when there are no SYSTEM records', async () => {
+  it('shows an empty state on the Charges tab when there are no SYSTEM records', async () => {
     mockFetch({ entries: [], totals: { totalCharges: 0, outstanding: 0 } });
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText(/no maintenance records yet/i)).toBeInTheDocument());
   });
 
@@ -276,7 +276,7 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await goToBillsTab(user);
+    await goToChargesTab(user);
     await waitFor(() => expect(screen.getByText('Mar 2026')).toBeInTheDocument());
     expect(screen.queryByLabelText('Year')).not.toBeInTheDocument();
   });

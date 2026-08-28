@@ -159,28 +159,31 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Custom Bills, Resident Book, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Other Charges, Resident Book, Manage Finance, Settings, Vehicle Finder) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /^settings$/i })).toBeInTheDocument());
     const nav = screen.getByRole('navigation', { name: /dashboard sections/i });
-    const labels = within(nav)
+    const links = within(nav)
       .getAllByRole('link')
-      .map((el) => el.textContent)
-      .concat(
-        within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
-        within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
-      );
-    // Dashboard, Custom Bills, Resident Book are direct links; Manage Finance and
-    // Settings are collapsed group toggles — their children (Record/Mark
-    // Paid/Receipt Book, and Society details/Billing plan/Custom Fees/Finance
-    // categories respectively) aren't links yet.
+      .map((el) => el.textContent);
+    const labels = links.concat(
+      within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
+      within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
+    );
+    // Dashboard, Other Charges, Resident Book, and Vehicle Finder are direct
+    // links; Manage Finance and Settings are collapsed group toggles — their
+    // children (Record/Mark Paid/Receipt Book, and Society details/Billing
+    // plan/Custom Fees/Finance categories respectively) aren't links yet, so
+    // this assertion's button labels are appended after every real link,
+    // regardless of the buttons' actual position in the sidebar.
     expect(labels[0]).toMatch(/dashboard/i);
-    expect(labels[1]).toMatch(/custom bills/i);
+    expect(labels[1]).toMatch(/other charges/i);
     expect(labels[2]).toMatch(/resident book/i);
-    expect(labels[3]).toMatch(/manage finance/i);
-    expect(labels[4]).toMatch(/settings/i);
+    expect(labels[3]).toMatch(/vehicle finder/i);
+    expect(labels[4]).toMatch(/manage finance/i);
+    expect(labels[5]).toMatch(/settings/i);
 
     expect(screen.queryByRole('link', { name: /^record$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /mark paid/i })).not.toBeInTheDocument();
@@ -214,12 +217,12 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /mark paid/i })).not.toBeInTheDocument();
   });
 
-  it('links "Custom Bills" to /other-charges', async () => {
+  it('links "Other Charges" to /other-charges', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /custom bills/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /custom bills/i })).toHaveAttribute('href', '/other-charges');
+    await waitFor(() => expect(screen.getByRole('link', { name: /other charges/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /other charges/i })).toHaveAttribute('href', '/other-charges');
   });
 
   it('links "Resident Book" to /resident-ledger', async () => {
@@ -228,6 +231,22 @@ describe('DashboardLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('link', { name: /resident book/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /resident book/i })).toHaveAttribute('href', '/resident-ledger');
+  });
+
+  it('links "Vehicle Finder" to /vehicle-finder for an ADMIN', async () => {
+    mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /vehicle finder/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /vehicle finder/i })).toHaveAttribute('href', '/vehicle-finder');
+  });
+
+  it('links "Vehicle Finder" to /vehicle-finder for an OWNER', async () => {
+    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /vehicle finder/i })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /vehicle finder/i })).toHaveAttribute('href', '/vehicle-finder');
   });
 
   it('expands the Settings submenu on click, revealing Society details, Billing plan, and Custom Fees as real top-level URLs', async () => {

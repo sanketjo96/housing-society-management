@@ -26,6 +26,7 @@ import { LoginPage } from './auth/login-page/LoginPage'
 import { MaintenanceBookPage } from './resident/maintenance-book-page/MaintenanceBookPage'
 import { MyDetailsPage } from './resident/my-details-page/MyDetailsPage'
 import { OtherChargesBookPage } from './resident/other-charges-book-page/OtherChargesBookPage'
+import { VehicleFinderPage } from './resident/vehicle-finder-page/VehicleFinderPage'
 import { ResetPasswordPage } from './auth/reset-password-page/ResetPasswordPage'
 
 // staleTime > 0 so switching pages (which mount/unmount their content) doesn't
@@ -158,7 +159,7 @@ function App() {
                 path="/manage-finance"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ManageFinancePage /></ProtectedRoute>}
               />
-              {/* Sidebar nav item, labeled "Custom Bills" (DashboardLayout.tsx) — the
+              {/* Sidebar nav item, labeled "Other Charges" (DashboardLayout.tsx) — the
                   primary action of billing a new ad-hoc charge, distinct from the
                   read-only /other-charges-dues drill-down below. */}
               <Route
@@ -189,6 +190,13 @@ function App() {
               <Route
                 path="/my-details"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><MyDetailsPage /></ProtectedRoute>}
+              />
+              {/* Available to every role (ADMIN included) — unlike almost every other
+                  route here, Vehicle Finder isn't persona-restricted: anyone in the
+                  society can look up a parked vehicle's plate (docs/features/vehicle-finder/). */}
+              <Route
+                path="/vehicle-finder"
+                element={<ProtectedRoute allowedRoles={['ADMIN', 'OWNER', 'TENANT']}><VehicleFinderPage /></ProtectedRoute>}
               />
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

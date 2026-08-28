@@ -178,7 +178,7 @@ export function FeeTypesPage() {
           <h1 className="m-0 font-display text-xl text-ink">Custom fees</h1>
           <p className="m-0 mt-0.5 text-xs text-muted">
             The catalog of Custom Fees (joining fee, transfer fee, fine, ...) available when billing a
-            flat from the Custom Bills page.
+            flat from the Other Charges page.
           </p>
         </div>
         <button
