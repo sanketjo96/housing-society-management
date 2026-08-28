@@ -13,7 +13,8 @@ import {
   ReceiptDownloadButton,
   SummaryCard,
 } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
-import { fetchOpenIntent, PayIntentPanel } from '../_shared/components/pay-intent-panel/PayIntentPanel';
+import { fetchOpenIntent } from '../_shared/components/pay-intent-panel/PayIntentPanel';
+import { PayModal } from '../_shared/components/pay-modal/PayModal';
 import { authedFetch } from '../../lib/api';
 import { useIsMobile } from '../../lib/use-is-mobile';
 import type {
@@ -165,6 +166,16 @@ export function MaintenanceBookPage() {
   const isMobile = useIsMobile();
   const [amountInput, setAmountInput] = useState('');
   const [activeTab, setActiveTab] = useState<BookTab>('PAYMENTS');
+  // Step 1 (PayModal, before locking) decides what's being paid; Step 2
+  // (PayIntentPanel, after locking) only reads it back to show the
+  // committee-approval warning for 'EXPENSE' — the note field itself is
+  // always available regardless of which is picked.
+  const [paymentType, setPaymentType] = useState<'MAINTENANCE' | 'EXPENSE'>('MAINTENANCE');
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  // "Back" (Step 2 -> Step 1) without cancelling the already-locked intent —
+  // re-locking upserts the same intent server-side, so this is purely a
+  // local display override on top of `intentOpenForThisPool`.
+  const [showStep1, setShowStep1] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-maintenance-records'],
@@ -205,6 +216,7 @@ export function MaintenanceBookPage() {
     onSuccess: (body) => {
       queryClient.setQueryData(['payment-intent'], (body as { intent: { upiLink?: string } }).intent);
       const intent = (body as { intent: { upiLink?: string } }).intent;
+      setShowStep1(false);
       if (isMobile && intent.upiLink) window.location.href = intent.upiLink;
     },
   });
@@ -345,7 +357,7 @@ export function MaintenanceBookPage() {
           {activeTab === 'PAYMENTS' && (
             <>
               <div className="mb-5 rounded-2xl border border-line bg-white p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
                   <div>
                     {outstanding > 0 ? (
                       <span className="text-sm text-ink">
@@ -357,55 +369,21 @@ export function MaintenanceBookPage() {
                       </span>
                     )}
                   </div>
-                  {/* Visible even at ₹0 Outstanding, for advance deposits. Hidden only when an intent is already open. */}
-                  {!intentQuery.data && (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <label className="flex flex-col text-xs font-semibold text-muted">
-                        {outstanding > 0 ? 'Amount to pay' : 'Amount to deposit'}
-                        <input
-                          type="number"
-                          aria-label="Amount to pay"
-                          value={amountInput}
-                          onChange={(e) => setAmountInput(e.target.value)}
-                          min={0.01}
-                          step="0.01"
-                          className="mt-1 w-32 rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => lockMutation.mutate(parsedAmount)}
-                        disabled={lockMutation.isPending || !isAmountValid}
-                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
-                      >
-                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
-                      </button>
-                    </div>
+                  {/* Visible even at ₹0 Outstanding, for advance deposits. Hidden only when the open intent belongs to the other pool. */}
+                  {!intentOpenForOtherPool && (
+                    <button
+                      type="button"
+                      onClick={() => setPayModalOpen(true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      <QrCode size={14} /> {intentOpenForThisPool ? 'Resume payment' : 'Pay'}
+                    </button>
                   )}
                 </div>
 
-                {!intentQuery.data && !isAmountValid && amountInput.trim() !== '' && (
-                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-coral">Enter an amount greater than ₹0.</p>
-                )}
-
-                {!intentQuery.data && overpayAmount > 0 && (
-                  <p className="mb-2.5 mt-[-0.5rem] text-xs text-teal">
-                    ₹{overpayAmount.toLocaleString('en-IN')} will be applied as Available Credit.
-                  </p>
-                )}
-
-                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
-
-                {intentOpenForThisPool && intentQuery.data && (
-                  <PayIntentPanel
-                    intent={intentQuery.data}
-                    isMobile={isMobile}
-                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] })}
-                  />
-                )}
                 {/* Only one open intent at a time — point at where to finish an Other Charges one. */}
                 {intentOpenForOtherPool && (
-                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                  <div className="mt-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
                     You have a pending payment for Other Charges — finish or cancel it on the{' '}
                     <Link to="/other-charges-book" className="font-semibold text-teal">
                       Other Charges
@@ -414,6 +392,84 @@ export function MaintenanceBookPage() {
                   </div>
                 )}
               </div>
+
+              <PayModal
+                title="Maintenance payment"
+                isOpen={payModalOpen}
+                onClose={() => {
+                  setPayModalOpen(false);
+                  setShowStep1(false);
+                }}
+                intent={intentOpenForThisPool && !showStep1 ? intentQuery.data : null}
+                isMobile={isMobile}
+                paymentType={paymentType}
+                multiStep
+                onBack={() => setShowStep1(true)}
+                onSubmitted={() => {
+                  queryClient.invalidateQueries({ queryKey: ['my-maintenance-records'] });
+                  setPaymentType('MAINTENANCE');
+                  setShowStep1(false);
+                }}
+                onCancelled={() => setPaymentType('MAINTENANCE')}
+                step1={
+                  <div>
+                    <div className="mb-3 flex flex-col gap-1.5">
+                      <label className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                        <input
+                          type="radio"
+                          name="pay-intent-payment-type"
+                          value="MAINTENANCE"
+                          checked={paymentType === 'MAINTENANCE'}
+                          onChange={() => setPaymentType('MAINTENANCE')}
+                        />
+                        Maintenance Payment
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                        <input
+                          type="radio"
+                          name="pay-intent-payment-type"
+                          value="EXPENSE"
+                          checked={paymentType === 'EXPENSE'}
+                          onChange={() => setPaymentType('EXPENSE')}
+                        />
+                        Expense to settle against maintenance
+                      </label>
+                    </div>
+
+                    <label className="mb-3 flex flex-col text-xs font-semibold text-muted">
+                      {outstanding > 0 ? 'Amount to pay' : 'Amount to deposit'}
+                      <input
+                        type="number"
+                        aria-label="Amount to pay"
+                        value={amountInput}
+                        onChange={(e) => setAmountInput(e.target.value)}
+                        min={0.01}
+                        step="0.01"
+                        className="mt-1 w-full rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+                      />
+                    </label>
+
+                    {!isAmountValid && amountInput.trim() !== '' && (
+                      <p className="mb-2.5 text-xs text-coral">Enter an amount greater than ₹0.</p>
+                    )}
+                    {overpayAmount > 0 && (
+                      <p className="mb-2.5 text-xs text-teal">
+                        ₹{overpayAmount.toLocaleString('en-IN')} will be applied as Available Credit.
+                      </p>
+                    )}
+                    {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
+
+                    <button
+                      type="button"
+                      onClick={() => lockMutation.mutate(parsedAmount)}
+                      disabled={lockMutation.isPending || !isAmountValid}
+                      className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
+                    >
+                      {lockMutation.isPending ? 'Locking…' : 'Next'}
+                    </button>
+                  </div>
+                }
+              />
 
               {data.depositRows.length === 0 ? (
                 <p className="m-0 flex items-center gap-1.5 text-sm text-teal">

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, X } from 'lucide-react';
 import { ErrorBanner } from '../../../../components/form-field/FormField';
 import { FileUploadField } from '../../../../components/file-upload-field/FileUploadField';
 import { authedFetch } from '../../../../lib/api';
@@ -37,20 +37,29 @@ export async function fetchOpenIntent(): Promise<PaymentIntent | null> {
 export function PayIntentPanel({
   intent,
   isMobile,
+  paymentType,
   onSubmitted,
+  onCancelled,
+  onBack,
 }: {
   intent: PaymentIntent;
   isMobile: boolean;
+  // Picked in Step 1 (the caller page, before locking) — only meaningful for
+  // 'MAINTENANCE' category. This panel is Step 2 and only reads it back to
+  // decide whether to show the committee-approval warning; the note field
+  // itself is always available regardless of which was picked.
+  paymentType?: 'MAINTENANCE' | 'EXPENSE';
   onSubmitted?: () => void;
+  onCancelled?: () => void;
+  // Returns to Step 1 without cancelling the locked intent — the backend
+  // upserts on re-lock (`createOrReplacePaymentIntent`), so a fresh "Next"
+  // just updates the same intent in place. Omitted where there's no
+  // interactive Step 1 to go back to (Other Charges).
+  onBack?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState('');
-  // The note field itself is always available for a Maintenance payment,
-  // freely editable regardless of which radio is picked. 'EXPENSE' only gates
-  // the committee-approval warning — a resident-fronted expense they want
-  // settled against maintenance needs the committee's sign-off.
-  const [paymentType, setPaymentType] = useState<'MAINTENANCE' | 'EXPENSE'>('MAINTENANCE');
 
   // Re-check the intent when the tab regains visibility (e.g. after a UPI app redirect).
   useEffect(() => {
@@ -77,7 +86,6 @@ export function PayIntentPanel({
       queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
       setFile(null);
       setNote('');
-      setPaymentType('MAINTENANCE');
       onSubmitted?.();
     },
   });
@@ -88,13 +96,14 @@ export function PayIntentPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-intent'] });
+      onCancelled?.();
     },
   });
 
   const isBankTransfer = intent.paymentMethod === 'BANK_TRANSFER';
 
   return (
-    <div className="mb-4 flex flex-wrap items-start gap-4 rounded-xl border border-line bg-paper p-4">
+    <div className="flex flex-wrap items-start gap-4">
       {!isBankTransfer && !isMobile && (
         <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-md border border-line bg-white p-1">
           <img src={intent.qrDataUrl} alt="UPI payment QR code" className="h-full w-full" />
@@ -120,33 +129,6 @@ export function PayIntentPanel({
               ? 'Complete the payment in your UPI app, then attach the screenshot below.'
               : 'Scan the QR with a UPI app on your phone. Once you have a screenshot, attach it below — you can come back later if needed.'}
         </p>
-
-        {/* Maintenance-specific wording — Other Charges keeps the plain, radio-less
-            workflow untouched. */}
-        {intent.category === 'MAINTENANCE' && (
-          <div className="mb-2.5 flex flex-col gap-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
-              <input
-                type="radio"
-                name="pay-intent-payment-type"
-                value="MAINTENANCE"
-                checked={paymentType === 'MAINTENANCE'}
-                onChange={() => setPaymentType('MAINTENANCE')}
-              />
-              Maintenance Payment
-            </label>
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
-              <input
-                type="radio"
-                name="pay-intent-payment-type"
-                value="EXPENSE"
-                checked={paymentType === 'EXPENSE'}
-                onChange={() => setPaymentType('EXPENSE')}
-              />
-              Expense to settle against maintenance
-            </label>
-          </div>
-        )}
 
         <div className="mb-2.5">
           <FileUploadField file={file} onFileChange={setFile} required placeholder="Attach payment screenshot" />
@@ -178,6 +160,15 @@ export function PayIntentPanel({
         {submitMutation.error && <ErrorBanner>{submitMutation.error.message}</ErrorBanner>}
 
         <div className="flex gap-2">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-transparent px-3.5 py-2 text-xs font-semibold text-ink"
+            >
+              <ArrowLeft size={13} /> Back
+            </button>
+          )}
           <button
             type="button"
             onClick={() => submitMutation.mutate()}

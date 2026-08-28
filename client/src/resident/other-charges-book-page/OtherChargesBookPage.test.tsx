@@ -267,21 +267,21 @@ describe('OtherChargesBookPage', () => {
     expect(screen.getAllByText('₹1,100').length).toBeGreaterThan(0);
   });
 
-  it('shows the Pay control on the Payment History tab (default): the amount is fixed at the full Outstanding, not editable, and requires a screenshot before submitting', async () => {
+  it('shows only "You owe ₹X" and a Pay button on the Payment History tab — no amount control inline', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/you owe/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^pay$/i })).toBeInTheDocument();
+    expect(screen.queryByText('Amount to pay')).not.toBeInTheDocument();
+  });
+
+  it('clicking Pay locks the full Outstanding immediately (single step — nothing to configure) and opens the modal on the locked amount', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByText('Amount to pay')).toBeInTheDocument());
-    // Read-only display of the fixed amount — no input to find/edit, unlike
-    // Maintenance's Pay control (Other Charges can never be settled partially).
-    // Scoped to the label's own sibling (not a bare text query), since "₹1,100"
-    // also appears in the Outstanding summary card and the "You owe" line.
-    expect(screen.queryByLabelText('Amount to pay')).not.toBeInTheDocument();
-    const amountLabel = screen.getByText('Amount to pay');
-    expect(amountLabel.parentElement).toHaveTextContent('₹1,100');
-
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(await screen.findByRole('button', { name: /^pay$/i }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -298,19 +298,20 @@ describe('OtherChargesBookPage', () => {
 
   // The "Maintenance Payment" / "Expense to settle against maintenance" radios
   // (and the note field they gate) are Maintenance-only wording — Other Charges
-  // keeps the plain, radio-less workflow.
+  // keeps the plain, radio-less, single-step workflow.
   it('never shows the payment-type radios or note field for an Other Charges payment', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByText('Amount to pay')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(await screen.findByRole('button', { name: /^pay$/i }));
 
     await screen.findByText(/locked/i);
     expect(screen.queryByLabelText('Maintenance Payment')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Expense to settle against maintenance')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
+    // No Back button either — there's no interactive Step 1 to return to (fixed amount, single step).
+    expect(screen.queryByRole('button', { name: /^back$/i })).not.toBeInTheDocument();
   });
 
   it('shows a notice instead of the Pay button on the Payment History tab when the open intent is for Maintenance', async () => {
@@ -325,7 +326,30 @@ describe('OtherChargesBookPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/pending payment for maintenance/i)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(pay|resume payment)$/i })).not.toBeInTheDocument();
+  });
+
+  it('shows "Resume payment" instead of "Pay" when an intent for this pool is already open, opening straight to Step 2 without re-locking', async () => {
+    mockFetch(ledger, {
+      id: 'intent-1',
+      amount: 1100,
+      paymentMethod: 'UPI',
+      upiLink: 'upi://pay?x',
+      qrDataUrl: 'data:image/png;base64,abc',
+      category: 'OTHER_CHARGE',
+    });
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: /^resume payment$/i }));
+
+    expect(await screen.findByText(/locked/i)).toBeInTheDocument();
+    // No second lock call — only the initial GET to check for an open intent.
+    expect(
+      (fetch as unknown as FetchMock).mock.calls.filter(
+        (call: unknown[]) => (call[1] as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toHaveLength(0);
   });
 
   it('hides the Pay controls and shows "Nothing outstanding right now" on the Payment History tab when outstanding is 0', async () => {

@@ -103,6 +103,12 @@ async function goToBillsTab(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('tab', { name: 'Bills' }));
 }
 
+// Opens the Pay modal from the "You owe ₹X" row — Step 1 (radios + amount +
+// Next) if no intent is locked yet, Step 2 directly if resuming one.
+async function openPayModal(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /^(pay|resume payment)$/i }));
+}
+
 function rowTexts() {
   // Only the active tab's table is mounted at a time, so there's exactly one table.
   const table = screen.getByRole('table');
@@ -275,15 +281,31 @@ describe('MaintenanceBookPage', () => {
     expect(screen.queryByLabelText('Year')).not.toBeInTheDocument();
   });
 
-  it('shows the Pay control on the Payment History tab (default): pre-fills Outstanding, locks the amount, and requires a screenshot before submitting', async () => {
+  it('shows only "You owe ₹X" and a Pay button on the Payment History tab — no amount/radio control inline', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/you owe/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^pay$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount to pay')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Maintenance Payment')).not.toBeInTheDocument();
+  });
+
+  it('opens a modal on Pay: Step 1 pre-fills Outstanding and shows the payment-type radios; Next locks it and requires a screenshot before submitting', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
-    const amountInput = await screen.findByLabelText('Amount to pay');
-    await waitFor(() => expect(amountInput).toHaveValue(1100));
+    await openPayModal(user);
 
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    const amountInput = await screen.findByLabelText('Amount to pay');
+    expect(amountInput).toHaveValue(1100);
+    expect(screen.getByLabelText('Maintenance Payment')).toBeChecked();
+    expect(screen.getByLabelText('Expense to settle against maintenance')).not.toBeChecked();
+    // Step 2 content doesn't exist yet — nothing locked.
+    expect(screen.queryByLabelText(/reason \(optional\)/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -300,63 +322,96 @@ describe('MaintenanceBookPage', () => {
     expect(submitButton).toBeEnabled();
   });
 
+  it('Back returns to Step 1 without cancelling the locked intent; editing the amount and clicking Next again re-locks (upserts) it', async () => {
+    mockFetch();
+    renderPage();
+    const user = userEvent.setup();
+
+    await openPayModal(user);
+    await screen.findByLabelText('Amount to pay');
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    await screen.findByRole('button', { name: /submit payment/i });
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }));
+
+    // Back to Step 1, previous amount retained — no cancel (DELETE) call made.
+    const amountInput = await screen.findByLabelText('Amount to pay');
+    expect(amountInput).toHaveValue(1100);
+    expect(
+      (fetch as unknown as FetchMock).mock.calls.some(
+        (call: unknown[]) => (call[1] as RequestInit | undefined)?.method === 'DELETE',
+      ),
+    ).toBe(false);
+
+    await user.clear(amountInput);
+    await user.type(amountInput, '1600');
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/me\/ledger\/deposits\/intent$/),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ amount: 1600, category: 'MAINTENANCE' }) }),
+      );
+    });
+    expect(await screen.findByRole('button', { name: /submit payment/i })).toBeInTheDocument();
+  });
+
   it('defaults to "Maintenance Payment", with the note field already shown and no committee warning', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     await screen.findByLabelText('Amount to pay');
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
-    expect(await screen.findByLabelText('Maintenance Payment')).toBeChecked();
-    expect(screen.getByLabelText('Expense to settle against maintenance')).not.toBeChecked();
-    expect(screen.getByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
     expect(screen.queryByText(/discuss this expense with the committee/i)).not.toBeInTheDocument();
   });
 
-  it('selecting "Expense to settle against maintenance" adds the committee-approval warning, keeping the note field as-is', async () => {
+  it('selecting "Expense to settle against maintenance" in Step 1 carries the committee-approval warning into Step 2', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     await screen.findByLabelText('Amount to pay');
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
-    await user.click(await screen.findByLabelText('Expense to settle against maintenance'));
+    await user.click(screen.getByLabelText('Expense to settle against maintenance'));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
-    expect(screen.getByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/reason \(optional\)/i)).toBeInTheDocument();
     expect(screen.getByText(/discuss this expense with the committee/i)).toBeInTheDocument();
     expect(screen.getByText(/committee can reject this payment/i)).toBeInTheDocument();
   });
 
-  it('keeps a typed note when switching between "Maintenance Payment" and "Expense to settle against maintenance"', async () => {
+  it('keeps a typed note when switching between "Maintenance Payment" and "Expense to settle against maintenance" pre-lock', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     await screen.findByLabelText('Amount to pay');
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
-    await user.type(screen.getByLabelText(/reason \(optional\)/i), 'Society repair reimbursement');
-
     await user.click(screen.getByLabelText('Expense to settle against maintenance'));
-    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('Society repair reimbursement');
-    // The committee warning appears, but the note itself is untouched by the switch.
-    expect(screen.getByText(/discuss this expense with the committee/i)).toBeInTheDocument();
-
     await user.click(screen.getByLabelText('Maintenance Payment'));
-    expect(screen.getByLabelText(/reason \(optional\)/i)).toHaveValue('Society repair reimbursement');
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+
+    const noteField = await screen.findByLabelText(/reason \(optional\)/i);
+    await user.type(noteField, 'Society repair reimbursement');
+    expect(noteField).toHaveValue('Society repair reimbursement');
     expect(screen.queryByText(/discuss this expense with the committee/i)).not.toBeInTheDocument();
   });
 
-  it('sends the note regardless of which payment-type radio is selected', async () => {
+  it('sends the note regardless of which payment-type radio is selected, and closes the modal on submit', async () => {
     mockFetch();
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     await screen.findByLabelText('Amount to pay');
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
     const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
+    await user.upload(await screen.findByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
     await user.type(screen.getByLabelText(/reason \(optional\)/i), 'Aug + Sep combined');
     await user.click(screen.getByRole('button', { name: /submit payment/i }));
 
@@ -368,6 +423,7 @@ describe('MaintenanceBookPage', () => {
       const body = submitCall![1].body as FormData;
       expect(body.get('note')).toBe('Aug + Sep combined');
     });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('omits the note when left blank, regardless of payment type', async () => {
@@ -375,11 +431,12 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     await screen.findByLabelText('Amount to pay');
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
     const file = new File(['fake-bytes'], 'proof.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
+    await user.upload(await screen.findByLabelText(/attach payment screenshot/i, { selector: 'input' }), file);
     await user.click(screen.getByRole('button', { name: /submit payment/i }));
 
     await waitFor(() => {
@@ -397,8 +454,9 @@ describe('MaintenanceBookPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await openPayModal(user);
     const amountInput = await screen.findByLabelText('Amount to pay');
-    await waitFor(() => expect(amountInput).toHaveValue(1100));
+    expect(amountInput).toHaveValue(1100);
 
     await user.clear(amountInput);
     await user.type(amountInput, '1600');
@@ -406,9 +464,9 @@ describe('MaintenanceBookPage', () => {
     await waitFor(() =>
       expect(screen.getByText(/₹500 will be applied as Available Credit/i)).toBeInTheDocument(),
     );
-    expect(screen.getByRole('button', { name: /^pay$/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled();
 
-    await user.click(screen.getByRole('button', { name: /^pay$/i }));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -430,7 +488,26 @@ describe('MaintenanceBookPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/pending payment for other charges/i)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /^pay$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(pay|resume payment)$/i })).not.toBeInTheDocument();
+  });
+
+  it('shows "Resume payment" instead of "Pay" when an intent for this pool is already open, opening straight to Step 2', async () => {
+    mockFetch(ledger, {
+      id: 'intent-1',
+      amount: 1100,
+      paymentMethod: 'UPI',
+      upiLink: 'upi://pay?x',
+      qrDataUrl: 'data:image/png;base64,abc',
+      category: 'MAINTENANCE',
+    });
+    renderPage();
+    const user = userEvent.setup();
+
+    const resumeButton = await screen.findByRole('button', { name: /^resume payment$/i });
+    await user.click(resumeButton);
+
+    expect(await screen.findByText(/locked/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount to pay')).not.toBeInTheDocument();
   });
 
   // Widget stays visible at ₹0 Outstanding (2026-08-26) — a resident may want to
@@ -442,11 +519,12 @@ describe('MaintenanceBookPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByText(/nothing outstanding right now/i)).toBeInTheDocument());
+    await openPayModal(user);
     const amountInput = await screen.findByLabelText('Amount to deposit');
     expect(amountInput).toHaveValue(null); // blank, not pre-filled with 0
 
     await user.type(amountInput, '500');
-    expect(screen.getByRole('button', { name: /^pay$/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeEnabled();
     await waitFor(() =>
       expect(screen.getByText(/₹500 will be applied as available credit/i)).toBeInTheDocument(),
     );

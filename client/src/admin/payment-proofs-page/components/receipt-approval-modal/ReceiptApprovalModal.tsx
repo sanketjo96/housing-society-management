@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authedFetch } from '../../../../lib/api';
-import { Modal } from '../modal/Modal';
+import { Modal } from '../../../../components/modal/Modal';
 
 // Streams the exact PDF the backend would issue if approved right now.
 // Authenticated endpoint — fetch and hand off a blob: URL, since a plain

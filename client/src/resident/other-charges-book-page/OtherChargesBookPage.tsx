@@ -13,7 +13,8 @@ import {
   ReceiptDownloadButton,
   SummaryCard,
 } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
-import { fetchOpenIntent, PayIntentPanel } from '../_shared/components/pay-intent-panel/PayIntentPanel';
+import { fetchOpenIntent } from '../_shared/components/pay-intent-panel/PayIntentPanel';
+import { PayModal } from '../_shared/components/pay-modal/PayModal';
 import { authedFetch } from '../../lib/api';
 import { useIsMobile } from '../../lib/use-is-mobile';
 import type {
@@ -159,6 +160,7 @@ export function OtherChargesBookPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<BookTab>('PAYMENTS');
+  const [payModalOpen, setPayModalOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-other-charges'],
@@ -330,7 +332,7 @@ export function OtherChargesBookPage() {
           {activeTab === 'PAYMENTS' && (
             <>
               <div className="mb-5 rounded-2xl border border-line bg-white p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
                   <div>
                     {outstanding > 0 ? (
                       <span className="text-sm text-ink">
@@ -342,38 +344,25 @@ export function OtherChargesBookPage() {
                       </span>
                     )}
                   </div>
-                  {outstanding > 0 && !intentQuery.data && (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <div className="flex flex-col text-xs font-semibold text-muted">
-                        Amount to pay
-                        <span className="mt-1 w-32 rounded-lg border border-line bg-paper px-3 py-1.5 font-mono-brand text-sm text-ink">
-                          ₹{outstanding.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => lockMutation.mutate(outstanding)}
-                        disabled={lockMutation.isPending}
-                        className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:cursor-default disabled:opacity-70"
-                      >
-                        <QrCode size={14} /> {lockMutation.isPending ? 'Locking…' : 'Pay'}
-                      </button>
-                    </div>
+                  {outstanding > 0 && !intentOpenForOtherPool && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Nothing to configure — amount is fixed, so opening
+                        // the modal locks it immediately (single step).
+                        if (!intentOpenForThisPool) lockMutation.mutate(outstanding);
+                        setPayModalOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      <QrCode size={14} /> {intentOpenForThisPool ? 'Resume payment' : 'Pay'}
+                    </button>
                   )}
                 </div>
 
-                {lockMutation.error && <ErrorBanner>{lockMutation.error.message}</ErrorBanner>}
-
-                {intentOpenForThisPool && intentQuery.data && (
-                  <PayIntentPanel
-                    intent={intentQuery.data}
-                    isMobile={isMobile}
-                    onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
-                  />
-                )}
                 {/* Only one open intent at a time — point at where to finish a Maintenance one. */}
                 {intentOpenForOtherPool && (
-                  <div className="mb-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
+                  <div className="mt-4 rounded-xl border border-line bg-paper p-4 text-sm text-ink">
                     You have a pending payment for Maintenance — finish or cancel it on the{' '}
                     <Link to="/maintenance-book" className="font-semibold text-teal">
                       Maintenance Book
@@ -382,6 +371,22 @@ export function OtherChargesBookPage() {
                   </div>
                 )}
               </div>
+
+              <PayModal
+                title="Other charges payment"
+                isOpen={payModalOpen}
+                onClose={() => setPayModalOpen(false)}
+                intent={intentOpenForThisPool ? intentQuery.data : null}
+                isMobile={isMobile}
+                onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['my-other-charges'] })}
+                step1={
+                  lockMutation.isPending ? (
+                    <p className="m-0 text-sm text-muted">Locking your payment…</p>
+                  ) : lockMutation.error ? (
+                    <ErrorBanner>{lockMutation.error.message}</ErrorBanner>
+                  ) : null
+                }
+              />
 
               {data.depositRows.length === 0 ? (
                 <p className="m-0 flex items-center gap-1.5 text-sm text-teal">
