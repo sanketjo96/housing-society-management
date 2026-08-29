@@ -159,7 +159,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Other Charges, Resident Book, Manage Finance, Settings, Vehicle Finder) for an ADMIN, with both submenus collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Other Charges, Resident Book, Vehicle Finder, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 

@@ -11,6 +11,8 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
   { to: '/resident-ledger', label: 'Resident Book', icon: Users },
+  // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
+  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
   {
     label: 'Manage Finance',
     icon: Wallet2,
@@ -40,8 +42,6 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/settings/finance-categories', label: 'Finance Categories', icon: ListTree },
     ],
   },
-  // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
-  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
 ];
 
 // '/other-charges-book' is reached only via the Dashboard's "Other Outstanding" card.
