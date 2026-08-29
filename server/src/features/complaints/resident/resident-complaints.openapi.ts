@@ -126,6 +126,40 @@ export {};
 
 /**
  * @openapi
+ * /api/complaints/{id}/upvote:
+ *   post:
+ *     tags: [Complaints]
+ *     summary: Upvote a complaint
+ *     description: >
+ *       OWNER only. Any owner may upvote any complaint, including their
+ *       own. Idempotent — upvoting twice is a silent no-op, not an error.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Upvoted (or already was). }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Forbidden — tenants have no access, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Complaint not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *   delete:
+ *     tags: [Complaints]
+ *     summary: Remove the caller's own upvote from a complaint
+ *     description: Idempotent — a no-op if no upvote existed.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Un-upvoted (or already wasn't). }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Forbidden — tenants have no access, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+
+/**
+ * @openapi
  * /api/complaints/{id}/image:
  *   get:
  *     tags: [Complaints]

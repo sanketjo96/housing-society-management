@@ -7,6 +7,7 @@ import { prisma } from '../../../infrastructure/prisma/client';
 import type { ComplaintPriority } from '../../../infrastructure/prisma/generated/client';
 import { getStorageAdapter } from '../../../infrastructure/storage';
 import { isEditable } from '../../../shared/complaints/complaint-lock';
+import { getUniqueConstraintFields } from '../../../shared/errors/prisma-errors';
 import { scopedWhere } from '../../../shared/security/tenant-scope';
 
 export class ComplaintNotFoundError extends Error {
@@ -184,6 +185,27 @@ export async function deleteComplaint(id: string, societyId: string, ownerId: st
       data: { actorId: ownerId, action: 'DELETE_COMPLAINT', entityType: 'Complaint', entityId: id },
     });
   });
+}
+
+// Idempotent: an owner who has already upvoted gets a silent no-op, not an
+// error — the @@unique([complaintId, ownerId]) constraint is what makes
+// this safe under a concurrent double-click. Any owner may upvote any
+// complaint, including their own (Confirmed Product Decision #3).
+export async function upvoteComplaint(id: string, societyId: string, ownerId: string) {
+  const complaint = await prisma.complaint.findFirst({ where: scopedWhere(societyId, { id }) });
+  if (!complaint) throw new ComplaintNotFoundError();
+
+  try {
+    await prisma.complaintUpvote.create({ data: { complaintId: id, ownerId, societyId } });
+  } catch (err) {
+    if (getUniqueConstraintFields(err)) return;
+    throw err;
+  }
+}
+
+// Idempotent: un-upvoting when no upvote exists is also a silent no-op.
+export async function unvoteComplaint(id: string, societyId: string, ownerId: string) {
+  await prisma.complaintUpvote.deleteMany({ where: { complaintId: id, ownerId, societyId } });
 }
 
 // Any owner in the society may view any complaint's image — visibility is

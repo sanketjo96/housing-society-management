@@ -8,7 +8,9 @@ import {
   deleteComplaint,
   getComplaintFileForViewing,
   listComplaints,
+  unvoteComplaint,
   updateComplaint,
+  upvoteComplaint,
 } from './resident-complaints.service';
 import { getMyFlat } from '../../flats/resident/resident-flats-service';
 
@@ -110,6 +112,34 @@ export async function deleteComplaintHandler(req: Request, res: Response) {
     }
     throw err;
   }
+}
+
+export async function upvoteComplaintHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  try {
+    await upvoteComplaint(req.params.id, req.user.societyId, req.user.id);
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof ComplaintNotFoundError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function unvoteComplaintHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  await unvoteComplaint(req.params.id, req.user.societyId, req.user.id);
+  res.status(204).send();
 }
 
 export async function getComplaintFileHandler(req: Request, res: Response) {

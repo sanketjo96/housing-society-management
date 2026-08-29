@@ -4,7 +4,9 @@ import {
   deleteComplaintHandler,
   getComplaintFileHandler,
   listComplaintsHandler,
+  unvoteComplaintHandler,
   updateComplaintHandler,
+  upvoteComplaintHandler,
 } from './resident-complaints.controller';
 import { proofUpload } from '../../../middleware/proof-upload';
 import { requireRole } from '../../../middleware/require-role';
@@ -35,6 +37,16 @@ residentComplaintsRouter.delete(
   '/api/complaints/:id',
   requireRole(['OWNER']),
   deleteComplaintHandler,
+);
+residentComplaintsRouter.post(
+  '/api/complaints/:id/upvote',
+  requireRole(['OWNER']),
+  upvoteComplaintHandler,
+);
+residentComplaintsRouter.delete(
+  '/api/complaints/:id/upvote',
+  requireRole(['OWNER']),
+  unvoteComplaintHandler,
 );
 residentComplaintsRouter.get(
   '/api/complaints/:id/image',
