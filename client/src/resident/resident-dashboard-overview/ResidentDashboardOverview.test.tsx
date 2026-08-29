@@ -225,8 +225,7 @@ describe('ResidentDashboardOverview', () => {
       {
         id: 'c1',
         title: 'Leaky pipe',
-        priority: 'HIGH' as const,
-        status: 'OPEN' as const,
+        possibleSolution: 'Call the plumber',
         owner: { id: 'owner-1', name: 'Alice Owner' },
         flat: { wing: 'A', flatNumber: '101' },
         upvoteCount: 5,
@@ -235,8 +234,7 @@ describe('ResidentDashboardOverview', () => {
       {
         id: 'c2',
         title: 'Broken light',
-        priority: 'LOW' as const,
-        status: 'RESOLVED' as const,
+        possibleSolution: 'Replace the tube light',
         owner: { id: 'owner-2', name: 'Bob Owner' },
         flat: { wing: 'B', flatNumber: '202' },
         upvoteCount: 1,
@@ -251,10 +249,9 @@ describe('ResidentDashboardOverview', () => {
       await waitFor(() => expect(screen.getByText('Community Complaints')).toBeInTheDocument());
       const rows = screen.getAllByRole('row').slice(1); // drop header row
       expect(within(rows[0]).getByText('Leaky pipe')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('Call the plumber')).toBeInTheDocument();
       expect(within(rows[0]).getByText('Alice Owner')).toBeInTheDocument();
       expect(within(rows[0]).getByText('A-101')).toBeInTheDocument();
-      expect(within(rows[0]).getByText('High')).toBeInTheDocument();
-      expect(within(rows[0]).getByText('Open')).toBeInTheDocument();
       expect(within(rows[0]).getByRole('button', { name: /upvote leaky pipe/i })).toHaveTextContent('5');
       expect(within(rows[1]).getByText('Broken light')).toBeInTheDocument();
       // c2's myUpvoted: true renders as a "remove upvote" toggle, already pressed.

@@ -10,8 +10,7 @@ import { authedFetch } from '../../lib/api';
 interface DashboardComplaint {
   id: string;
   title: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED';
+  possibleSolution: string;
   owner: { id: string; name: string };
   flat: { wing: string; flatNumber: string };
   upvoteCount: number;
@@ -27,19 +26,6 @@ interface BalancesSummary {
   // view, not just to log. Already sorted by upvote count descending.
   complaints?: DashboardComplaint[];
 }
-
-const PRIORITY_LABEL: Record<DashboardComplaint['priority'], string> = {
-  LOW: 'Low',
-  MEDIUM: 'Medium',
-  HIGH: 'High',
-};
-
-const STATUS_LABEL: Record<DashboardComplaint['status'], string> = {
-  OPEN: 'Open',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  REJECTED: 'Rejected',
-};
 
 async function fetchMyBalances(year?: number): Promise<BalancesSummary> {
   const res = await authedFetch(`/api/me/balances${year ? `?year=${year}` : ''}`);
@@ -78,21 +64,32 @@ export function ResidentDashboardOverview() {
   });
 
   const complaints = data?.complaints ?? [];
+  // Same column shape as AdminComplaintsPage.tsx's "Complaint"/"Raised by"
+  // pair (title+subtitle, flat+owner subtitle) — status, image, and
+  // priority are deliberately left off this compact dashboard preview.
   const complaintColumns = useMemo<ColumnDef<DashboardComplaint, unknown>[]>(
     () => [
-      { id: 'title', header: 'Title', cell: ({ row }) => row.original.title },
-      { id: 'owner', header: 'Raised by', cell: ({ row }) => row.original.owner.name },
       {
-        id: 'flat',
-        header: 'Flat',
-        cell: ({ row }) => `${row.original.flat.wing}-${row.original.flat.flatNumber}`,
+        id: 'complaint',
+        header: 'Complaint',
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.title}
+            <div className="text-xs text-muted">{row.original.possibleSolution}</div>
+          </span>
+        ),
       },
       {
-        id: 'priority',
-        header: 'Priority',
-        cell: ({ row }) => PRIORITY_LABEL[row.original.priority],
+        id: 'raisedBy',
+        header: 'Raised by',
+        meta: { headerClassName: 'w-36', cellClassName: 'w-36 max-w-36' },
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.flat.wing}-{row.original.flat.flatNumber}
+            <div className="text-xs text-muted">{row.original.owner.name}</div>
+          </span>
+        ),
       },
-      { id: 'status', header: 'Status', cell: ({ row }) => STATUS_LABEL[row.original.status] },
       {
         id: 'upvotes',
         header: 'Upvotes',
