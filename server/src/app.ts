@@ -27,6 +27,7 @@ import { platformBootstrapRouter } from './features/platform-bootstrap/platform-
 import { bulkChargesRouter } from './features/bulk-charges/bulk-charges.route';
 import { residentVehiclesRouter } from './features/vehicles/resident/resident-vehicles.route';
 import { vehicleLookupRouter } from './features/vehicles/lookup/vehicle-lookup.route';
+import { residentComplaintsRouter } from './features/complaints/resident/resident-complaints.route';
 import { openapiSpec } from './infrastructure/openapi/openapi';
 
 export const app = express();
@@ -82,6 +83,7 @@ app.use(financeCategoriesRouter);
 app.use(societyLedgerRouter);
 app.use(platformBootstrapRouter);
 app.use(bulkChargesRouter);
+app.use(residentComplaintsRouter);
 
 // Must be registered last.
 app.use(errorHandler);
