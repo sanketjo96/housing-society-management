@@ -227,6 +227,7 @@ describe('ResidentDashboardOverview', () => {
         title: 'Leaky pipe',
         priority: 'HIGH' as const,
         status: 'OPEN' as const,
+        owner: { id: 'owner-1', name: 'Alice Owner' },
         flat: { wing: 'A', flatNumber: '101' },
         upvoteCount: 5,
         myUpvoted: false,
@@ -236,6 +237,7 @@ describe('ResidentDashboardOverview', () => {
         title: 'Broken light',
         priority: 'LOW' as const,
         status: 'RESOLVED' as const,
+        owner: { id: 'owner-2', name: 'Bob Owner' },
         flat: { wing: 'B', flatNumber: '202' },
         upvoteCount: 1,
         myUpvoted: true,
@@ -249,6 +251,7 @@ describe('ResidentDashboardOverview', () => {
       await waitFor(() => expect(screen.getByText('Community Complaints')).toBeInTheDocument());
       const rows = screen.getAllByRole('row').slice(1); // drop header row
       expect(within(rows[0]).getByText('Leaky pipe')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('Alice Owner')).toBeInTheDocument();
       expect(within(rows[0]).getByText('A-101')).toBeInTheDocument();
       expect(within(rows[0]).getByText('High')).toBeInTheDocument();
       expect(within(rows[0]).getByText('Open')).toBeInTheDocument();

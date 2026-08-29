@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowUp, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Heart } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/data-table/DataTable';
 import { SummaryCard } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
@@ -12,6 +12,7 @@ interface DashboardComplaint {
   title: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED';
+  owner: { id: string; name: string };
   flat: { wing: string; flatNumber: string };
   upvoteCount: number;
   myUpvoted: boolean;
@@ -80,6 +81,7 @@ export function ResidentDashboardOverview() {
   const complaintColumns = useMemo<ColumnDef<DashboardComplaint, unknown>[]>(
     () => [
       { id: 'title', header: 'Title', cell: ({ row }) => row.original.title },
+      { id: 'owner', header: 'Raised by', cell: ({ row }) => row.original.owner.name },
       {
         id: 'flat',
         header: 'Flat',
@@ -110,10 +112,11 @@ export function ResidentDashboardOverview() {
               }
               aria-pressed={complaint.myUpvoted}
               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                complaint.myUpvoted ? 'border-teal bg-teal-light text-teal' : 'border-line text-muted'
+                complaint.myUpvoted ? 'border-coral bg-coral-light text-coral' : 'border-line text-muted'
               }`}
             >
-              <ArrowUp size={12} /> {complaint.upvoteCount}
+              <Heart size={12} fill={complaint.myUpvoted ? 'currentColor' : 'none'} />{' '}
+              {complaint.upvoteCount}
             </button>
           );
         },
