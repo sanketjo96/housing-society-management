@@ -1,4 +1,4 @@
-import { BadgeIndianRupee, Banknote, BookText, Building2, Car, LayoutGrid, ListTree, PlusCircle, Settings, Tag, Upload, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
+import { BadgeIndianRupee, Banknote, BookText, Building2, Car, LayoutGrid, ListTree, MessageSquareWarning, PlusCircle, Settings, Tag, Upload, Users, Wallet, Wallet2, BookOpen, User } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell';
@@ -13,6 +13,9 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/resident-ledger', label: 'Resident Book', icon: Users },
   // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
   { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
+  // Status moderation only — admin never edits/deletes complaint content
+  // (docs/features/complaints/ Confirmed Product Decision #6).
+  { to: '/admin/complaints', label: 'Complaints', icon: MessageSquareWarning },
   {
     label: 'Manage Finance',
     icon: Wallet2,
@@ -52,9 +55,20 @@ const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
 ];
 
+// Owner-only addition to the resident nav — tenants have no access at all,
+// not even read-only (docs/features/complaints/ Confirmed Product Decision #1).
+const OWNER_ONLY_NAV_ITEMS: NavEntry[] = [
+  { to: '/complaints', label: 'Complaints', icon: MessageSquareWarning },
+];
+
 export function DashboardLayout() {
   const { user, logout } = useAuth();
-  const navItems = user?.role === 'ADMIN' ? ADMIN_NAV_ITEMS : RESIDENT_NAV_ITEMS;
+  const navItems =
+    user?.role === 'ADMIN'
+      ? ADMIN_NAV_ITEMS
+      : user?.role === 'OWNER'
+        ? [...RESIDENT_NAV_ITEMS, ...OWNER_ONLY_NAV_ITEMS]
+        : RESIDENT_NAV_ITEMS;
 
   return (
     <DashboardShell navItems={navItems} user={user} onLogout={() => void logout()}>

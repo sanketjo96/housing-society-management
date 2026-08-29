@@ -10,6 +10,7 @@ import { FlatWiseDuesPage } from './admin/flat-wise-dues-page/FlatWiseDuesPage'
 import { ImportsPage } from './admin/imports-page/ImportsPage'
 import { ManageFinancePage } from './admin/manage-finance-page/ManageFinancePage'
 import { MarkAsPaidPage } from './admin/mark-as-paid-page/MarkAsPaidPage'
+import { AdminComplaintsPage } from './admin/complaints-page/AdminComplaintsPage'
 import { OtherChargesFlatDuesPage } from './admin/other-charges-flat-dues-page/OtherChargesFlatDuesPage'
 import { OtherChargesPage } from './admin/other-charges-page/OtherChargesPage'
 import { PaymentProofsPage } from './admin/payment-proofs-page/PaymentProofsPage'
@@ -23,6 +24,7 @@ import { SocietyDetailsPage } from './admin/society-details-page/SocietyDetailsP
 import { DashboardPage } from './components/dashboard-page/DashboardPage'
 import { ForgotPasswordPage } from './auth/forgot-password-page/ForgotPasswordPage'
 import { LoginPage } from './auth/login-page/LoginPage'
+import { ComplaintsPage } from './resident/complaints-page/ComplaintsPage'
 import { MaintenanceBookPage } from './resident/maintenance-book-page/MaintenanceBookPage'
 import { MyDetailsPage } from './resident/my-details-page/MyDetailsPage'
 import { OtherChargesBookPage } from './resident/other-charges-book-page/OtherChargesBookPage'
@@ -175,6 +177,15 @@ function App() {
                 path="/other-charges-dues"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesFlatDuesPage /></ProtectedRoute>}
               />
+              {/* Admin-only complaint moderation — status changes for every complaint
+                  in the society (docs/features/complaints/). Owners have their own
+                  page at /complaints; this is deliberately a different path since
+                  the two surfaces have different capabilities (status change here,
+                  create/edit/delete/upvote there). */}
+              <Route
+                path="/admin/complaints"
+                element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminComplaintsPage /></ProtectedRoute>}
+              />
 
               <Route
                 path="/maintenance-book"
@@ -190,6 +201,12 @@ function App() {
               <Route
                 path="/my-details"
                 element={<ProtectedRoute allowedRoles={['OWNER', 'TENANT']}><MyDetailsPage /></ProtectedRoute>}
+              />
+              {/* Owner-only — tenants have no access at all, not even read-only
+                  (docs/features/complaints/ Confirmed Product Decision #1). */}
+              <Route
+                path="/complaints"
+                element={<ProtectedRoute allowedRoles={['OWNER']}><ComplaintsPage /></ProtectedRoute>}
               />
               {/* Available to every role (ADMIN included) — unlike almost every other
                   route here, Vehicle Finder isn't persona-restricted: anyone in the

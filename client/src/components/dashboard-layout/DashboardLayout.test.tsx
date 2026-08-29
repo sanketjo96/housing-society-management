@@ -127,6 +127,8 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           societyTotalExpense: 0,
           societyNetPosition: 0,
           availableYears: [],
+          openComplaintsCount: 0,
+          complaintCountsByStatus: { OPEN: 0, IN_PROGRESS: 0, RESOLVED: 0, REJECTED: 0 },
         }),
       });
     }
@@ -159,7 +161,19 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Other Charges, Resident Book, Vehicle Finder, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
+  it('shows a Complaints nav link for an OWNER but not for a TENANT', async () => {
+    mockAuth({ id: '1', name: 'Alice', email: 'alice@example.com', phone: null, role: 'OWNER', societyId: 's1' });
+    const { unmount } = renderApp();
+    await waitFor(() => expect(screen.getByRole('link', { name: /complaints/i })).toBeInTheDocument());
+    unmount();
+
+    mockAuth({ id: '2', name: 'Bob', email: 'bob@example.com', phone: null, role: 'TENANT', societyId: 's1' });
+    renderApp();
+    await waitFor(() => expect(screen.getByRole('link', { name: /^dashboard$/i })).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: /complaints/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the admin nav in order (Dashboard, Other Charges, Resident Book, Vehicle Finder, Complaints, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
@@ -172,18 +186,20 @@ describe('DashboardLayout', () => {
       within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
       within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
     );
-    // Dashboard, Other Charges, Resident Book, and Vehicle Finder are direct
-    // links; Manage Finance and Settings are collapsed group toggles — their
-    // children (Record/Mark Paid/Receipt Book, and Society details/Billing
-    // plan/Custom Fees/Finance categories respectively) aren't links yet, so
-    // this assertion's button labels are appended after every real link,
-    // regardless of the buttons' actual position in the sidebar.
+    // Dashboard, Other Charges, Resident Book, Vehicle Finder, and Complaints
+    // are direct links; Manage Finance and Settings are collapsed group
+    // toggles — their children (Record/Mark Paid/Receipt Book, and Society
+    // details/Billing plan/Custom Fees/Finance categories respectively)
+    // aren't links yet, so this assertion's button labels are appended after
+    // every real link, regardless of the buttons' actual position in the
+    // sidebar.
     expect(labels[0]).toMatch(/dashboard/i);
     expect(labels[1]).toMatch(/other charges/i);
     expect(labels[2]).toMatch(/resident book/i);
     expect(labels[3]).toMatch(/vehicle finder/i);
-    expect(labels[4]).toMatch(/manage finance/i);
-    expect(labels[5]).toMatch(/settings/i);
+    expect(labels[4]).toMatch(/complaints/i);
+    expect(labels[5]).toMatch(/manage finance/i);
+    expect(labels[6]).toMatch(/settings/i);
 
     expect(screen.queryByRole('link', { name: /^record$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /mark paid/i })).not.toBeInTheDocument();
