@@ -73,6 +73,8 @@ function mockAuth(user: { id: string; name: string; email: string; phone: string
           societyTotalExpense: 0,
           societyNetPosition: 0,
           availableYears: [],
+          openComplaintsCount: 0,
+          complaintCountsByStatus: { OPEN: 0, IN_PROGRESS: 0, RESOLVED: 0, REJECTED: 0 },
         }),
       });
     }

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Building2, IndianRupee, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Building2, IndianRupee, MessageSquare, ReceiptText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -189,6 +189,27 @@ export function AdminDashboardPage() {
               accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
               note="View flat-wise dues →"
               to="/other-charges-dues"
+            />
+          </CardGroup>
+
+          <CardGroup icon={MessageSquare} title="Complaints">
+            <SummaryCard
+              label="Open"
+              value={summaryQuery.data.openComplaintsCount.toLocaleString('en-IN')}
+              accent={summaryQuery.data.openComplaintsCount > 0 ? 'coral' : undefined}
+            />
+            <SummaryCard
+              label="In Progress"
+              value={summaryQuery.data.complaintCountsByStatus.IN_PROGRESS.toLocaleString('en-IN')}
+            />
+            <SummaryCard
+              label="Resolved"
+              value={summaryQuery.data.complaintCountsByStatus.RESOLVED.toLocaleString('en-IN')}
+              accent="teal"
+            />
+            <SummaryCard
+              label="Rejected"
+              value={summaryQuery.data.complaintCountsByStatus.REJECTED.toLocaleString('en-IN')}
             />
           </CardGroup>
 

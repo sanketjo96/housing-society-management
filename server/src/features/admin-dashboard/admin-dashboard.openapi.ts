@@ -37,6 +37,8 @@ export {};
  *                 societyTotalExpense: { type: number }
  *                 societyNetPosition: { type: number }
  *                 availableYears: { type: array, items: { type: integer }, description: Every year with at least one charge, Deposit, or SocietyLedgerEntry, society-wide — always lifetime. }
+ *                 openComplaintsCount: { type: integer, description: 'Count of Complaint rows with status=OPEN, society-wide.' }
+ *                 complaintCountsByStatus: { type: object, properties: { OPEN: { type: integer }, IN_PROGRESS: { type: integer }, RESOLVED: { type: integer }, REJECTED: { type: integer } } }
  *       400: { description: Invalid year, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Caller is not an ADMIN., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

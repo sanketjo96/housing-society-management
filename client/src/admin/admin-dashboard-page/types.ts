@@ -14,6 +14,15 @@ export interface DashboardSummary {
   societyTotalExpense: number;
   societyNetPosition: number;
   availableYears: number[];
+  // Complaints — summary cards with counts, not a list (the resident
+  // dashboard shows the full ranked list instead).
+  openComplaintsCount: number;
+  complaintCountsByStatus: {
+    OPEN: number;
+    IN_PROGRESS: number;
+    RESOLVED: number;
+    REJECTED: number;
+  };
 }
 
 export interface FlatDues {

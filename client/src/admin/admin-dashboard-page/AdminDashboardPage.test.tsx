@@ -34,6 +34,8 @@ const summary = {
   societyTotalExpense: 3200,
   societyNetPosition: 1800,
   availableYears: [2026, 2025],
+  openComplaintsCount: 2,
+  complaintCountsByStatus: { OPEN: 2, IN_PROGRESS: 1, RESOLVED: 3, REJECTED: 1 },
 };
 
 // Distinct figures from `summary` above, returned only when the request asks for
@@ -107,6 +109,19 @@ describe('AdminDashboardPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
+  });
+
+  it('shows the Complaints card group with counts by status', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Complaints')).toBeInTheDocument());
+    const group = screen.getByText('Complaints').closest('div')!.parentElement!;
+    expect(within(group).getByText('Open')).toBeInTheDocument();
+    expect(within(group).getAllByText('2')).not.toHaveLength(0);
+    expect(within(group).getByText('In Progress')).toBeInTheDocument();
+    expect(within(group).getByText('Resolved')).toBeInTheDocument();
+    expect(within(group).getByText('Rejected')).toBeInTheDocument();
   });
 
   it('no longer shows the numeric "Pending review" amount card', async () => {

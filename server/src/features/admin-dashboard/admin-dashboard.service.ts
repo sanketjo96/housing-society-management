@@ -1,5 +1,5 @@
 import { prisma } from '../../infrastructure/prisma/client';
-import type { LedgerCategory } from '../../infrastructure/prisma/generated/client';
+import type { ComplaintStatus, LedgerCategory } from '../../infrastructure/prisma/generated/client';
 import {
   buildEscalationMessage,
   DEFAULT_GRACE_PERIOD_DAYS,
@@ -39,6 +39,32 @@ export interface DashboardSummary {
   // powers the Dashboard's year dropdown. Always the full lifetime set,
   // regardless of whichever `year` scoped the rest of this summary.
   availableYears: number[];
+  // Complaints (docs/features/complaints/) — summary CARDS WITH COUNTS, not a
+  // list. The full ranked list of complaints lives on the resident/owner
+  // dashboard instead (Confirmed Product Decision #10) — deliberately a
+  // different shape for each audience, not the same widget reused twice.
+  openComplaintsCount: number;
+  complaintCountsByStatus: Record<ComplaintStatus, number>;
+}
+
+const ALL_COMPLAINT_STATUSES: ComplaintStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
+
+// groupBy only returns rows for statuses that actually occur — this fills in
+// zero for any status with no complaints, so callers never have to guard
+// against a missing key.
+async function getComplaintStatusCounts(societyId: string): Promise<Record<ComplaintStatus, number>> {
+  const grouped = await prisma.complaint.groupBy({
+    by: ['status'],
+    where: { societyId },
+    _count: true,
+  });
+
+  const counts = Object.fromEntries(ALL_COMPLAINT_STATUSES.map((s) => [s, 0])) as Record<
+    ComplaintStatus,
+    number
+  >;
+  for (const row of grouped) counts[row.status] = row._count;
+  return counts;
 }
 
 // Fetches all flats' records/entries in two queries (not N+1), then groups by
@@ -100,12 +126,14 @@ async function getDashboardAvailableYears(societyId: string): Promise<number[]> 
 // outstandingTotal sums each flat's own Outstanding rather than one global
 // subtraction, so an overpaid flat never offsets another flat's balance.
 export async function getDashboardSummary(societyId: string, year?: number): Promise<DashboardSummary> {
-  const [byFlat, byFlatOtherCharges, societyLedgerTotals, availableYears] = await Promise.all([
-    getBalancesByFlat(societyId, 'MAINTENANCE', year),
-    getBalancesByFlat(societyId, 'OTHER_CHARGE', year),
-    getSocietyLedgerTotals(societyId, year),
-    getDashboardAvailableYears(societyId),
-  ]);
+  const [byFlat, byFlatOtherCharges, societyLedgerTotals, availableYears, complaintCountsByStatus] =
+    await Promise.all([
+      getBalancesByFlat(societyId, 'MAINTENANCE', year),
+      getBalancesByFlat(societyId, 'OTHER_CHARGE', year),
+      getSocietyLedgerTotals(societyId, year),
+      getDashboardAvailableYears(societyId),
+      getComplaintStatusCounts(societyId),
+    ]);
 
   let totalBilled = 0;
   let totalPaid = 0;
@@ -137,6 +165,8 @@ export async function getDashboardSummary(societyId: string, year?: number): Pro
     societyTotalExpense: societyLedgerTotals.totalExpense,
     societyNetPosition: societyLedgerTotals.totalIncome + totalPaid - societyLedgerTotals.totalExpense,
     availableYears,
+    openComplaintsCount: complaintCountsByStatus.OPEN,
+    complaintCountsByStatus,
   };
 }
 
