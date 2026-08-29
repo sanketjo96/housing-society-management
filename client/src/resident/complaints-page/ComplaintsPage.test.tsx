@@ -181,12 +181,15 @@ describe('ComplaintsPage', () => {
     expect(screen.queryByLabelText(/edit leaky pipe/i)).not.toBeInTheDocument();
   });
 
-  it('hides edit/delete controls for another owner\'s complaint', async () => {
-    mockAuthAndComplaints([{ ...myOpenComplaint, owner: { id: 'someone-else', name: 'Bob' } }]);
+  it("does not show another owner's complaint at all — this page is my own complaints only", async () => {
+    mockAuthAndComplaints([
+      myOpenComplaint,
+      { ...myOpenComplaint, id: 'c-someone-else', title: 'Someone else\'s issue', owner: { id: 'someone-else', name: 'Bob' } },
+    ]);
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Leaky pipe')).toBeInTheDocument());
-    expect(screen.queryByLabelText(/edit leaky pipe/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Someone else\'s issue')).not.toBeInTheDocument();
   });
 
   it('shows an error, not a crash, when editing a since-locked complaint returns 409', async () => {

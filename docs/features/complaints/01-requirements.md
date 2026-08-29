@@ -31,11 +31,20 @@ re-litigated without a new conversation:
    gates on `Role === 'OWNER'` (or `'ADMIN'` for the one admin-only
    endpoint), using the same `requireRole()` middleware every other
    role-gated feature already uses — no new access-control mechanism.
-2. **Shared, society-wide visibility, not a personal list.** Every owner
-   sees every complaint raised in the society, scoped only by `societyId`
-   — not filtered to "my complaints" by default in v1. Closer to Vehicle
-   Finder's "search across the whole society" precedent than to a
-   per-resident list.
+2. **Shared, society-wide visibility — split across two surfaces, not one
+   list.** ~~Every owner sees every complaint... not filtered to "my
+   complaints" by default~~ — **superseded (2026-08-29):** the shared,
+   ranked, upvotable view of every complaint in the society lives on the
+   Owner/Resident Dashboard's "Community Complaints" table; the dedicated
+   `/complaints` page is each owner's own management view (create, edit,
+   delete, track status), filtered to `owner.id === caller.id`. The
+   backend's `GET /api/complaints` is unchanged (still society-wide,
+   ranked by upvote count) — filtering to "my own" happens client-side on
+   `/complaints` only, so Admin's complaint-management page
+   (`/admin/complaints`) is unaffected. Self-upvoting one's own complaint
+   from `/complaints` is still possible (Decision #3) even though the
+   primary place to browse and upvote others' complaints is the
+   Dashboard.
 3. **Self-upvoting is allowed, and upvoting is a toggle.** An owner may
    upvote their own complaint, and may remove (un-toggle) their upvote on
    any complaint at any time.
@@ -91,7 +100,8 @@ re-litigated without a new conversation:
 |----|-------------|----------|
 | R1 | An owner can log a complaint with Title, Possible Solution, and Priority (Low/Medium/High), plus an optional image | Must |
 | R2 | A logged complaint is automatically tied to the logging owner and their flat — not free text the owner types in | Must |
-| R3 | Every owner in the society can view a shared list of every complaint (not just their own), showing who raised it, which flat, priority, status, and upvote count | Must |
+| R3 | Every owner in the society can view a shared, ranked list of every complaint (not just their own) on the Owner/Resident Dashboard, showing who raised it, which flat, priority, status, and upvote count | Must |
+| R3a | The dedicated `/complaints` page shows only the caller's own complaints (create/edit/delete/status-tracking view) — superseded 2026-08-29, see Confirmed Product Decision #2 | Must |
 | R4 | Any owner can upvote any complaint, including their own | Must |
 | R5 | An owner can remove (toggle off) their own upvote on any complaint | Must |
 | R6 | The complaint list can be ranked/sorted by upvote count | Must |
@@ -126,8 +136,10 @@ re-litigated without a new conversation:
 - **Tenant involvement of any kind** — see future-scope item 3.
 - **Comments or threaded discussion** on a complaint — see future-scope
   item 4.
-- **A "my complaints only" filtered view** — the v1 list is society-wide
-  by design — see future-scope item 5.
+- ~~A "my complaints only" filtered view~~ — **built 2026-08-29**: this is
+  now the entire purpose of the dedicated `/complaints` page (see
+  Confirmed Product Decision #2). Future-scope item 5 is resolved, not
+  deferred.
 - **Admin editing complaint content** — Rejected is the only moderation
   lever (Confirmed Product Decision #6); this is a deliberate exclusion,
   not a deferral.

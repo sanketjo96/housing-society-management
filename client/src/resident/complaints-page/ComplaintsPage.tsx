@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowUp, ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Heart, ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -183,6 +183,11 @@ export function ComplaintsPage() {
     queryKey: ['complaints'],
     queryFn: fetchComplaints,
   });
+  // This page is the caller's own management view — create/edit/delete/
+  // track status for complaints they logged. Browsing and upvoting every
+  // complaint in the society happens on the Dashboard's Community
+  // Complaints table instead (ResidentDashboardOverview.tsx).
+  const myComplaints = data?.filter((c) => c.owner.id === user?.id);
 
   const upvoteMutation = useMutation<unknown, Error, { id: string; nowUpvoted: boolean }>({
     mutationFn: async ({ id, nowUpvoted }) => {
@@ -209,7 +214,7 @@ export function ComplaintsPage() {
     onError: (err) => setActionError(err.message),
   });
 
-  const editingComplaint = data?.find((c) => c.id === editingId) ?? null;
+  const editingComplaint = myComplaints?.find((c) => c.id === editingId) ?? null;
 
   const columns: ColumnDef<ComplaintListItem, unknown>[] = [
     { id: 'title', header: 'Title', cell: ({ row }) => row.original.title },
@@ -218,7 +223,6 @@ export function ComplaintsPage() {
       header: 'Flat',
       cell: ({ row }) => `${row.original.flat.wing}-${row.original.flat.flatNumber}`,
     },
-    { id: 'owner', header: 'Raised by', cell: ({ row }) => row.original.owner.name },
     {
       id: 'priority',
       header: 'Priority',
@@ -259,10 +263,10 @@ export function ComplaintsPage() {
             aria-label={nowUpvoted ? `Remove upvote from ${complaint.title}` : `Upvote ${complaint.title}`}
             aria-pressed={nowUpvoted}
             className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-              nowUpvoted ? 'border-teal bg-teal-light text-teal' : 'border-line text-muted'
+              nowUpvoted ? 'border-coral bg-coral-light text-coral' : 'border-line text-muted'
             }`}
           >
-            <ArrowUp size={12} /> {complaint.upvoteCount}
+            <Heart size={12} fill={nowUpvoted ? 'currentColor' : 'none'} /> {complaint.upvoteCount}
           </button>
         );
       },
@@ -303,7 +307,7 @@ export function ComplaintsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="m-0 font-display text-xl text-ink">Complaints</h1>
+        <h1 className="m-0 font-display text-xl text-ink">My Complaints</h1>
         {!showCreateForm && !editingId && (
           <button
             type="button"
@@ -332,7 +336,9 @@ export function ComplaintsPage() {
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && <p role="alert" className="text-sm text-coral">Could not load complaints.</p>}
-      {data && <DataTable data={data} columns={columns} emptyMessage="No complaints logged yet." />}
+      {myComplaints && (
+        <DataTable data={myComplaints} columns={columns} emptyMessage="You haven't logged any complaints yet." />
+      )}
     </div>
   );
 }

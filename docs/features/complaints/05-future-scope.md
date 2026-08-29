@@ -46,14 +46,16 @@ moderation surface.
 **Cost to add**: moderate — a `ComplaintComment` model plus its own
 create/list/delete endpoints and UI.
 
-## 5. "My Complaints" Filtered View
-**What**: a personal list scoped to the logged-in owner's own complaints.
-**Trigger**: owners report the shared list is hard to navigate as
-complaint volume grows.
-**Why not now**: the issue frames this as a shared/browsable list by
-design (Confirmed Product Decision #2).
-**Cost to add**: small — a query-param filter on the existing list
-endpoint (`?mine=true`), no schema change.
+## 5. "My Complaints" Filtered View — RESOLVED (2026-08-29)
+Built, not deferred. The dedicated `/complaints` page now filters
+client-side to `owner.id === caller.id` — it's each owner's own
+create/edit/delete/status-tracking view. The shared, ranked, upvotable
+view of every complaint in the society moved to the Owner/Resident
+Dashboard's "Community Complaints" table instead. See
+[`01-requirements.md`](./01-requirements.md) Confirmed Product Decision
+#2. `GET /api/complaints` itself is unchanged (still society-wide) — the
+filter is purely client-side on this one page, so `/admin/complaints`
+and the dashboard are unaffected.
 
 ## Guiding Rule for All of the Above
 Don't build any item in this document until the specific trigger listed
