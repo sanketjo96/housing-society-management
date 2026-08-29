@@ -21,4 +21,5 @@ detail per feature, see [`_status.md`](./_status.md).
 | Observability | [`observability/`](./observability/) | Structured logging; further stages (metrics, tracing) designed, not built |
 | Bank Reference Capture | [`bank-reference/`](./bank-reference/) | Designed, not built — OCR-assisted UPI/bank transaction reference capture |
 | Vehicle Finder | [`vehicle-finder/`](./vehicle-finder/) | Resident vehicle registration ("My Details" → Vehicle Info) + a manual plate-number lookup page (flat, occupant name, tap-to-call phone), open to every role — camera/OCR scan-assist was tried and rolled back |
+| Complaints | [`complaints/`](./complaints/) | Owner-only issue reporting with admin-moderated status workflow and community upvoting — designed, not built |
 | Production Deployment | [`../../DEPLOY.md`](../../DEPLOY.md) | Docker Compose, HTTPS via free dynamic-DNS, operator runbook |

@@ -30,6 +30,7 @@ Re-check against `git log` and each feature's own doc if this looks stale.
 | File Storage | [`file-storage.md`](./file-storage.md) | ✅ Implemented | 2026-08-26; local disk (default) or S3-compatible (Cloudflare R2), swappable via `STORAGE_PROVIDER`. Live deployment cut over to R2. Weekly DB backup job built and live 2026-08-27 (separate R2 bucket/credential) |
 | Committee & Signatures | [`committee-and-signatures.md`](./committee-and-signatures.md) | ✅ Implemented | Chairman/Secretary/Treasurer roles + signature uploads; approving a Deposit now blocked (409) if neither Chairman nor Secretary has a signature configured (2026-08-26) |
 | Vehicle Finder | [`vehicle-finder/`](./vehicle-finder/) | ✅ Implemented | 2026-08-28; resident vehicle registration + plate-number lookup (flat, occupant name, phone number on a match); manual search only — camera/OCR scan-assist was built and rolled back the same day, see the doc's Confirmed Product Decisions |
+| Complaints | [`complaints/`](./complaints/) | 📝 Designed, not built | 2026-08-29; owner-only complaint logging + upvoting, admin-controlled status workflow; brings a previously out-of-scope item back in, see `docs/decisions/0007-complaints-back-in-scope.md` |
 
 ## Auth & Access Control
 **Status**: ✅ Implemented (Phase 2, tasks 2.1–2.8, all complete).
@@ -400,6 +401,26 @@ future-scope items (rate limiting, audit logging, opt-out, visitor/gate
 integration, and OCR scan-assist itself if revisited with real preprocessing)
 remain deliberately deferred — see
 [`vehicle-finder/05-future-scope.md`](./vehicle-finder/05-future-scope.md).
+
+## Complaints
+**Status**: 📝 Designed, not built (2026-08-29). Brings a previously
+out-of-scope item ("Complaints/helpdesk") back into scope for this app,
+narrowed to owner-only issue logging with admin-moderated status and
+community upvoting — see
+[`docs/decisions/0007-complaints-back-in-scope.md`](../decisions/0007-complaints-back-in-scope.md).
+**Scope implemented**: none yet. Full planned scope is in
+[`complaints/01-requirements.md`](./complaints/01-requirements.md) and
+[`complaints/02-architecture.md`](./complaints/02-architecture.md); task
+breakdown and effort estimate in
+[`complaints/03-scope-and-task-breakdown.md`](./complaints/03-scope-and-task-breakdown.md);
+a mutually-exclusive parallel-build split for whoever implements this in
+[`complaints/06-parallel-build-plan.md`](./complaints/06-parallel-build-plan.md).
+**Pending**: everything — schema (`Complaint`/`ComplaintUpvote`), backend
+(owner create/list/edit/delete/upvote, admin status transitions), frontend
+(owner surface, admin surface, both dashboard integrations), and tests.
+Deferred-beyond-v1 items (notifications, multi-image attachments, tenant
+involvement, comments, a "my complaints" filter) are in
+[`complaints/05-future-scope.md`](./complaints/05-future-scope.md).
 
 ## Society Onboarding — Bootstrap & Bulk Import
 **Status**: ✅ Implemented (2026-08-21, all three phases from the original

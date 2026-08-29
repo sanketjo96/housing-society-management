@@ -186,7 +186,7 @@ host; the deployed Docker stack reads the root `.env` instead — see
 - Public self-signup (accounts are always admin- or owner-provisioned).
 - Payment gateway integration (Razorpay etc.) — UPI deep-link + manual proof
   verification only.
-- Complaints/helpdesk, notices/announcements, gate/visitor management.
+- Notices/announcements, gate/visitor management.
 - Per-square-foot billing (flat-rate only).
 - Facility booking, formal expense-report generation, polls, document vault.
 - Multi-society admin UX (society switching, cross-society views) — a
