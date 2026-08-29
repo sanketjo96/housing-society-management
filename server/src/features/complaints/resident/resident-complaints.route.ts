@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import {
   createComplaintHandler,
+  deleteComplaintHandler,
   getComplaintFileHandler,
   listComplaintsHandler,
+  updateComplaintHandler,
 } from './resident-complaints.controller';
 import { proofUpload } from '../../../middleware/proof-upload';
 import { requireRole } from '../../../middleware/require-role';
@@ -21,6 +23,18 @@ residentComplaintsRouter.post(
   proofUpload.single('file'),
   verifyComplaintImageSignature,
   createComplaintHandler,
+);
+residentComplaintsRouter.patch(
+  '/api/complaints/:id',
+  requireRole(['OWNER']),
+  proofUpload.single('file'),
+  verifyComplaintImageSignature,
+  updateComplaintHandler,
+);
+residentComplaintsRouter.delete(
+  '/api/complaints/:id',
+  requireRole(['OWNER']),
+  deleteComplaintHandler,
 );
 residentComplaintsRouter.get(
   '/api/complaints/:id/image',

@@ -5,3 +5,5 @@ export const createComplaintSchema = z.object({
   possibleSolution: z.string().min(1),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
 });
+
+export const updateComplaintSchema = createComplaintSchema;

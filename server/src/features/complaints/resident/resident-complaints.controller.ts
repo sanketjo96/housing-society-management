@@ -1,10 +1,14 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { createComplaintSchema } from './resident-complaints.schemas';
+import { createComplaintSchema, updateComplaintSchema } from './resident-complaints.schemas';
 import {
+  ComplaintLockedError,
+  ComplaintNotFoundError,
   createComplaint,
+  deleteComplaint,
   getComplaintFileForViewing,
   listComplaints,
+  updateComplaint,
 } from './resident-complaints.service';
 import { getMyFlat } from '../../flats/resident/resident-flats-service';
 
@@ -47,6 +51,65 @@ export async function createComplaintHandler(req: Request, res: Response) {
       : undefined,
   });
   res.status(201).json(complaint);
+}
+
+export async function updateComplaintHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const parsed = updateComplaintSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const complaint = await updateComplaint(req.params.id, req.user.societyId, req.user.id, {
+      ...parsed.data,
+      file: req.file
+        ? {
+            buffer: req.file.buffer,
+            mimeType: req.file.mimetype,
+            extension: path.extname(req.file.originalname),
+          }
+        : undefined,
+    });
+    res.status(200).json(complaint);
+  } catch (err) {
+    if (err instanceof ComplaintNotFoundError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    if (err instanceof ComplaintLockedError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function deleteComplaintHandler(req: Request, res: Response) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  try {
+    await deleteComplaint(req.params.id, req.user.societyId, req.user.id);
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof ComplaintNotFoundError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    if (err instanceof ComplaintLockedError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function getComplaintFileHandler(req: Request, res: Response) {

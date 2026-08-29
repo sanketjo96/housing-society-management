@@ -73,6 +73,59 @@ export {};
 
 /**
  * @openapi
+ * /api/complaints/{id}:
+ *   patch:
+ *     tags: [Complaints]
+ *     summary: Edit a complaint the caller logged
+ *     description: >
+ *       OWNER only, and only the complaint's own owner. Allowed only while
+ *       status is Open and the upvote count is zero — a live check, not a
+ *       one-way lock. Once locked, this returns 409 even for the owner who
+ *       logged it; if the condition later reverts (upvote removed, or
+ *       admin reverts status to Open), edit access returns automatically.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [title, possibleSolution, priority]
+ *             properties:
+ *               title: { type: string }
+ *               possibleSolution: { type: string }
+ *               priority: { type: string, enum: [LOW, MEDIUM, HIGH] }
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Updated. }
+ *       400: { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Forbidden — tenants have no access, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Complaint not found, or belongs to another owner., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Locked — no longer Open with zero upvotes., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *   delete:
+ *     tags: [Complaints]
+ *     summary: Delete a complaint the caller logged
+ *     description: Same lock rule as PATCH — Open with zero upvotes only.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Deleted. }
+ *       401: { description: Unauthenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Forbidden — tenants have no access, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Complaint not found, or belongs to another owner., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Locked — no longer Open with zero upvotes., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+
+/**
+ * @openapi
  * /api/complaints/{id}/image:
  *   get:
  *     tags: [Complaints]
