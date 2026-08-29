@@ -69,6 +69,7 @@ describe('resident-complaints service — create/list', () => {
 
   afterAll(async () => {
     const societies = [societyId, otherSocietyId];
+    await prisma.complaintUpvote.deleteMany({ where: { societyId: { in: societies } } });
     await prisma.complaint.deleteMany({ where: { societyId: { in: societies } } });
     await prisma.flat.deleteMany({ where: { societyId: { in: societies } } });
     await prisma.user.deleteMany({ where: { societyId: { in: societies } } });
@@ -84,7 +85,7 @@ describe('resident-complaints service — create/list', () => {
 
     expect(complaint.status).toBe('OPEN');
 
-    const list = await listComplaints(societyId);
+    const list = await listComplaints(societyId, ownerId);
     const found = list.find((c) => c.id === complaint.id);
     expect(found).toBeTruthy();
     expect(found?.upvoteCount).toBe(0);
@@ -113,7 +114,7 @@ describe('resident-complaints service — create/list', () => {
       priority: 'MEDIUM',
     });
 
-    const list = await listComplaints(societyId);
+    const list = await listComplaints(societyId, ownerId);
     expect(list.map((c) => c.id)).toContain(complaint.id);
   });
 
@@ -124,7 +125,7 @@ describe('resident-complaints service — create/list', () => {
       priority: 'LOW',
     });
 
-    const list = await listComplaints(societyId);
+    const list = await listComplaints(societyId, ownerId);
     expect(list.map((c) => c.id)).not.toContain(otherComplaint.id);
   });
 
@@ -137,5 +138,31 @@ describe('resident-complaints service — create/list', () => {
 
     const result = await getComplaintFileForViewing(complaint.id, societyId);
     expect(result).toBeNull();
+  });
+
+  it('reports myUpvoted per caller, not a global flag', async () => {
+    const complaint = await createComplaint(societyId, ownerId, flatId, {
+      title: 'myUpvoted test',
+      possibleSolution: 'n/a',
+      priority: 'LOW',
+    });
+    await prisma.complaintUpvote.create({
+      data: { complaintId: complaint.id, ownerId, societyId },
+    });
+
+    const listAsUpvoter = await listComplaints(societyId, ownerId);
+    expect(listAsUpvoter.find((c) => c.id === complaint.id)?.myUpvoted).toBe(true);
+
+    const otherOwnerInSameSociety = await prisma.user.create({
+      data: {
+        name: 'Non-upvoter',
+        email: `non-upvoter-${suffix}@example.com`,
+        passwordHash: 'x',
+        role: 'OWNER',
+        societyId,
+      },
+    });
+    const listAsNonUpvoter = await listComplaints(societyId, otherOwnerInSameSociety.id);
+    expect(listAsNonUpvoter.find((c) => c.id === complaint.id)?.myUpvoted).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ import {
   type FlatBalances,
   type RecordSettlementStatus,
 } from '../ledger-shared';
+import { listComplaints } from '../../complaints/resident/resident-complaints.service';
 
 export { ForbiddenLedgerEntryAccessError, InvalidAmountError };
 
@@ -197,6 +198,21 @@ export async function getLedgerForResident(
   return { entries: merged, totals, yearTotals, availableYears };
 }
 
+export interface ResidentComplaintRow {
+  id: string;
+  title: string;
+  possibleSolution: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED';
+  createdAt: Date;
+  updatedAt: Date;
+  owner: { id: string; name: string };
+  flat: { wing: string; flatNumber: string };
+  hasImage: boolean;
+  upvoteCount: number;
+  myUpvoted: boolean;
+}
+
 export interface ResidentBalancesSummary {
   maintenance: FlatBalances;
   otherCharges: FlatBalances;
@@ -205,6 +221,13 @@ export interface ResidentBalancesSummary {
   // Dashboard's year dropdown. Always the full lifetime set, regardless of
   // whichever `year` was passed to filter the balances above.
   availableYears: number[];
+  // Every complaint in the society, sorted by upvote count descending — the
+  // full ranked browse surface for owners (docs/features/complaints/
+  // 01-requirements.md Confirmed Product Decision #10; the Admin dashboard
+  // gets compact count cards instead, a separate integration). Empty for a
+  // TENANT caller — Complaints is owner-only to view, not just to log
+  // (Confirmed Product Decision #1).
+  complaints: ResidentComplaintRow[];
 }
 
 // Minimal-field query, both pools — just enough to derive a distinct year set,
@@ -229,18 +252,23 @@ async function getResidentAvailableYears(flatId: string): Promise<number[]> {
 // (what a payment intent actually locks against) is untouched by this.
 export async function getResidentBalancesSummary(
   flatId: string,
+  societyId: string,
+  role: 'OWNER' | 'TENANT',
+  userId: string,
   year?: number,
 ): Promise<ResidentBalancesSummary> {
-  const [maintenance, otherCharges, availableYears] = await Promise.all([
+  const [maintenance, otherCharges, availableYears, complaints] = await Promise.all([
     computeFlatBalances(flatId, year),
     computeFlatBalances(flatId, year, 'OTHER_CHARGE'),
     getResidentAvailableYears(flatId),
+    role === 'OWNER' ? listComplaints(societyId, userId) : Promise.resolve([]),
   ]);
   return {
     maintenance,
     otherCharges,
     totalOutstanding: maintenance.outstanding + otherCharges.outstanding,
     availableYears,
+    complaints,
   };
 }
 

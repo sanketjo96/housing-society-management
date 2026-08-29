@@ -20,7 +20,7 @@ export async function listComplaintsHandler(req: Request, res: Response) {
     return;
   }
 
-  const complaints = await listComplaints(req.user.societyId);
+  const complaints = await listComplaints(req.user.societyId, req.user.id);
   res.status(200).json(complaints);
 }
 

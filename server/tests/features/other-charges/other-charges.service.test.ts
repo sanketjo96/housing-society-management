@@ -154,7 +154,7 @@ describe('other-charges service', () => {
   });
 
   it('getResidentBalancesSummary keeps the two pools independent and sums them for totalOutstanding', async () => {
-    const summary = await getResidentBalancesSummary(flatId);
+    const summary = await getResidentBalancesSummary(flatId, societyId, 'OWNER', ownerId);
     expect(summary.totalOutstanding).toBe(
       summary.maintenance.outstanding + summary.otherCharges.outstanding,
     );

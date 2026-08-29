@@ -86,7 +86,13 @@ export async function getMyBalancesHandler(req: Request, res: Response) {
     return;
   }
 
-  const balances = await getResidentBalancesSummary(flatId, parsedQuery.data.year);
+  const balances = await getResidentBalancesSummary(
+    flatId,
+    req.user.societyId,
+    req.user.role as 'OWNER' | 'TENANT',
+    req.user.id,
+    parsedQuery.data.year,
+  );
   res.status(200).json(balances);
 }
 

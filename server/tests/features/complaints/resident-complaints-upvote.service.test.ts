@@ -66,7 +66,7 @@ describe('resident-complaints service — upvote toggle', () => {
   }
 
   async function upvoteCountOf(id: string) {
-    const list = await listComplaints(societyId);
+    const list = await listComplaints(societyId, ownerId);
     return list.find((c) => c.id === id)?.upvoteCount ?? -1;
   }
 
@@ -94,6 +94,17 @@ describe('resident-complaints service — upvote toggle', () => {
     await upvoteComplaint(complaint.id, societyId, otherOwnerId);
     await unvoteComplaint(complaint.id, societyId, otherOwnerId);
     expect(await upvoteCountOf(complaint.id)).toBe(0);
+  });
+
+  it('myUpvoted reflects only the requesting caller\'s own vote', async () => {
+    const complaint = await makeComplaint();
+    await upvoteComplaint(complaint.id, societyId, otherOwnerId);
+
+    const asUpvoter = await listComplaints(societyId, otherOwnerId);
+    expect(asUpvoter.find((c) => c.id === complaint.id)?.myUpvoted).toBe(true);
+
+    const asNonUpvoter = await listComplaints(societyId, ownerId);
+    expect(asNonUpvoter.find((c) => c.id === complaint.id)?.myUpvoted).toBe(false);
   });
 
   it('un-upvoting when no upvote exists is a no-op 204, not an error', async () => {

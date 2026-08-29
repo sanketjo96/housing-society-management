@@ -86,16 +86,25 @@ export async function createComplaint(
 
 // Society-wide, ranked by upvote count — this is the shared browse-and-upvote
 // surface, not a "my complaints" list. See Confirmed Product Decision #2.
-export async function listComplaints(societyId: string) {
-  const complaints = await prisma.complaint.findMany({
-    where: scopedWhere(societyId),
-    include: {
-      owner: { select: { id: true, name: true } },
-      flat: { select: { wing: true, flatNumber: true } },
-      _count: { select: { upvotes: true } },
-    },
-    orderBy: [{ upvotes: { _count: 'desc' } }, { createdAt: 'desc' }],
-  });
+// callerId is only used to compute myUpvoted per row (a personal, per-viewer
+// flag) — it never filters which complaints are returned.
+export async function listComplaints(societyId: string, callerId: string) {
+  const [complaints, myUpvotes] = await Promise.all([
+    prisma.complaint.findMany({
+      where: scopedWhere(societyId),
+      include: {
+        owner: { select: { id: true, name: true } },
+        flat: { select: { wing: true, flatNumber: true } },
+        _count: { select: { upvotes: true } },
+      },
+      orderBy: [{ upvotes: { _count: 'desc' } }, { createdAt: 'desc' }],
+    }),
+    prisma.complaintUpvote.findMany({
+      where: { societyId, ownerId: callerId },
+      select: { complaintId: true },
+    }),
+  ]);
+  const myUpvotedIds = new Set(myUpvotes.map((v) => v.complaintId));
 
   return complaints.map((c) => ({
     id: c.id,
@@ -109,6 +118,7 @@ export async function listComplaints(societyId: string) {
     flat: c.flat,
     hasImage: c.fileUrl != null,
     upvoteCount: c._count.upvotes,
+    myUpvoted: myUpvotedIds.has(c.id),
   }));
 }
 

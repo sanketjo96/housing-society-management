@@ -3,18 +3,30 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthProvider } from '../../context/AuthContext';
 import { setAccessToken } from '../../lib/auth-token';
 import { ResidentDashboardOverview } from './ResidentDashboardOverview';
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
+const ownerUser = {
+  id: 'owner-1',
+  name: 'Alice Owner',
+  email: 'alice@example.com',
+  phone: null,
+  role: 'OWNER' as const,
+  societyId: 's1',
+};
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <ResidentDashboardOverview />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <ResidentDashboardOverview />
+        </MemoryRouter>
+      </AuthProvider>
     </QueryClientProvider>,
   );
 }
@@ -33,9 +45,15 @@ const balances2025 = {
   availableYears: [2026, 2025],
 };
 
-function mockFetch(balances: unknown = baseBalances) {
+function mockFetch(balances: unknown = baseBalances, user: unknown = ownerUser) {
   const fetchMock = fetch as unknown as FetchMock;
   fetchMock.mockImplementation((url: string) => {
+    if (url.includes('/api/auth/refresh')) {
+      return Promise.resolve({ ok: true, json: async () => ({ accessToken: 'fake-token' }) });
+    }
+    if (url.includes('/api/auth/me')) {
+      return Promise.resolve({ ok: true, json: async () => user });
+    }
     if (url.includes('/api/me/balances')) {
       const body = url.includes('year=2025') ? balances2025 : balances;
       return Promise.resolve({ ok: true, json: async () => body });
@@ -180,5 +198,63 @@ describe('ResidentDashboardOverview', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
+  describe('Community Complaints', () => {
+    const complaints = [
+      {
+        id: 'c1',
+        title: 'Leaky pipe',
+        priority: 'HIGH' as const,
+        status: 'OPEN' as const,
+        flat: { wing: 'A', flatNumber: '101' },
+        upvoteCount: 5,
+      },
+      {
+        id: 'c2',
+        title: 'Broken light',
+        priority: 'LOW' as const,
+        status: 'RESOLVED' as const,
+        flat: { wing: 'B', flatNumber: '202' },
+        upvoteCount: 1,
+      },
+    ];
+
+    it("shows every complaint for an OWNER, already ordered as the API returned them", async () => {
+      mockFetch({ ...baseBalances, complaints });
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText('Community Complaints')).toBeInTheDocument());
+      const rows = screen.getAllByRole('row').slice(1); // drop header row
+      expect(within(rows[0]).getByText('Leaky pipe')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('A-101')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('High')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('Open')).toBeInTheDocument();
+      expect(within(rows[0]).getByText('5')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('Broken light')).toBeInTheDocument();
+    });
+
+    it('shows "No complaints yet." when there are none', async () => {
+      mockFetch({ ...baseBalances, complaints: [] });
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText(/no complaints yet/i)).toBeInTheDocument());
+    });
+
+    it('shows "No complaints yet." when the field is entirely omitted (e.g. an older API response)', async () => {
+      mockFetch(baseBalances);
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText(/no complaints yet/i)).toBeInTheDocument());
+    });
+
+    it('does not show the Community Complaints section for a TENANT', async () => {
+      const tenantUser = { ...ownerUser, id: 'tenant-1', role: 'TENANT' as const };
+      mockFetch({ ...baseBalances, complaints }, tenantUser);
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText(/^total outstanding$/i)).toBeInTheDocument());
+      expect(screen.queryByText('Community Complaints')).not.toBeInTheDocument();
+    });
   });
 });
