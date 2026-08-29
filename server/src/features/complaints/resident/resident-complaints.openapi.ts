@@ -8,9 +8,9 @@ export {};
  *     tags: [Complaints]
  *     summary: List every complaint in the society, ranked by upvote count
  *     description: >
- *       OWNER only. Society-wide, shared visibility — not filtered to the
- *       caller's own complaints. Sorted by upvote count descending, then
- *       most recent first.
+ *       OWNER or ADMIN. Society-wide, shared visibility — not filtered to
+ *       the caller's own complaints. Sorted by upvote count descending,
+ *       then most recent first.
  *     responses:
  *       200:
  *         description: OK.
@@ -164,7 +164,7 @@ export {};
  *   get:
  *     tags: [Complaints]
  *     summary: Fetch a complaint's optional image
- *     description: OWNER only. Authenticated, never a public URL.
+ *     description: OWNER or ADMIN. Authenticated, never a public URL.
  *     parameters:
  *       - in: path
  *         name: id
