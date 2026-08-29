@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CheckCircle2 } from 'lucide-react';
+import { ArrowUp, CheckCircle2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DataTable } from '../../components/data-table/DataTable';
 import { SummaryCard } from '../_shared/components/ledger-entry-display/LedgerEntryDisplay';
@@ -14,6 +14,7 @@ interface DashboardComplaint {
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED';
   flat: { wing: string; flatNumber: string };
   upvoteCount: number;
+  myUpvoted: boolean;
 }
 
 interface BalancesSummary {
@@ -54,10 +55,25 @@ export function ResidentDashboardOverview() {
   const { user } = useAuth();
   const [selectedYear, setSelectedYear] = useState<'ALL' | number>('ALL');
   const year = selectedYear === 'ALL' ? undefined : selectedYear;
+  const [upvoteError, setUpvoteError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-balances', year],
     queryFn: () => fetchMyBalances(year),
+  });
+
+  // Same toggle endpoint ComplaintsPage.tsx uses — any owner can upvote any
+  // complaint, including their own, from either surface.
+  const upvoteMutation = useMutation<unknown, Error, { id: string; nowUpvoted: boolean }>({
+    mutationFn: async ({ id, nowUpvoted }) => {
+      const res = await authedFetch(`/api/complaints/${id}/upvote`, {
+        method: nowUpvoted ? 'POST' : 'DELETE',
+      });
+      if (!res.ok) throw new Error('Could not update your upvote.');
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-balances', year] }),
+    onError: (err) => setUpvoteError(err.message),
   });
 
   const complaints = data?.complaints ?? [];
@@ -79,10 +95,31 @@ export function ResidentDashboardOverview() {
         id: 'upvotes',
         header: 'Upvotes',
         meta: { align: 'right' },
-        cell: ({ row }) => row.original.upvoteCount,
+        cell: ({ row }) => {
+          const complaint = row.original;
+          return (
+            <button
+              type="button"
+              onClick={() =>
+                upvoteMutation.mutate({ id: complaint.id, nowUpvoted: !complaint.myUpvoted })
+              }
+              aria-label={
+                complaint.myUpvoted
+                  ? `Remove upvote from ${complaint.title}`
+                  : `Upvote ${complaint.title}`
+              }
+              aria-pressed={complaint.myUpvoted}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                complaint.myUpvoted ? 'border-teal bg-teal-light text-teal' : 'border-line text-muted'
+              }`}
+            >
+              <ArrowUp size={12} /> {complaint.upvoteCount}
+            </button>
+          );
+        },
       },
     ],
-    [],
+    [upvoteMutation],
   );
 
   return (
@@ -152,6 +189,11 @@ export function ResidentDashboardOverview() {
           {user?.role === 'OWNER' && (
             <div className="mt-6">
               <h2 className="m-0 mb-3 font-display text-base text-ink">Community Complaints</h2>
+              {upvoteError && (
+                <p role="alert" className="mb-2 text-sm text-coral">
+                  {upvoteError}
+                </p>
+              )}
               <DataTable
                 data={complaints}
                 columns={complaintColumns}

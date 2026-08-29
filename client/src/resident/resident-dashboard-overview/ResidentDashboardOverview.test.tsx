@@ -45,14 +45,34 @@ const balances2025 = {
   availableYears: [2026, 2025],
 };
 
-function mockFetch(balances: unknown = baseBalances, user: unknown = ownerUser) {
+// Mutates `balances.complaints` in place on an upvote/unvote call, mirroring
+// ComplaintsPage.test.tsx's pattern, so invalidating ['my-balances', year]
+// re-fetches an observably-updated list.
+function mockFetch(balances: Record<string, unknown> = baseBalances, user: unknown = ownerUser) {
   const fetchMock = fetch as unknown as FetchMock;
-  fetchMock.mockImplementation((url: string) => {
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('/api/auth/refresh')) {
       return Promise.resolve({ ok: true, json: async () => ({ accessToken: 'fake-token' }) });
     }
     if (url.includes('/api/auth/me')) {
       return Promise.resolve({ ok: true, json: async () => user });
+    }
+    const upvoteMatch = url.match(/\/api\/complaints\/([^/]+)\/upvote$/);
+    if (upvoteMatch) {
+      const list = (balances.complaints ?? []) as Array<{
+        id: string;
+        myUpvoted: boolean;
+        upvoteCount: number;
+      }>;
+      const complaint = list.find((c) => c.id === upvoteMatch[1]);
+      if (complaint) {
+        const nowUpvoted = init?.method === 'POST';
+        if (complaint.myUpvoted !== nowUpvoted) {
+          complaint.myUpvoted = nowUpvoted;
+          complaint.upvoteCount += nowUpvoted ? 1 : -1;
+        }
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
     }
     if (url.includes('/api/me/balances')) {
       const body = url.includes('year=2025') ? balances2025 : balances;
@@ -209,6 +229,7 @@ describe('ResidentDashboardOverview', () => {
         status: 'OPEN' as const,
         flat: { wing: 'A', flatNumber: '101' },
         upvoteCount: 5,
+        myUpvoted: false,
       },
       {
         id: 'c2',
@@ -217,11 +238,12 @@ describe('ResidentDashboardOverview', () => {
         status: 'RESOLVED' as const,
         flat: { wing: 'B', flatNumber: '202' },
         upvoteCount: 1,
+        myUpvoted: true,
       },
     ];
 
     it("shows every complaint for an OWNER, already ordered as the API returned them", async () => {
-      mockFetch({ ...baseBalances, complaints });
+      mockFetch({ ...baseBalances, complaints: complaints.map((c) => ({ ...c })) });
       renderPage();
 
       await waitFor(() => expect(screen.getByText('Community Complaints')).toBeInTheDocument());
@@ -230,8 +252,28 @@ describe('ResidentDashboardOverview', () => {
       expect(within(rows[0]).getByText('A-101')).toBeInTheDocument();
       expect(within(rows[0]).getByText('High')).toBeInTheDocument();
       expect(within(rows[0]).getByText('Open')).toBeInTheDocument();
-      expect(within(rows[0]).getByText('5')).toBeInTheDocument();
+      expect(within(rows[0]).getByRole('button', { name: /upvote leaky pipe/i })).toHaveTextContent('5');
       expect(within(rows[1]).getByText('Broken light')).toBeInTheDocument();
+      // c2's myUpvoted: true renders as a "remove upvote" toggle, already pressed.
+      expect(
+        within(rows[1]).getByRole('button', { name: /remove upvote from broken light/i }),
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('lets an owner upvote a complaint directly from the dashboard', async () => {
+      const mutableComplaints = complaints.map((c) => ({ ...c }));
+      mockFetch({ ...baseBalances, complaints: mutableComplaints });
+      renderPage();
+      const user = userEvent.setup();
+
+      const upvoteButton = await screen.findByRole('button', { name: /upvote leaky pipe/i });
+      await user.click(upvoteButton);
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: /remove upvote from leaky pipe/i }),
+        ).toHaveTextContent('6'),
+      );
     });
 
     it('shows "No complaints yet." when there are none', async () => {
