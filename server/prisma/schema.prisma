@@ -64,6 +64,19 @@ enum VehicleType {
   FOUR_WHEELER
 }
 
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 // Only EMAIL exists this phase — WhatsApp is explicitly deferred (compliance risk,
 // see CLAUDE.md out-of-scope list). Modeled as an enum now so adding a channel later
 // is a one-line change, not a migration to a previously-untyped string column.
@@ -174,6 +187,8 @@ model Society {
   financeCategories    SocietyLedgerCategory[]
   societyLedgerEntries SocietyLedgerEntry[]
   vehicles             Vehicle[]
+  complaints           Complaint[]
+  complaintUpvotes     ComplaintUpvote[]
 }
 
 model User {
@@ -208,6 +223,8 @@ model User {
   refreshTokens                RefreshToken[]
   passwordResetTokens          PasswordResetToken[]
   vehicles                     Vehicle[]
+  complaints                   Complaint[]
+  complaintUpvotes             ComplaintUpvote[]
 
   @@index([societyId])
 }
@@ -273,6 +290,7 @@ model Flat {
   ledgerEntries      LedgerEntry[]
   paymentIntent      PaymentIntent?
   otherCharges       OtherCharge[]
+  complaints         Complaint[]
 
   @@unique([societyId, wing, flatNumber])
   @@index([societyId])
@@ -326,6 +344,68 @@ model Vehicle {
   @@unique([societyId, plateNumber])
   @@index([societyId])
   @@index([userId])
+}
+
+// Complaints (docs/features/complaints/). Owner-only end to end — never
+// reachable by a TENANT. ownerId/flatId are captured at creation, not
+// resolved live via owner.ownedFlats: a complaint's flat is a point-in-time
+// fact and must not drift if the owner's flat portfolio changes later
+// (contrast with Vehicle, which resolves flat live). societyId is
+// denormalized for the same reason as Vehicle's — scopedWhere() needs it
+// directly on this row. There is deliberately no upvoteCount column — see
+// ComplaintUpvote below; count is always derived at read time
+// (prisma.complaintUpvote.count), never stored.
+model Complaint {
+  id               String            @id @default(cuid())
+  title            String
+  possibleSolution String
+  priority         ComplaintPriority
+  status           ComplaintStatus   @default(OPEN)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // Opaque storage key, not a browsable URL — same StorageAdapter contract as
+  // LedgerEntry.fileUrl. Optional — an image is not required to log a
+  // complaint — served only through GET /api/complaints/:id/image
+  // (authenticated, never public).
+  fileUrl  String?
+  mimeType String?
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  flatId String
+  flat   Flat   @relation(fields: [flatId], references: [id])
+
+  upvotes ComplaintUpvote[]
+
+  @@index([societyId])
+  @@index([ownerId])
+  @@index([flatId])
+}
+
+// One row per (complaint, owner) upvote — @@unique gives toggle idempotency
+// for free: adding an upvote is a row create, removing one is a row delete.
+// No boolean/array on Complaint instead, since this is also where "one
+// upvote per owner per complaint" is enforced.
+model ComplaintUpvote {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  complaintId String
+  complaint   Complaint @relation(fields: [complaintId], references: [id])
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  societyId String
+  society   Society @relation(fields: [societyId], references: [id])
+
+  @@unique([complaintId, ownerId])
+  @@index([societyId])
 }
 
 // One row per flat per calendar month — always a SYSTEM ledger entry, implicitly
