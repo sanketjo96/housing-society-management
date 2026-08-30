@@ -212,9 +212,12 @@ function App() {
                 path="/complaints"
                 element={<ProtectedRoute allowedRoles={['OWNER']}><ComplaintsPage /></ProtectedRoute>}
               />
-              {/* Available to every role (ADMIN included) — unlike almost every other
-                  route here, Vehicle Finder isn't persona-restricted: anyone in the
-                  society can look up a parked vehicle's plate (docs/features/vehicle-finder/). */}
+              {/* Available to every role (ADMIN included) at the route level — unlike
+                  almost every other route here, Vehicle Finder isn't persona-restricted:
+                  anyone in the society can look up a parked vehicle's plate
+                  (docs/features/vehicle-finder/). The sidebar link itself is Owner-only
+                  as of 2026-08-30 (DashboardLayout.tsx) — a nav-placement choice, not a
+                  route restriction, so Admin/Tenant can still reach it directly by URL. */}
               <Route
                 path="/vehicle-finder"
                 element={<ProtectedRoute allowedRoles={['ADMIN', 'OWNER', 'TENANT']}><VehicleFinderPage /></ProtectedRoute>}

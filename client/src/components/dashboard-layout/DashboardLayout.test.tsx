@@ -173,7 +173,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /complaints/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Other Charges, Vehicle Finder, Complaints, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Other Charges, Complaints, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
@@ -186,19 +186,18 @@ describe('DashboardLayout', () => {
       within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
       within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
     );
-    // Dashboard, Other Charges, Vehicle Finder, and Complaints are direct
-    // links; Manage Finance and Settings are collapsed group toggles — their
-    // children (Society Records/Receipt Records/Offline Payments, and Society
+    // Dashboard, Other Charges, and Complaints are direct links; Manage
+    // Finance and Settings are collapsed group toggles — their children
+    // (Society Records/Receipt Records/Offline Payments, and Society
     // details/Billing plan/Custom Fees/Finance categories respectively)
     // aren't links yet, so this assertion's button labels are appended after
     // every real link, regardless of the buttons' actual position in the
     // sidebar.
     expect(labels[0]).toMatch(/dashboard/i);
     expect(labels[1]).toMatch(/other charges/i);
-    expect(labels[2]).toMatch(/vehicle finder/i);
-    expect(labels[3]).toMatch(/complaints/i);
-    expect(labels[4]).toMatch(/manage finance/i);
-    expect(labels[5]).toMatch(/settings/i);
+    expect(labels[2]).toMatch(/complaints/i);
+    expect(labels[3]).toMatch(/manage finance/i);
+    expect(labels[4]).toMatch(/settings/i);
 
     expect(screen.queryByRole('link', { name: /^society records$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /offline payments/i })).not.toBeInTheDocument();
@@ -211,10 +210,13 @@ describe('DashboardLayout', () => {
     // Flats and residents, Tenants, Resident book, Flat-wise/Other charges
     // dues, and Payment proofs are all real routes but not sidebar nav items —
     // reached only via dashboard tiles (Resident book dropped from the sidebar
-    // 2026-08-29; see DashboardLayout.tsx).
+    // 2026-08-29; see DashboardLayout.tsx). Vehicle Finder's sidebar link is
+    // Owner-only as of 2026-08-30 (still a real route for Admin, see the
+    // dedicated test below).
     expect(screen.queryByRole('link', { name: /flats and residents/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^payment proofs$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /resident book/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /vehicle finder/i })).not.toBeInTheDocument();
   });
 
   it('expands the Manage Finance submenu on click, revealing Society Records, Receipt Records, and Offline Payments as real top-level URLs', async () => {
@@ -242,12 +244,12 @@ describe('DashboardLayout', () => {
     expect(screen.getByRole('link', { name: /other charges/i })).toHaveAttribute('href', '/other-charges');
   });
 
-  it('links "Vehicle Finder" to /vehicle-finder for an ADMIN', async () => {
+  it('does not show a Vehicle Finder nav link for an ADMIN', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /vehicle finder/i })).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /vehicle finder/i })).toHaveAttribute('href', '/vehicle-finder');
+    await waitFor(() => expect(screen.getByRole('link', { name: /^dashboard$/i })).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: /vehicle finder/i })).not.toBeInTheDocument();
   });
 
   it('links "Vehicle Finder" to /vehicle-finder for an OWNER', async () => {
@@ -256,6 +258,14 @@ describe('DashboardLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('link', { name: /vehicle finder/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /vehicle finder/i })).toHaveAttribute('href', '/vehicle-finder');
+  });
+
+  it('does not show a Vehicle Finder nav link for a TENANT', async () => {
+    mockAuth({ id: '2', name: 'Bob', email: 'bob@example.com', phone: null, role: 'TENANT', societyId: 's1' });
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /^dashboard$/i })).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: /vehicle finder/i })).not.toBeInTheDocument();
   });
 
   it('expands the Settings submenu on click, revealing Society details, Billing plan, and Custom Fees as real top-level URLs', async () => {

@@ -10,11 +10,12 @@ import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell
 // Outstanding-section tiles on the dashboard now point at '/resident-ledger'
 // (2026-08-29) — '/flat-dues' and '/other-charges-dues' are unlinked from any
 // nav surface as a result, kept only as still-working direct routes.
+// '/vehicle-finder' is Owner-sidebar-only as of 2026-08-30 — the route itself
+// (App.tsx) still allows ADMIN/OWNER/TENANT, so Admin/Tenant can still reach
+// it directly by URL, just without a nav link.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
-  // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
-  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
   // Status moderation only — admin never edits/deletes complaint content
   // (docs/features/complaints/ Confirmed Product Decision #6).
   { to: '/admin/complaints', label: 'Complaints', icon: MessageSquareWarning },
@@ -27,16 +28,6 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/mark-as-paid', label: 'Offline Payments', icon: Banknote },
     ],
   },
-  // CSV bulk-import utilities, one child per import type.
-  {
-    label: 'Imports',
-    icon: Upload,
-    children: [
-      { to: '/imports/residents', label: 'Resident', icon: Users },
-      { to: '/imports/charges', label: 'Charges', icon: BadgeIndianRupee },
-      { to: '/imports/finance', label: 'Finance', icon: Banknote },
-    ],
-  },
   {
     label: 'Settings',
     icon: Settings,
@@ -47,20 +38,34 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
       { to: '/settings/finance-categories', label: 'Finance Categories', icon: ListTree },
     ],
   },
+  // CSV bulk-import utilities, one child per import type.
+  {
+    label: 'Imports',
+    icon: Upload,
+    children: [
+      { to: '/imports/residents', label: 'Resident', icon: Users },
+      { to: '/imports/charges', label: 'Charges', icon: BadgeIndianRupee },
+      { to: '/imports/finance', label: 'Finance', icon: Banknote },
+    ],
+  },
 ];
 
-// '/other-charges-book' is reached only via the Dashboard's "Other Outstanding" card.
+// Base resident nav, shared by OWNER and TENANT alike — '/other-charges-book'
+// is reached only via the Dashboard's "Other Outstanding" card.
 const RESIDENT_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },
   { to: '/my-details', label: 'My Details', icon: User },
-  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
+  { to: '/maintenance-book', label: 'Maintenance Book', icon: BookOpen },
 ];
 
-// Owner-only addition to the resident nav — tenants have no access at all,
-// not even read-only (docs/features/complaints/ Confirmed Product Decision #1).
+// Owner-only additions to the resident nav. Complaints: tenants have no
+// access at all, not even read-only (docs/features/complaints/ Confirmed
+// Product Decision #1). Vehicle Finder: sidebar link is Owner-only as of
+// 2026-08-30 (see top-of-file note) — a product/nav-placement choice, not a
+// route restriction.
 const OWNER_ONLY_NAV_ITEMS: NavEntry[] = [
   { to: '/complaints', label: 'Complaints', icon: MessageSquareWarning },
+  { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
 ];
 
 export function DashboardLayout() {
