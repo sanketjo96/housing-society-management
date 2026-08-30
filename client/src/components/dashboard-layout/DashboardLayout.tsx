@@ -15,10 +15,10 @@ import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell
 // it directly by URL, just without a nav link.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
   // Status moderation only — admin never edits/deletes complaint content
   // (docs/features/complaints/ Confirmed Product Decision #6).
   { to: '/admin/complaints', label: 'Complaints', icon: MessageSquareWarning },
+  { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
   {
     label: 'Manage Finance',
     icon: Wallet2,

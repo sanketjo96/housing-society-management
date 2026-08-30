@@ -173,7 +173,7 @@ describe('DashboardLayout', () => {
     expect(screen.queryByRole('link', { name: /complaints/i })).not.toBeInTheDocument();
   });
 
-  it('shows the admin nav in order (Dashboard, Other Charges, Complaints, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
+  it('shows the admin nav in order (Dashboard, Complaints, Other Charges, Manage Finance, Settings) for an ADMIN, with both submenus collapsed by default', async () => {
     mockAuth({ id: '1', name: 'Admin', email: 'admin@example.com', phone: null, role: 'ADMIN', societyId: 's1' });
     renderApp();
 
@@ -186,7 +186,7 @@ describe('DashboardLayout', () => {
       within(nav).getByRole('button', { name: /^manage finance$/i }).textContent ?? '',
       within(nav).getByRole('button', { name: /^settings$/i }).textContent ?? '',
     );
-    // Dashboard, Other Charges, and Complaints are direct links; Manage
+    // Dashboard, Complaints, and Other Charges are direct links; Manage
     // Finance and Settings are collapsed group toggles — their children
     // (Society Records/Receipt Records/Offline Payments, and Society
     // details/Billing plan/Custom Fees/Finance categories respectively)
@@ -194,8 +194,8 @@ describe('DashboardLayout', () => {
     // every real link, regardless of the buttons' actual position in the
     // sidebar.
     expect(labels[0]).toMatch(/dashboard/i);
-    expect(labels[1]).toMatch(/other charges/i);
-    expect(labels[2]).toMatch(/complaints/i);
+    expect(labels[1]).toMatch(/complaints/i);
+    expect(labels[2]).toMatch(/other charges/i);
     expect(labels[3]).toMatch(/manage finance/i);
     expect(labels[4]).toMatch(/settings/i);
 
