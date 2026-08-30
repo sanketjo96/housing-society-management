@@ -228,7 +228,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
       expect(submitted.body.note).toBe('Paying August + September together');
     });
 
-    it('submit falls back to the default note when none is provided', async () => {
+    it('submit stores no note when none is provided', async () => {
       await request(app)
         .post('/api/me/ledger/deposits/intent')
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -239,7 +239,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .set('Authorization', `Bearer ${ownerToken}`)
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(submitted.status).toBe(201);
-      expect(submitted.body.note).toBe('UPI payment - awaiting review');
+      expect(submitted.body.note).toBeNull();
     });
 
     it('submit treats a whitespace-only note the same as no note', async () => {
@@ -254,7 +254,7 @@ describe('/api/me/ledger*, /api/ledger-entries/:id/file', () => {
         .field('note', '   ')
         .attach('file', TINY_JPEG_BYTES, { filename: 'proof.jpg', contentType: 'image/jpeg' });
       expect(submitted.status).toBe(201);
-      expect(submitted.body.note).toBe('UPI payment - awaiting review');
+      expect(submitted.body.note).toBeNull();
     });
 
     it('DELETE cancels an open intent', async () => {

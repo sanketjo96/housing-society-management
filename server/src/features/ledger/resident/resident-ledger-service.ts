@@ -382,8 +382,9 @@ export async function submitPaymentIntent(
   societyId: string,
   role: 'OWNER' | 'TENANT',
   file: ProofFileInput,
-  // Resident's optional freeform reason — falls back to the default status note
-  // when omitted or blank.
+  // Resident's optional freeform reason — stored as null when omitted or blank,
+  // rather than a placeholder, since the note persists unchanged after review
+  // and a stale "awaiting review" string would mislead once approved/rejected.
   note?: string,
 ): Promise<unknown> {
   const intent = await prisma.paymentIntent.findUnique({ where: { flatId, flat: { societyId } } });
@@ -402,7 +403,7 @@ export async function submitPaymentIntent(
         payerId,
         status: 'PENDING',
         amount: intent.amount,
-        note: note && note.length > 0 ? note : 'UPI payment - awaiting review',
+        note: note && note.length > 0 ? note : null,
         fileUrl: saved.key,
         mimeType: file.mimeType,
         createdById: payerId,
@@ -460,7 +461,7 @@ export async function createDeposit(
         payerId,
         status: 'PENDING',
         amount: input.amount,
-        note: 'UPI payment - awaiting review',
+        note: null,
         fileUrl,
         mimeType,
         createdById: payerId,
