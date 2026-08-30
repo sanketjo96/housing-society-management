@@ -133,6 +133,27 @@ export async function bulkImportSocietyLedgerEntries(
 
     const importedNote = note ? `${note} ${IMPORTED_NOTE_SUFFIX}` : IMPORTED_NOTE_SUFFIX;
 
+    // Idempotency: a re-run of the same CSV (whole or in part) must not double the
+    // ledger. Matching on every row field, including the suffixed note, means only
+    // an identical prior *import* is caught — a manually-recorded entry (no suffix)
+    // that happens to share amount/date/category is never mistaken for a duplicate.
+    const duplicate = await prisma.societyLedgerEntry.findFirst({
+      where: {
+        societyId,
+        categoryId: category.id,
+        direction,
+        amount,
+        transactionDate,
+        paymentMethod,
+        bankReference: bankReference?.trim() || null,
+        note: importedNote,
+      },
+    });
+    if (duplicate) {
+      errors.push({ row: rowNumber, message: 'This row was already imported — skipped' });
+      continue;
+    }
+
     const entry = await prisma.societyLedgerEntry.create({
       data: {
         societyId,

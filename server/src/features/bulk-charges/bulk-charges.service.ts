@@ -29,6 +29,12 @@ export interface BulkImportChargesResult {
 const REQUIRED_COLUMNS = ['wing', 'flatnumber', 'pool', 'amount'];
 const OPTIONAL_COLUMNS = ['feetypename', 'note'] as const;
 
+// OtherCharge has no natural unique key (a fee can legitimately be re-billed), so
+// import-created rows are marked with this suffix — lets a re-run of the same CSV
+// detect its own prior rows without ever blocking a genuinely separate manual bill
+// (billed via the single-charge form) that happens to share flat/fee/amount.
+const IMPORTED_CHARGE_NOTE_SUFFIX = '[Imported from CSV]';
+
 // MaintenanceRecord has no `note` column — an Opening Balance row's note goes into
 // AuditLog instead.
 async function importOpeningBalance(
@@ -86,8 +92,21 @@ async function importOtherCharge(
     return { error: `Custom fee "${feeTypeName}" not found or inactive` };
   }
 
+  const importedNote = note ? `${note} ${IMPORTED_CHARGE_NOTE_SUFFIX}` : IMPORTED_CHARGE_NOTE_SUFFIX;
+  const duplicate = await prisma.otherCharge.findFirst({
+    where: { flatId: flat.id, feeTypeId: feeType.id, amount, note: importedNote },
+  });
+  if (duplicate) {
+    return { error: `This charge (${feeTypeName}, ${amount}) was already imported for this flat — skipped` };
+  }
+
   try {
-    await billOtherCharge(societyId, adminId, { flatId: flat.id, feeTypeId: feeType.id, amount, note });
+    await billOtherCharge(societyId, adminId, {
+      flatId: flat.id,
+      feeTypeId: feeType.id,
+      amount,
+      note: importedNote,
+    });
     return {};
   } catch (err) {
     if (

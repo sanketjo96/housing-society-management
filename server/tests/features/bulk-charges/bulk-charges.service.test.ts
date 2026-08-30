@@ -148,4 +148,22 @@ describe('bulk-charges service — bulkImportCharges', () => {
     expect(result.imported).toBe(0);
     expect(result.errors[0].message).toMatch(/Missing required column/);
   });
+
+  it('reports a row error, not a duplicate, when the same OTHER_CHARGE row is re-imported', async () => {
+    const csv =
+      'wing,flatnumber,pool,feetypename,amount,note\n' +
+      `X,101,OTHER_CHARGE,Water Connection ${suffix},4321,Idempotency check`;
+
+    const first = await bulkImportCharges(societyId, adminId, csv);
+    expect(first.imported).toBe(1);
+    expect(first.errors).toHaveLength(0);
+
+    const second = await bulkImportCharges(societyId, adminId, csv);
+    expect(second.imported).toBe(0);
+    expect(second.errors).toHaveLength(1);
+    expect(second.errors[0].message).toMatch(/already imported/i);
+
+    const count = await prisma.otherCharge.count({ where: { flatId, feeTypeId, amount: 4321 } });
+    expect(count).toBe(1);
+  });
 });

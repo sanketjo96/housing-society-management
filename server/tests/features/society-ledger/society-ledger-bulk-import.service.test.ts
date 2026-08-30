@@ -112,4 +112,22 @@ describe('society-ledger bulk import service — bulkImportSocietyLedgerEntries'
     expect(result.imported).toBe(0);
     expect(result.errors[0].message).toMatch(/Missing required column/);
   });
+
+  it('is idempotent — re-importing the exact same row reports a row error, not a duplicate', async () => {
+    const csv =
+      'direction,categoryname,amount,transactiondate,paymentmethod,note\n' +
+      `EXPENSE,${expenseCategoryName},777,2024-05-01,CASH,Idempotency check`;
+
+    const first = await bulkImportSocietyLedgerEntries(societyId, adminId, csv);
+    expect(first.imported).toBe(1);
+    expect(first.errors).toHaveLength(0);
+
+    const second = await bulkImportSocietyLedgerEntries(societyId, adminId, csv);
+    expect(second.imported).toBe(0);
+    expect(second.errors).toHaveLength(1);
+    expect(second.errors[0].message).toMatch(/already imported/i);
+
+    const count = await prisma.societyLedgerEntry.count({ where: { societyId, amount: 777 } });
+    expect(count).toBe(1);
+  });
 });
