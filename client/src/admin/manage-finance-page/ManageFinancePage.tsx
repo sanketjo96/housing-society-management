@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, Download, Plus, Save } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Download, Plus, Save, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable } from '../../components/data-table/DataTable';
 import { ErrMsg, ErrorBanner, Field, inputClass, WarningBanner } from '../../components/form-field/FormField';
@@ -291,85 +291,132 @@ const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   OTHER: 'Other',
 };
 
+const MONTH_FILTER_LABEL_FORMAT = new Intl.DateTimeFormat('en-IN', { month: 'short' });
+
 export function ManageFinancePage() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-society-ledger'],
     queryFn: fetchSocietyLedgerEntries,
   });
 
-  const columns: ColumnDef<SocietyLedgerEntryRow, unknown>[] = [
-    {
-      id: 'direction',
-      header: 'Type',
-      cell: ({ row }) => (
-        <span
-          className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
-            row.original.direction === 'INCOME' ? 'bg-teal-light text-teal' : 'bg-coral-light text-coral'
-          }`}
-        >
-          {row.original.direction === 'INCOME' ? 'Income' : 'Expense'}
-        </span>
-      ),
-    },
-    {
-      id: 'category',
-      header: 'Category',
-      cell: ({ row }) => (
-        <span className="text-ink">
-          {row.original.category.name}
-          {row.original.note && <div className="text-xs text-muted">{row.original.note}</div>}
-        </span>
-      ),
-    },
-    {
-      id: 'amount',
-      header: 'Amount',
-      meta: { align: 'right' },
-      cell: ({ row }) => (
-        <span
-          className={`font-mono-brand ${row.original.direction === 'INCOME' ? 'text-teal' : 'text-coral'}`}
-        >
-          {row.original.direction === 'INCOME' ? '+' : '−'}₹{Number(row.original.amount).toLocaleString('en-IN')}
-        </span>
-      ),
-    },
-    {
-      id: 'date',
-      header: 'Transaction date',
-      cell: ({ row }) => (
-        <span className="text-ink">
-          {new Date(row.original.transactionDate).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          })}
-        </span>
-      ),
-    },
-    {
-      id: 'method',
-      header: 'Payment method',
-      cell: ({ row }) => (
-        <span className="text-ink">
-          {PAYMENT_METHOD_LABEL[row.original.paymentMethod]}
-          {row.original.bankReference && (
-            <div className="font-mono-brand text-xs text-muted">{row.original.bankReference}</div>
-          )}
-        </span>
-      ),
-    },
-    {
-      id: 'recordedBy',
-      header: 'Recorded by',
-      cell: ({ row }) => <span className="text-ink">{row.original.recordedBy.name}</span>,
-    },
-    {
-      id: 'file',
-      header: '',
-      cell: ({ row }) => (row.original.fileUrl ? <FileDownloadButton entryId={row.original.id} /> : null),
-    },
-  ];
+  // Years actually present in the data, newest first.
+  const availableYears = useMemo(() => {
+    if (!data) return [];
+    const years = new Set(data.map((e) => e.transactionDate.slice(0, 4)));
+    return Array.from(years).sort().reverse();
+  }, [data]);
+
+  // Months present for the selected year (or across all years, if none is picked
+  // yet) — the Month filter never offers a month with nothing to show.
+  const availableMonths = useMemo(() => {
+    if (!data) return [];
+    const months = new Set(
+      data
+        .filter((e) => !yearFilter || e.transactionDate.slice(0, 4) === yearFilter)
+        .map((e) => e.transactionDate.slice(5, 7)),
+    );
+    return Array.from(months).sort();
+  }, [data, yearFilter]);
+
+  const rows = useMemo(() => {
+    if (!data) return [];
+    const query = search.trim().toLowerCase();
+    return data.filter((e) => {
+      if (yearFilter && e.transactionDate.slice(0, 4) !== yearFilter) return false;
+      if (monthFilter && e.transactionDate.slice(5, 7) !== monthFilter) return false;
+      if (!query) return true;
+      const haystack = [
+        e.direction,
+        e.category.name,
+        e.note ?? '',
+        PAYMENT_METHOD_LABEL[e.paymentMethod],
+        e.bankReference ?? '',
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [data, search, yearFilter, monthFilter]);
+
+  const columns = useMemo<ColumnDef<SocietyLedgerEntryRow, unknown>[]>(
+    () => [
+      {
+        id: 'direction',
+        header: 'Type',
+        accessorFn: (row) => row.direction,
+        cell: ({ row }) => (
+          <span
+            className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
+              row.original.direction === 'INCOME' ? 'bg-teal-light text-teal' : 'bg-coral-light text-coral'
+            }`}
+          >
+            {row.original.direction === 'INCOME' ? 'Income' : 'Expense'}
+          </span>
+        ),
+      },
+      {
+        id: 'category',
+        header: 'Category',
+        accessorFn: (row) => row.category.name,
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {row.original.category.name}
+            {row.original.note && <div className="text-xs text-muted">{row.original.note}</div>}
+          </span>
+        ),
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        accessorFn: (row) => Number(row.amount),
+        meta: { align: 'right' },
+        cell: ({ row }) => (
+          <span
+            className={`font-mono-brand ${row.original.direction === 'INCOME' ? 'text-teal' : 'text-coral'}`}
+          >
+            {row.original.direction === 'INCOME' ? '+' : '−'}₹{Number(row.original.amount).toLocaleString('en-IN')}
+          </span>
+        ),
+      },
+      {
+        id: 'date',
+        header: 'Transaction date',
+        accessorFn: (row) => row.transactionDate,
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {new Date(row.original.transactionDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </span>
+        ),
+      },
+      {
+        id: 'method',
+        header: 'Payment method',
+        accessorFn: (row) => row.paymentMethod,
+        cell: ({ row }) => (
+          <span className="text-ink">
+            {PAYMENT_METHOD_LABEL[row.original.paymentMethod]}
+            {row.original.bankReference && (
+              <div className="font-mono-brand text-xs text-muted">{row.original.bankReference}</div>
+            )}
+          </span>
+        ),
+      },
+      {
+        id: 'file',
+        header: '',
+        cell: ({ row }) => (row.original.fileUrl ? <FileDownloadButton entryId={row.original.id} /> : null),
+      },
+    ],
+    [],
+  );
 
   if (showForm) {
     return (
@@ -405,12 +452,85 @@ export function ManageFinancePage() {
       )}
 
       {data && (
-        <DataTable
-          data={data}
-          columns={columns}
-          getRowId={(e) => e.id}
-          emptyMessage="No transactions recorded yet."
-        />
+        <>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className="text-xs font-semibold text-muted">
+              Year
+              <select
+                value={yearFilter}
+                onChange={(e) => {
+                  setYearFilter(e.target.value);
+                  setMonthFilter('');
+                }}
+                className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+              >
+                <option value="">All years</option>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-muted">
+              Month
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="mt-1 block rounded-lg border border-line px-3 py-1.5 text-sm text-ink"
+              >
+                <option value="">All months</option>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {MONTH_FILTER_LABEL_FORMAT.format(new Date(`2000-${month}-01T00:00:00`))}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex-1 text-xs font-semibold text-muted" style={{ minWidth: '12rem' }}>
+              Search
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Category, note, payment method, or bank reference"
+                  className="block w-full rounded-lg border border-line px-3 py-1.5 pr-8 text-sm text-ink"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 border-none bg-transparent p-0 text-muted"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </label>
+            {(search || yearFilter || monthFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setYearFilter('');
+                  setMonthFilter('');
+                }}
+                className="rounded-lg border border-line bg-transparent px-3 py-1.5 text-xs font-semibold text-ink"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <DataTable
+            data={rows}
+            columns={columns}
+            getRowId={(e) => e.id}
+            emptyMessage="No transactions found."
+          />
+        </>
       )}
     </div>
   );

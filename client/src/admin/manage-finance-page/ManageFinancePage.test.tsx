@@ -164,4 +164,172 @@ describe('ManageFinancePage', () => {
       expect(screen.getByPlaceholderText(/utr \/ cheque number/i)).toHaveValue('');
     });
   });
+
+  describe('list search & sort', () => {
+    const entries = [
+      {
+        id: 'e1',
+        direction: 'EXPENSE',
+        amount: '500.00',
+        transactionDate: '2026-01-05',
+        paymentMethod: 'CASH',
+        bankReference: null,
+        note: null,
+        fileUrl: null,
+        category: { id: 'c1', name: 'Electricity', direction: 'EXPENSE' },
+        recordedBy: { id: 'u1', name: 'Admin One' },
+      },
+      {
+        id: 'e2',
+        direction: 'INCOME',
+        amount: '2000.00',
+        transactionDate: '2026-01-10',
+        paymentMethod: 'BANK_TRANSFER',
+        bankReference: 'UTR123',
+        note: null,
+        fileUrl: null,
+        category: { id: 'c2', name: 'Bank Interest', direction: 'INCOME' },
+        recordedBy: { id: 'u1', name: 'Admin One' },
+      },
+      {
+        id: 'e3',
+        direction: 'EXPENSE',
+        amount: '150.00',
+        transactionDate: '2026-01-15',
+        paymentMethod: 'CASH',
+        bankReference: null,
+        note: 'Plumbing repair',
+        fileUrl: null,
+        category: { id: 'c3', name: 'Plumbing', direction: 'EXPENSE' },
+        recordedBy: { id: 'u1', name: 'Admin One' },
+      },
+    ];
+
+    function mockFetchWithEntries() {
+      const fetchMock = fetch as unknown as FetchMock;
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('/api/admin/society-ledger')) {
+          return Promise.resolve({ ok: true, json: async () => entries });
+        }
+        return Promise.resolve({ ok: true, json: async () => [] });
+      });
+    }
+
+    it('filters the list to rows matching the search box', async () => {
+      mockFetchWithEntries();
+      renderPage();
+      const user = userEvent.setup();
+
+      await screen.findByText('Electricity');
+      expect(screen.getByText('Bank Interest')).toBeInTheDocument();
+      expect(screen.getByText('Plumbing')).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText(/search/i), 'plumbing');
+
+      expect(screen.getByText('Plumbing')).toBeInTheDocument();
+      expect(screen.queryByText('Electricity')).not.toBeInTheDocument();
+      expect(screen.queryByText('Bank Interest')).not.toBeInTheDocument();
+    });
+
+    it('shows a clear-search icon only once there is search text, and clears just the search box', async () => {
+      mockFetchWithEntries();
+      renderPage();
+      const user = userEvent.setup();
+
+      await screen.findByText('Electricity');
+      expect(screen.queryByRole('button', { name: /clear search/i })).not.toBeInTheDocument();
+
+      await user.type(screen.getByLabelText(/search/i), 'plumbing');
+      expect(screen.queryByText('Electricity')).not.toBeInTheDocument();
+
+      const clearSearchButton = screen.getByRole('button', { name: /clear search/i });
+      await user.click(clearSearchButton);
+
+      expect(screen.getByLabelText(/search/i)).toHaveValue('');
+      expect(screen.getByText('Electricity')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /clear search/i })).not.toBeInTheDocument();
+    });
+
+    it('sorts the list by amount when the Amount column header is clicked, toggling direction', async () => {
+      mockFetchWithEntries();
+      renderPage();
+      const user = userEvent.setup();
+
+      await screen.findByText('Electricity');
+      const amountHeader = screen.getByRole('button', { name: /amount/i });
+
+      function rowTexts() {
+        return Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent);
+      }
+
+      await user.click(amountHeader);
+      await waitFor(() => {
+        const texts = rowTexts();
+        expect(texts[0]).toContain('Bank Interest');
+        expect(texts[1]).toContain('Electricity');
+        expect(texts[2]).toContain('Plumbing');
+      });
+
+      await user.click(amountHeader);
+      await waitFor(() => {
+        const texts = rowTexts();
+        expect(texts[0]).toContain('Plumbing');
+        expect(texts[1]).toContain('Electricity');
+        expect(texts[2]).toContain('Bank Interest');
+      });
+    });
+
+    it('no longer shows a Recorded by column', async () => {
+      mockFetchWithEntries();
+      renderPage();
+
+      await screen.findByText('Electricity');
+      expect(screen.queryByText(/recorded by/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('Admin One')).not.toBeInTheDocument();
+    });
+
+    it('filters via separate Year and Month dropdowns', async () => {
+      const febEntry = {
+        ...entries[0],
+        id: 'e4',
+        category: { id: 'c4', name: 'February Only Category', direction: 'EXPENSE' },
+        transactionDate: '2026-02-10',
+      };
+      const pastYearEntry = {
+        ...entries[0],
+        id: 'e5',
+        category: { id: 'c5', name: 'PastYear Only Category', direction: 'EXPENSE' },
+        transactionDate: '2025-01-05',
+      };
+      const fetchMock = fetch as unknown as FetchMock;
+      fetchMock.mockImplementation((url: string) => {
+        if (url.includes('/api/admin/society-ledger')) {
+          return Promise.resolve({ ok: true, json: async () => [...entries, febEntry, pastYearEntry] });
+        }
+        return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      renderPage();
+      const user = userEvent.setup();
+
+      await screen.findByText('February Only Category');
+      expect(screen.getByText('Electricity')).toBeInTheDocument();
+      expect(screen.getByText('PastYear Only Category')).toBeInTheDocument();
+
+      // Year alone narrows to that year, across all its months.
+      await user.selectOptions(screen.getByLabelText(/year/i), '2025');
+      expect(screen.getByText('PastYear Only Category')).toBeInTheDocument();
+      expect(screen.queryByText('Electricity')).not.toBeInTheDocument();
+      expect(screen.queryByText('February Only Category')).not.toBeInTheDocument();
+
+      // Year + Month together narrow to a single month.
+      await user.selectOptions(screen.getByLabelText(/year/i), '2026');
+      await user.selectOptions(screen.getByLabelText(/month/i), '02');
+      expect(screen.getByText('February Only Category')).toBeInTheDocument();
+      expect(screen.queryByText('Electricity')).not.toBeInTheDocument();
+      expect(screen.queryByText('Bank Interest')).not.toBeInTheDocument();
+      expect(screen.queryByText('Plumbing')).not.toBeInTheDocument();
+      expect(screen.queryByText('PastYear Only Category')).not.toBeInTheDocument();
+    });
+  });
 });
