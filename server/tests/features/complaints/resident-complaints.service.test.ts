@@ -93,19 +93,6 @@ describe('resident-complaints service — create/list', () => {
     expect(found?.flat.flatNumber).toBe(flatNumber);
   });
 
-  it('writes an AuditLog row on create', async () => {
-    const complaint = await createComplaint(societyId, ownerId, flatId, {
-      title: 'Broken common light',
-      possibleSolution: 'Replace the tube light',
-      priority: 'LOW',
-    });
-
-    const log = await prisma.auditLog.findFirst({
-      where: { entityType: 'Complaint', entityId: complaint.id, action: 'CREATE_COMPLAINT' },
-    });
-    expect(log).toBeTruthy();
-    expect(log?.actorId).toBe(ownerId);
-  });
 
   it('lists every complaint in the society, not just the caller\'s own', async () => {
     const complaint = await createComplaint(societyId, ownerId, flatId, {

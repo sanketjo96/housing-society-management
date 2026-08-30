@@ -161,10 +161,8 @@ resident-complaints.service.ts:
   - resolve ownerId from req.user, flatId from the owner's flat
   - if the image was provided: getStorageAdapter().save({ buffer, societyId, extension })
       → imageFileKey, imageMimeType
-  - prisma.$transaction([
-      complaint.create({ ...fields, ownerId, flatId, societyId, imageFileKey, imageMimeType }),
-      auditLog.create({ action: 'CREATE_COMPLAINT', entityType: 'Complaint', entityId, actorId: ownerId })
-    ])
+  - complaint.create({ ...fields, ownerId, flatId, societyId, imageFileKey, imageMimeType })
+      (no AuditLog — see decision 0008)
         │
         ▼
 201, new Complaint row
@@ -183,7 +181,7 @@ resident-complaints.service.ts (inside prisma.$transaction):
       case" precedent as getOwnFlat/deleteMyVehicle)
   - upvoteCount = tx.complaintUpvote.count({ where: { complaintId: id } })
   - if !isEditable(complaint.status, upvoteCount): throw ComplaintLockedError (409)
-  - else: apply the update/delete + tx.auditLog.create({ action: 'EDIT_COMPLAINT' | 'DELETE_COMPLAINT', ... })
+  - else: apply the update/delete (no AuditLog — see decision 0008)
         │
         ▼
 200 (edit) or 204 (delete)
@@ -229,11 +227,9 @@ PATCH /api/admin/complaints/:id/status  { status }
         │
         ▼
 admin-complaints.service.ts:
-  - prisma.$transaction([
-      complaint.update({ where: scopedWhere(societyId, { id }), data: { status } }),
-      auditLog.create({ action: 'CHANGE_COMPLAINT_STATUS', entityType: 'Complaint', entityId, actorId, note: `${from} -> ${to}` })
-    ])
-      (no restriction on from/to combination — Confirmed Product Decision #5)
+  - complaint.update({ where: scopedWhere(societyId, { id }), data: { status } })
+      (no restriction on from/to combination — Confirmed Product Decision #5;
+      no AuditLog — see decision 0008)
         │
         ▼
 200

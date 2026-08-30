@@ -14,26 +14,9 @@ export class ComplaintNotFoundError extends Error {
   }
 }
 
-export async function changeComplaintStatus(
-  id: string,
-  societyId: string,
-  actorId: string,
-  status: ComplaintStatus,
-) {
-  return prisma.$transaction(async (tx) => {
-    const complaint = await tx.complaint.findFirst({ where: scopedWhere(societyId, { id }) });
-    if (!complaint) throw new ComplaintNotFoundError();
+export async function changeComplaintStatus(id: string, societyId: string, status: ComplaintStatus) {
+  const complaint = await prisma.complaint.findFirst({ where: scopedWhere(societyId, { id }) });
+  if (!complaint) throw new ComplaintNotFoundError();
 
-    const updated = await tx.complaint.update({ where: { id }, data: { status } });
-    await tx.auditLog.create({
-      data: {
-        actorId,
-        action: 'CHANGE_COMPLAINT_STATUS',
-        entityType: 'Complaint',
-        entityId: id,
-        note: `${complaint.status} -> ${status}`,
-      },
-    });
-    return updated;
-  });
+  return prisma.complaint.update({ where: { id }, data: { status } });
 }

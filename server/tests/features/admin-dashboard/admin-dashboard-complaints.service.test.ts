@@ -8,7 +8,6 @@ describe('admin-dashboard service — complaint counts', () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let societyId: string;
   let ownerId: string;
-  let adminId: string;
   let flatId: string;
 
   beforeAll(async () => {
@@ -27,17 +26,6 @@ describe('admin-dashboard service — complaint counts', () => {
       },
     });
     ownerId = owner.id;
-
-    const admin = await prisma.user.create({
-      data: {
-        name: 'Dashboard Complaint Admin',
-        email: `dash-complaint-admin-${suffix}@example.com`,
-        passwordHash: 'x',
-        role: 'ADMIN',
-        societyId,
-      },
-    });
-    adminId = admin.id;
 
     const flat = await prisma.flat.create({
       data: { wing: 'F', flatNumber: `60${suffix.slice(-2)}`, baseRate: 1000, societyId, ownerId },
@@ -68,7 +56,7 @@ describe('admin-dashboard service — complaint counts', () => {
       possibleSolution: 'x',
       priority: 'LOW',
     });
-    await changeComplaintStatus(c3.id, societyId, adminId, 'RESOLVED');
+    await changeComplaintStatus(c3.id, societyId, 'RESOLVED');
 
     const summary = await getDashboardSummary(societyId);
     expect(summary.openComplaintsCount).toBe(2);

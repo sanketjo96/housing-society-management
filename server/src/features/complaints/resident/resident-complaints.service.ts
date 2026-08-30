@@ -1,8 +1,8 @@
 // Resident (OWNER-only) complaint create/list/image-serving. Shared,
 // society-wide visibility — list() returns every complaint in the society,
 // not just the caller's own (docs/features/complaints/01-requirements.md
-// Confirmed Product Decision #2). Every create writes an AuditLog row in
-// the same transaction, following other-charges.service.ts's pattern.
+// Confirmed Product Decision #2). Complaints are not audit-logged — that's
+// reserved for financial entities (docs/decisions/0008).
 import { prisma } from '../../../infrastructure/prisma/client';
 import type { ComplaintPriority } from '../../../infrastructure/prisma/generated/client';
 import { getStorageAdapter } from '../../../infrastructure/storage';
@@ -58,29 +58,17 @@ export async function createComplaint(
     mimeType = input.file.mimeType;
   }
 
-  return prisma.$transaction(async (tx) => {
-    const complaint = await tx.complaint.create({
-      data: {
-        societyId,
-        ownerId,
-        flatId,
-        title: input.title,
-        possibleSolution: input.possibleSolution,
-        priority: input.priority,
-        fileUrl,
-        mimeType,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorId: ownerId,
-        action: 'CREATE_COMPLAINT',
-        entityType: 'Complaint',
-        entityId: complaint.id,
-        note: complaint.title,
-      },
-    });
-    return complaint;
+  return prisma.complaint.create({
+    data: {
+      societyId,
+      ownerId,
+      flatId,
+      title: input.title,
+      possibleSolution: input.possibleSolution,
+      priority: input.priority,
+      fileUrl,
+      mimeType,
+    },
   });
 }
 
@@ -163,7 +151,7 @@ export async function updateComplaint(
     const upvoteCount = await tx.complaintUpvote.count({ where: { complaintId: id } });
     if (!isEditable(complaint.status, upvoteCount)) throw new ComplaintLockedError();
 
-    const updated = await tx.complaint.update({
+    return tx.complaint.update({
       where: { id },
       data: {
         title: input.title,
@@ -172,10 +160,6 @@ export async function updateComplaint(
         ...(input.file ? { fileUrl, mimeType } : {}),
       },
     });
-    await tx.auditLog.create({
-      data: { actorId: ownerId, action: 'EDIT_COMPLAINT', entityType: 'Complaint', entityId: id },
-    });
-    return updated;
   });
 }
 
@@ -191,9 +175,6 @@ export async function deleteComplaint(id: string, societyId: string, ownerId: st
     if (!isEditable(complaint.status, upvoteCount)) throw new ComplaintLockedError();
 
     await tx.complaint.delete({ where: { id } });
-    await tx.auditLog.create({
-      data: { actorId: ownerId, action: 'DELETE_COMPLAINT', entityType: 'Complaint', entityId: id },
-    });
   });
 }
 

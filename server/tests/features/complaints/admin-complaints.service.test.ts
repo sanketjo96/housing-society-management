@@ -11,7 +11,6 @@ describe('admin-complaints service — status transitions', () => {
   let societyId: string;
   let otherSocietyId: string;
   let ownerId: string;
-  let adminId: string;
   let flatId: string;
 
   beforeAll(async () => {
@@ -35,17 +34,6 @@ describe('admin-complaints service — status transitions', () => {
       },
     });
     ownerId = owner.id;
-
-    const admin = await prisma.user.create({
-      data: {
-        name: 'Status Admin',
-        email: `status-admin-${suffix}@example.com`,
-        passwordHash: 'x',
-        role: 'ADMIN',
-        societyId,
-      },
-    });
-    adminId = admin.id;
 
     const flat = await prisma.flat.create({
       data: { wing: 'E', flatNumber: `50${suffix.slice(-2)}`, baseRate: 1000, societyId, ownerId },
@@ -71,52 +59,39 @@ describe('admin-complaints service — status transitions', () => {
 
   it('moves a complaint from Open to In Progress', async () => {
     const complaint = await makeComplaint();
-    const updated = await changeComplaintStatus(complaint.id, societyId, adminId, 'IN_PROGRESS');
+    const updated = await changeComplaintStatus(complaint.id, societyId, 'IN_PROGRESS');
     expect(updated.status).toBe('IN_PROGRESS');
   });
 
   it('moves a complaint through the full happy path to Resolved', async () => {
     const complaint = await makeComplaint();
-    await changeComplaintStatus(complaint.id, societyId, adminId, 'IN_PROGRESS');
-    const resolved = await changeComplaintStatus(complaint.id, societyId, adminId, 'RESOLVED');
+    await changeComplaintStatus(complaint.id, societyId, 'IN_PROGRESS');
+    const resolved = await changeComplaintStatus(complaint.id, societyId, 'RESOLVED');
     expect(resolved.status).toBe('RESOLVED');
   });
 
   it('allows reverting from Resolved back to Open — no restricted transitions', async () => {
     const complaint = await makeComplaint();
-    await changeComplaintStatus(complaint.id, societyId, adminId, 'RESOLVED');
-    const reverted = await changeComplaintStatus(complaint.id, societyId, adminId, 'OPEN');
+    await changeComplaintStatus(complaint.id, societyId, 'RESOLVED');
+    const reverted = await changeComplaintStatus(complaint.id, societyId, 'OPEN');
     expect(reverted.status).toBe('OPEN');
   });
 
   it('allows moving straight to Rejected from Open', async () => {
     const complaint = await makeComplaint();
-    const rejected = await changeComplaintStatus(complaint.id, societyId, adminId, 'REJECTED');
+    const rejected = await changeComplaintStatus(complaint.id, societyId, 'REJECTED');
     expect(rejected.status).toBe('REJECTED');
   });
 
-  it('writes an AuditLog row noting the transition', async () => {
-    const complaint = await makeComplaint();
-    await changeComplaintStatus(complaint.id, societyId, adminId, 'IN_PROGRESS');
-
-    const log = await prisma.auditLog.findFirst({
-      where: { entityType: 'Complaint', entityId: complaint.id, action: 'CHANGE_COMPLAINT_STATUS' },
-    });
-    expect(log).toBeTruthy();
-    expect(log?.actorId).toBe(adminId);
-    expect(log?.note).toContain('OPEN');
-    expect(log?.note).toContain('IN_PROGRESS');
-  });
-
   it('never leaks a complaint from another society', async () => {
-    await expect(
-      changeComplaintStatus('does-not-exist', otherSocietyId, adminId, 'IN_PROGRESS'),
-    ).rejects.toThrow(ComplaintNotFoundError);
+    await expect(changeComplaintStatus('does-not-exist', otherSocietyId, 'IN_PROGRESS')).rejects.toThrow(
+      ComplaintNotFoundError,
+    );
   });
 
   it('changing status of a nonexistent complaint throws ComplaintNotFoundError', async () => {
-    await expect(
-      changeComplaintStatus('does-not-exist', societyId, adminId, 'IN_PROGRESS'),
-    ).rejects.toThrow(ComplaintNotFoundError);
+    await expect(changeComplaintStatus('does-not-exist', societyId, 'IN_PROGRESS')).rejects.toThrow(
+      ComplaintNotFoundError,
+    );
   });
 });

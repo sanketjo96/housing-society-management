@@ -87,12 +87,11 @@ re-litigated without a new conversation:
     at-a-glance signal; the Owner/Resident dashboard shows every complaint
     in the society, sorted by upvote count descending, as the actual
     browse-and-upvote surface.
-11. **Every state-changing action is audit-logged.** Create, edit,
-    delete-while-unlocked, and admin status changes each write an
-    `AuditLog` row (`entityType: 'Complaint'`) inside the same
-    `prisma.$transaction` as the mutation — follows `other-charges.
-    service.ts`'s pattern, not Vehicle Finder's (which explicitly opted
-    out of audit logging by product decision).
+11. **Not audit-logged.** Complaints don't write `AuditLog` rows — audit
+    logging is reserved for financial state-changing actions (see
+    `CLAUDE.md`). Reversed from the original design, which had every
+    create/edit/delete/status-change write one; see
+    `docs/decisions/0008-complaints-not-audit-logged.md`.
 
 ## Functional Requirements
 
@@ -113,7 +112,7 @@ re-litigated without a new conversation:
 | R12 | Owner/Resident dashboard shows the full list of all complaints in the society, sorted by upvote count descending | Must |
 | R13 | The optional complaint image is served only via an authenticated endpoint, never a public URL | Must |
 | R14 | Tenants receive a 403 (backend) and see no nav entry or UI surface (frontend) for every complaints route | Must |
-| R15 | Every create, edit, delete, and admin status-change action writes an `AuditLog` row | Should |
+| R15 | ~~Every create, edit, delete, and admin status-change action writes an `AuditLog` row~~ — reversed, see decision 0008 | Should |
 
 ## Non-Functional Requirements
 - **Low operating cost**: reuses the existing `StorageAdapter` (local disk

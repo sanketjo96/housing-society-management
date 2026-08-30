@@ -15,12 +15,7 @@ export async function changeComplaintStatusHandler(req: Request, res: Response) 
   }
 
   try {
-    const complaint = await changeComplaintStatus(
-      req.params.id,
-      req.user.societyId,
-      req.user.id,
-      parsed.data.status,
-    );
+    const complaint = await changeComplaintStatus(req.params.id, req.user.societyId, parsed.data.status);
     res.status(200).json(complaint);
   } catch (err) {
     if (err instanceof ComplaintNotFoundError) {
