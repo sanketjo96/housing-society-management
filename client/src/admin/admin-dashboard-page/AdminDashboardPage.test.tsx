@@ -111,17 +111,24 @@ describe('AdminDashboardPage', () => {
     await waitFor(() => expect(screen.getByText('₹2,700')).toBeInTheDocument());
   });
 
-  it('shows the Complaints card group with counts by status', async () => {
+  it('shows an Open Complaints card under Society, deep-linking to the complaints page', async () => {
     mockFetch();
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Complaints')).toBeInTheDocument());
-    const group = screen.getByText('Complaints').closest('div')!.parentElement!;
-    expect(within(group).getByText('Open')).toBeInTheDocument();
-    expect(within(group).getAllByText('2')).not.toHaveLength(0);
-    expect(within(group).getByText('In Progress')).toBeInTheDocument();
-    expect(within(group).getByText('Resolved')).toBeInTheDocument();
-    expect(within(group).getByText('Rejected')).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: /open complaints/i });
+    expect(link).toHaveAttribute('href', '/admin/complaints');
+    expect(within(link).getByText('2')).toBeInTheDocument();
+  });
+
+  it('no longer shows a standalone Complaints card group', async () => {
+    mockFetch();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('Society')).toBeInTheDocument());
+    expect(screen.queryByText(/^complaints$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('In Progress')).not.toBeInTheDocument();
+    expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rejected')).not.toBeInTheDocument();
   });
 
   it('no longer shows the numeric "Pending review" amount card', async () => {
@@ -182,12 +189,22 @@ describe('AdminDashboardPage', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
-  it('links the Outstanding tile to the flat-wise dues page', async () => {
+  it('links all three Outstanding tiles to the resident book', async () => {
     mockFetch();
     renderPage();
 
-    const link = await screen.findByRole('link', { name: /maintenance outstanding total/i });
-    expect(link).toHaveAttribute('href', '/flat-dues');
+    expect(await screen.findByRole('link', { name: /total outstanding/i })).toHaveAttribute(
+      'href',
+      '/resident-ledger',
+    );
+    expect(screen.getByRole('link', { name: /maintenance outstanding total/i })).toHaveAttribute(
+      'href',
+      '/resident-ledger',
+    );
+    expect(screen.getByRole('link', { name: /other charges outstanding total/i })).toHaveAttribute(
+      'href',
+      '/resident-ledger',
+    );
   });
 
   // docs/features/other-charges/ — a fully separate pool: its own card, plus a Total that
@@ -200,12 +217,6 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText('₹3,600')).toBeInTheDocument();
     // The maintenance-only figure is still shown separately, unmerged.
     expect(screen.getByText('₹2,700')).toBeInTheDocument();
-
-    // Links to the read-only flat-wise dues table, not the /other-charges billing
-    // page (deliberately unlinked from the Dashboard card, per the admin nav
-    // restructure — that page is reached via the sidebar's "Other Charges" instead).
-    const link = await screen.findByRole('link', { name: /other charges outstanding total/i });
-    expect(link).toHaveAttribute('href', '/other-charges-dues');
   });
 
   it('links the Total Owners tile to the flats and residents page', async () => {
@@ -265,11 +276,13 @@ describe('AdminDashboardPage', () => {
     expect(within(financeGroup).getByText('Net')).toBeInTheDocument();
     expect(within(financeGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
 
-    // Society's heading and its 3 cards live in the same container.
+    // Society's heading and its 4 cards (including the relocated Open
+    // Complaints tile) live in the same container.
     const societyGroup = screen.getByText('Society').closest('div')!.parentElement!;
     expect(within(societyGroup).getByText('Total Owners')).toBeInTheDocument();
     expect(within(societyGroup).getByText('Total Flats')).toBeInTheDocument();
     expect(within(societyGroup).getByText('Total Tenants')).toBeInTheDocument();
+    expect(within(societyGroup).getByText('Open Complaints')).toBeInTheDocument();
     expect(within(societyGroup).queryByText('Total Outstanding')).not.toBeInTheDocument();
 
     // Outstanding's heading and all three of its cards (the combined Total
@@ -298,6 +311,7 @@ describe('AdminDashboardPage', () => {
       'Total Owners',
       'Total Flats',
       'Total Tenants',
+      'Open Complaints',
     ];
     const elements = labels.map((label) => screen.getByText(new RegExp(label, 'i')));
     for (let i = 0; i < elements.length - 1; i++) {

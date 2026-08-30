@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Building2, IndianRupee, MessageSquare, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Building2, IndianRupee, ReceiptText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -76,7 +76,8 @@ function CardGroup({ icon: Icon, title, children }: { icon: LucideIcon; title: s
   );
 }
 
-// Society-wide headline numbers only; per-flat dues live at /flat-dues.
+// Society-wide headline numbers only; per-flat dues live at /resident-ledger,
+// which every Outstanding-section tile links to (2026-08-29).
 // 'ALL' means no year filter — every Finance/Outstanding figure is lifetime.
 // Flat/owner/tenant counts (Society card group) are never affected either way —
 // they come from duesQuery below, which never takes a year.
@@ -175,41 +176,22 @@ export function AdminDashboardPage() {
               label="Total Outstanding"
               value={`₹${summaryQuery.data.totalOutstandingTotal.toLocaleString('en-IN')}`}
               accent={summaryQuery.data.totalOutstandingTotal > 0 ? 'coral' : undefined}
+              note="View resident book →"
+              to="/resident-ledger"
             />
             <SummaryCard
               label="Maintenance Outstanding Total"
               value={`₹${summaryQuery.data.outstandingTotal.toLocaleString('en-IN')}`}
               accent={summaryQuery.data.outstandingTotal > 0 ? 'coral' : undefined}
-              note="View flat-wise dues →"
-              to="/flat-dues"
+              note="View resident book →"
+              to="/resident-ledger"
             />
             <SummaryCard
               label="Other Charges Outstanding Total"
               value={`₹${summaryQuery.data.otherChargesOutstandingTotal.toLocaleString('en-IN')}`}
               accent={summaryQuery.data.otherChargesOutstandingTotal > 0 ? 'coral' : undefined}
-              note="View flat-wise dues →"
-              to="/other-charges-dues"
-            />
-          </CardGroup>
-
-          <CardGroup icon={MessageSquare} title="Complaints">
-            <SummaryCard
-              label="Open"
-              value={summaryQuery.data.openComplaintsCount.toLocaleString('en-IN')}
-              accent={summaryQuery.data.openComplaintsCount > 0 ? 'coral' : undefined}
-            />
-            <SummaryCard
-              label="In Progress"
-              value={summaryQuery.data.complaintCountsByStatus.IN_PROGRESS.toLocaleString('en-IN')}
-            />
-            <SummaryCard
-              label="Resolved"
-              value={summaryQuery.data.complaintCountsByStatus.RESOLVED.toLocaleString('en-IN')}
-              accent="teal"
-            />
-            <SummaryCard
-              label="Rejected"
-              value={summaryQuery.data.complaintCountsByStatus.REJECTED.toLocaleString('en-IN')}
+              note="View resident book →"
+              to="/resident-ledger"
             />
           </CardGroup>
 
@@ -231,6 +213,13 @@ export function AdminDashboardPage() {
               value={totalTenants.toLocaleString('en-IN')}
               note="View tenants →"
               to="/tenants"
+            />
+            <SummaryCard
+              label="Open Complaints"
+              value={summaryQuery.data.openComplaintsCount.toLocaleString('en-IN')}
+              accent={summaryQuery.data.openComplaintsCount > 0 ? 'coral' : undefined}
+              note="View complaints →"
+              to="/admin/complaints"
             />
           </CardGroup>
         </>

@@ -5,12 +5,14 @@ import { DashboardShell, type NavEntry } from '../dashboard-shell/DashboardShell
 
 // Shared layout for every authenticated page — owns which nav items show per
 // role, renders the matched child via <Outlet/>. '/flats', '/tenants',
-// '/flat-dues', '/other-charges-dues', and '/payment-proofs' are real routes
-// but not sidebar items — reached only via dashboard tiles (read-only drill-downs).
+// '/resident-ledger', and '/payment-proofs' are real routes but not sidebar
+// items — reached only via dashboard tiles (read-only drill-downs). All three
+// Outstanding-section tiles on the dashboard now point at '/resident-ledger'
+// (2026-08-29) — '/flat-dues' and '/other-charges-dues' are unlinked from any
+// nav surface as a result, kept only as still-working direct routes.
 const ADMIN_NAV_ITEMS: NavEntry[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/other-charges', label: 'Other Charges', icon: BadgeIndianRupee },
-  { to: '/resident-ledger', label: 'Resident Book', icon: Users },
   // Not persona-restricted — available to residents too (docs/features/vehicle-finder/).
   { to: '/vehicle-finder', label: 'Vehicle Finder', icon: Car },
   // Status moderation only — admin never edits/deletes complaint content
@@ -20,9 +22,9 @@ const ADMIN_NAV_ITEMS: NavEntry[] = [
     label: 'Manage Finance',
     icon: Wallet2,
     children: [
-      { to: '/manage-finance', label: 'Record', icon: PlusCircle },
-      { to: '/mark-as-paid', label: 'Mark Paid', icon: Banknote },
-      { to: '/receipt-book', label: 'Receipt Book', icon: BookText },
+      { to: '/manage-finance', label: 'Society Records', icon: PlusCircle },
+      { to: '/receipt-book', label: 'Receipt Records', icon: BookText },
+      { to: '/mark-as-paid', label: 'Offline Payments', icon: Banknote },
     ],
   },
   // CSV bulk-import utilities, one child per import type.

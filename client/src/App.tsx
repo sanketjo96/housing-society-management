@@ -89,8 +89,8 @@ function App() {
                   "N payment proofs pending review" tile on AdminDashboardPage, same
                   drill-down convention as /flats, /tenants, /flat-dues, and
                   /other-charges-dues. Moved out of the sidebar 2026-08-20 once
-                  /mark-as-paid below took over as the "Mark Paid" child under the
-                  Manage Finance submenu — the manual cash/bank-transfer fallback
+                  /mark-as-paid below took over as the "Offline Payments" child under
+                  the Manage Finance submenu — the manual cash/bank-transfer fallback
                   ("Mark as paid") used to live here too as a modal, but a
                   manualDeposit entry has no proof file and so never actually
                   appeared in this page's proof-filtered tabs anyway. */}
@@ -98,33 +98,35 @@ function App() {
                 path="/payment-proofs"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><PaymentProofsPage /></ProtectedRoute>}
               />
-              {/* "Mark Paid" child under the "Manage Finance" submenu (DashboardLayout.tsx)
-                  — the manual cash/bank-transfer fallback (manualDeposit), delinked
-                  from /payment-proofs above. Lists only entries an admin recorded
-                  directly (createdByType=ADMIN); the payer is still whichever
-                  resident the payment was recorded against. */}
+              {/* "Offline Payments" child under the "Manage Finance" submenu
+                  (DashboardLayout.tsx) — the manual cash/bank-transfer fallback
+                  (manualDeposit), delinked from /payment-proofs above. Lists only
+                  entries an admin recorded directly (createdByType=ADMIN); the payer
+                  is still whichever resident the payment was recorded against. */}
               <Route
                 path="/mark-as-paid"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><MarkAsPaidPage /></ProtectedRoute>}
               />
-              {/* "Receipt Book" child under the "Manage Finance" submenu
+              {/* "Receipt Records" child under the "Manage Finance" submenu
                   (DashboardLayout.tsx) — covers issued receipts for both Maintenance
                   and Other Charges (its backend query has no category filter). */}
               <Route
                 path="/receipt-book"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ReceiptBookPage /></ProtectedRoute>}
               />
-              {/* Sidebar nav item, labeled "Resident Book" (DashboardLayout.tsx)
-                  — a comprehensive per-flat overview (both pools in one row), unlike
-                  /flat-dues and /other-charges-dues, which are dashboard-card
-                  drill-downs filtered to only what's still owed. */}
+              {/* Not a sidebar nav item (dropped from DashboardLayout.tsx 2026-08-29,
+                  where it used to appear as "Resident Book") — a comprehensive
+                  per-flat overview (both pools in one row). Now the target of all
+                  three Outstanding-section tiles on AdminDashboardPage, taking over
+                  from /flat-dues and /other-charges-dues below (kept as still-working
+                  routes, just no longer linked from anywhere in the UI). */}
               <Route
                 path="/resident-ledger"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><ResidentLedgerPage /></ProtectedRoute>}
               />
-              {/* Not a sidebar nav item — reached only via the "Maintenance Outstanding
-                  Total" tile on AdminDashboardPage, same admin-only guard as every
-                  other admin route here. */}
+              {/* Not a sidebar nav item, and no longer linked from any dashboard tile
+                  either (all three Outstanding-section tiles point at /resident-ledger
+                  as of 2026-08-29) — kept only as a still-working direct route. */}
               <Route
                 path="/flat-dues"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><FlatWiseDuesPage /></ProtectedRoute>}
@@ -152,8 +154,9 @@ function App() {
                 path="/settings/finance-categories"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><FinanceCategoriesPage /></ProtectedRoute>}
               />
-              {/* "Record" child under the "Manage Finance" submenu (DashboardLayout.tsx,
-                  restructured 2026-08-20 from a standalone top-level item) — the
+              {/* "Society Records" child under the "Manage Finance" submenu
+                  (DashboardLayout.tsx, restructured 2026-08-20 from a standalone
+                  top-level item) — the
                   primary action of recording the society's own income/expenditure
                   (SocietyLedgerEntry, docs/features/manage-finance/), entirely separate from
                   resident-billing LedgerEntry. */}
@@ -168,11 +171,12 @@ function App() {
                 path="/other-charges"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesPage /></ProtectedRoute>}
               />
-              {/* Not a sidebar nav item — reached only via the "Other Charges
-                  Outstanding Total" tile on AdminDashboardPage, same drill-down
-                  convention as /flat-dues above (docs/features/other-charges/). Deliberately
-                  NOT linked from /other-charges — that page is the billing action,
-                  this one is the read-only per-flat dues table. */}
+              {/* Not a sidebar nav item, and no longer linked from any dashboard tile
+                  either (same 2026-08-29 change as /flat-dues above — the Other
+                  Charges Outstanding tile now points at /resident-ledger instead) —
+                  kept only as a still-working direct route. Deliberately NOT linked
+                  from /other-charges — that page is the billing action, this one is
+                  the read-only per-flat dues table (docs/features/other-charges/). */}
               <Route
                 path="/other-charges-dues"
                 element={<ProtectedRoute allowedRoles={['ADMIN']}><OtherChargesFlatDuesPage /></ProtectedRoute>}
