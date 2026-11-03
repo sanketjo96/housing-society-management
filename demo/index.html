@@ -363,6 +363,7 @@ button.li:hover { background: var(--surface-2); }
 .li .tx { flex: 1; min-width: 0; }
 .li .tx b { display: block; font-size: 13.5px; font-weight: 600; }
 .li .tx span { font-size: 12px; color: var(--muted); display: block; }
+.li .tx span span { display: inline; }
 .li.tint-CREDIT { background: color-mix(in srgb, var(--brass-soft) 55%, transparent); }
 .li.tint-DEPOSIT { background: color-mix(in srgb, var(--blue-soft) 45%, transparent); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); flex: none; }
@@ -412,6 +413,38 @@ button.li:hover { background: var(--surface-2); }
   .statusbar { display: none; }
   .app-head { padding-top: 12px; }
 }
+
+/* ---------- Guard app ---------- */
+.g-head { background: var(--panel); color: var(--panel-fg); padding: 10px 16px 14px; flex: none; }
+.g-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.g-stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.g-stats b { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums lining-nums; }
+.g-stats span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.big-act { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.big-act button { height: 104px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--surface); display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 4px; padding: 14px; font-size: 16px; font-weight: 700; text-align: left; }
+.big-act button span { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.big-act button.primary { background: var(--teal); border-color: var(--teal); color: var(--on-teal); }
+.big-act button.primary span { color: inherit; opacity: .8; }
+.big-act button svg { margin-bottom: auto; }
+.code-slots { display: flex; gap: 8px; justify-content: center; }
+.code-slots span { width: 42px; height: 54px; border: 1.5px solid var(--line); border-radius: 12px; display: grid; place-items: center; font-family: var(--mono); font-size: 24px; font-weight: 600; background: var(--surface); }
+.code-slots span.f { border-color: var(--teal); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: auto; }
+.keypad button { height: 54px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-family: var(--mono); font-size: 22px; font-weight: 500; display: grid; place-items: center; }
+.keypad button:active { background: var(--sunken); }
+.verdict { border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; border: 1.5px solid; }
+.verdict.ok { background: var(--teal-soft); border-color: var(--teal); }
+.verdict.bad { background: var(--coral-soft); border-color: var(--coral); }
+.vbadge { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
+.verdict.ok .vbadge { background: var(--teal); } .verdict.bad .vbadge { background: var(--coral); }
+.viewfinder { position: relative; aspect-ratio: 1; max-width: 100%; background: #0B100E; border-radius: 18px; overflow: hidden; }
+.viewfinder .vf { position: absolute; width: 36px; height: 36px; border: 3px solid #B8863A; }
+.vf.tl { top: 22%; left: 22%; border-right: none; border-bottom: none; border-radius: 8px 0 0 0; } .vf.tr { top: 22%; right: 22%; border-left: none; border-bottom: none; border-radius: 0 8px 0 0; }
+.vf.bl { bottom: 22%; left: 22%; border-right: none; border-top: none; border-radius: 0 0 0 8px; } .vf.br { bottom: 22%; right: 22%; border-left: none; border-top: none; border-radius: 0 0 8px 0; }
+.scanline { position: absolute; left: 24%; right: 24%; height: 2px; background: #62A898; box-shadow: 0 0 12px #62A898; top: 24%; animation: scan 2s ease-in-out infinite alternate; }
+@keyframes scan { to { top: 76%; } }
+.li .qr { width: 40px; height: 40px; padding: 2px; border-radius: 6px; flex: none; }
+.visitor-ask { background: var(--surface); border: 1.5px solid var(--brass-bright); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 </style>
 
 <div id="root"></div>
@@ -613,9 +646,18 @@ function buildSeed() {
   const gatePasses = [
     { id: 'GP-7', flat: 'A-302', code: '482913', visitor: 'Meena Nair', phone: '+91 98201 44518', type: 'Guest', date: '2026-11-03', window: 'Evening · 4 pm – 9 pm', status: 'active', createdBy: 'Priya Nair' },
     { id: 'GP-6', flat: 'A-302', code: '771045', visitor: 'Swiggy delivery', phone: '', type: 'Delivery', date: '2026-11-03', window: 'All day', status: 'used', usedAt: '12:48 pm', createdBy: 'Arjun Mehta' },
+    { id: 'GP-8', flat: 'A-201', code: '550218', visitor: 'Blue Dart courier', phone: '', type: 'Delivery', date: '2026-11-03', window: 'All day', status: 'active', createdBy: 'Kabir Shah' },
+    { id: 'GP-9', flat: 'A-504', code: '913377', visitor: 'Rohit Bhat', phone: '+91 99702 18834', type: 'Guest', date: '2026-11-03', window: 'Evening · 4 pm – 9 pm', status: 'active', createdBy: 'Tanvi Bhat' },
     { id: 'GP-4', flat: 'A-302', code: '305562', visitor: 'Urban Company · AC service', phone: '+91 90110 22764', type: 'Service', date: '2026-10-29', window: 'Morning · 9 am – 1 pm', status: 'used', usedAt: '10:12 am', createdBy: 'Arjun Mehta' },
   ];
-  return { settings, flats, ledger, receipts, nextReceipt: rcpt, expenses, complaints, notices, amenities, bookings, messages, runs, credits: 412, gatePasses, intents: {}, noticeReads: {} };
+  const visitors = [
+    { id: 'V-5', name: 'Otis technician', phone: '', type: 'Service', flat: 'A-504', purpose: 'Lift repair, complaint C-117', status: 'inside', inAt: '3:30 pm', via: 'Committee (Sanjay)', vehicle: 'MH12 KT 2290' },
+    { id: 'V-4', name: 'Mahesh (plumber)', phone: '+91 97654 11820', type: 'Service', flat: 'A-103', purpose: 'Bathroom tap', status: 'inside', inAt: '2:10 pm', via: 'Approved by Vikram Joshi', vehicle: '' },
+    { id: 'V-3', name: 'Swiggy delivery', phone: '', type: 'Delivery', flat: 'A-302', purpose: 'Food', status: 'out', inAt: '12:48 pm', outAt: '12:55 pm', via: 'Gate pass 771045' },
+    { id: 'V-2', name: 'Ravi · Amazon', phone: '+91 90280 33417', type: 'Delivery', flat: 'A-403', purpose: 'Parcel', status: 'out', inAt: '11:02 am', outAt: '11:06 am', via: 'Approved by Shalini Kapoor' },
+    { id: 'V-1', name: 'Sunita (cook)', phone: '+91 98500 76120', type: 'Staff', flat: 'A-601', purpose: 'Daily staff', status: 'out', inAt: '7:05 am', outAt: '9:40 am', via: 'Daily staff list' },
+  ];
+  return { settings, flats, ledger, receipts, nextReceipt: rcpt, expenses, complaints, notices, amenities, bookings, messages, runs, credits: 412, gatePasses, intents: {}, noticeReads: {}, visitors };
 }
 
 /* =============================== Derived =============================== */
@@ -1360,7 +1402,7 @@ function Settings({ db, update, toast }) {
 const NAV = [
   ['Overview', [['dashboard', 'Dashboard', 'grid']]],
   ['Collections', [['review', 'Payment review', 'inbox'], ['billing', 'Billing', 'zap'], ['receipts', 'Receipts', 'receipt'], ['flats', 'Flats & residents', 'building']]],
-  ['Operations', [['expenses', 'Expenses', 'wallet'], ['complaints', 'Complaints', 'wrench'], ['amenities', 'Amenity booking', 'calendar']]],
+  ['Operations', [['expenses', 'Expenses', 'wallet'], ['complaints', 'Complaints', 'wrench'], ['amenities', 'Amenity booking', 'calendar'], ['visitors', 'Visitor log', 'shield']]],
   ['Communication', [['notices', 'Notices', 'megaphone'], ['notifications', 'Notifications', 'bell']]],
   ['Society', [['settings', 'Settings', 'sliders']]],
 ];
@@ -1382,7 +1424,7 @@ function AdminApp({ db, update, persona, onLogout, onReset, toast }) {
   const openCount = db.complaints.filter((c) => c.status === 'open').length;
   const counts = { review: pendingCount, complaints: openCount, amenities: db.bookings.filter((b) => b.status === 'requested').length };
   const props = { db, update, toast, go, openFlat: setFlatOpen, setNewFlat, openReceipt: setReceiptNo };
-  const Page = { dashboard: Dashboard, flats: Flats, billing: Billing, review: Review, receipts: Receipts, expenses: Expenses, complaints: Complaints, notices: Notices, amenities: Amenities, notifications: Notifications, settings: Settings }[page];
+  const Page = { dashboard: Dashboard, flats: Flats, billing: Billing, review: Review, receipts: Receipts, expenses: Expenses, complaints: Complaints, notices: Notices, amenities: Amenities, notifications: Notifications, settings: Settings, visitors: Visitors }[page];
   const label = NAV_FLAT.find((n) => n[0] === page)[1];
   const rcpt = receiptNo && db.receipts.find((r) => r.no === receiptNo);
   return html`<div className="shell">
@@ -1391,7 +1433,7 @@ function AdminApp({ db, update, persona, onLogout, onReset, toast }) {
       <div className="soc"><b>Aldgate Residency</b><span>Wing A · 24 flats · Baner, Pune</span></div>
       <nav className="nav" aria-label="Admin">${NAV.map(([g, items]) => html`<${Fragment} key=${g}><div className="nav-group">${g}</div>
         ${items.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)} aria-current=${page === k ? 'page' : undefined}><${Icon} n=${ic} s=${17} />${l}${counts[k] ? html`<span className="count">${counts[k]}</span>` : null}</button>`)}<//>`)}</nav>
-      <div style=${{ marginTop: 'auto', fontSize: 11, color: 'var(--panel-muted)', padding: '0 10px' }}>Demo build · Stage 1 of 3<br/>Designed by Sanket Joshi</div>
+      <div style=${{ marginTop: 'auto', fontSize: 11, color: 'var(--panel-muted)', padding: '0 10px' }}>Demo build · Stages 1–3<br/>Designed by Sanket Joshi</div>
     </aside>
     <div className="main">
       <div className="mobile-nav">${NAV_FLAT.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)}><${Icon} n=${ic} s=${14} />${l}${counts[k] ? ' · ' + counts[k] : ''}</button>`)}</div>
@@ -1627,6 +1669,10 @@ function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch }
   if (tab === 'home') body = html`<${Fragment}>
     ${PayCard}
     ${intent && html`<div className="banner warn"><${Icon} n="clock" s=${17} style=${{ flex: 'none', marginTop: 1 }} /><div><b>Payment started in ${intent.app}</b>Upload the screenshot so the treasurer can approve it. ${intent.by !== persona.name ? `Started by ${intent.by}.` : ''}</div></div>`}
+    ${db.visitors.filter((v) => v.flat === fl.id && v.status === 'waiting').map((v) => html`<div key=${v.id} className="visitor-ask">
+      <div style=${{ display: 'flex', gap: 10, alignItems: 'center' }}><${VPhoto} v=${v} size=${48} /><div style=${{ flex: 1, minWidth: 0 }}><span className="eyebrow" style=${{ color: 'var(--brass)' }}>At the main gate · ${v.requestedAt}</span><b style=${{ display: 'block', fontSize: 15 }}>${v.name}</b><span className="muted" style=${{ fontSize: 12 }}>${v.type}${v.purpose && v.purpose !== v.type ? ' · ' + v.purpose : ''}${v.vehicle ? ' · ' + v.vehicle : ''}</span></div></div>
+      <div style=${{ display: 'flex', gap: 8 }}><button className="btn danger" style=${{ flex: 1 }} onClick=${() => { update((d) => { const x = d.visitors.find((y) => y.id === v.id); x.status = 'denied'; x.via = 'Denied by ' + persona.name; }); toast('Guard told not to let them in'); }}>Deny</button>
+        <button className="btn primary" style=${{ flex: 1 }} onClick=${() => { update((d) => { const x = d.visitors.find((y) => y.id === v.id); x.status = 'inside'; x.inAt = nowTime(); x.via = 'Approved by ' + persona.name; }); toast(`${v.name} allowed in`); }}>Allow</button></div></div>`)}
     ${lastPay && lastPay.status === 'rejected' && html`<div className="banner bad"><${Icon} n="alert" s=${17} style=${{ flex: 'none', marginTop: 1 }} /><div><b>Payment of ${inr(lastPay.amount)} was rejected</b>${lastPay.rejectReason}</div></div>`}
     ${lastPay && lastPay.status === 'approved' && lastPay.reviewedOn === TODAY && html`<button className="banner ok" style=${{ border: 'none', textAlign: 'left', width: '100%' }} onClick=${() => setSheet({ kind: 'receipt', no: lastPay.receiptNo })}><${Icon} n="check" s=${17} style=${{ flex: 'none', marginTop: 1, color: 'var(--teal)' }} /><div><b>Payment approved</b>Receipt ${lastPay.receiptNo} is ready. Tap to view.</div></button>`}
     <div className="tiles">
@@ -1726,27 +1772,178 @@ function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch }
   </div>`;
 }
 
-/* =============================== Resident / guard placeholder =============================== */
-function ComingSoon({ persona, db, onLogout, onReset }) {
-  const isGuard = persona.key === 'guard';
-  const sum = !isGuard && flatSummary(db, persona.flat);
-  return html`<div className="login-wrap" style=${{ gap: 24 }}>
-    <div style=${{ display: 'flex', gap: 40, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 900 }}>
-      <div className="phone">
-        <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><${Logo} s=${26} /><${Avatar} name=${persona.name} size=${28} /></div>
-        <div><div className="eyebrow">${isGuard ? 'Main gate' : 'Flat ' + persona.flat}</div><div style=${{ fontFamily: 'var(--display)', fontSize: 22 }}>${isGuard ? 'Visitors today' : 'Payable'}</div></div>
-        ${isGuard ? html`<div className="sk" style=${{ height: 60 }}></div>` : html`<div className="metric hero" style=${{ padding: 14 }}><span className="eyebrow">Payable now</span><span className="val">${inr(sum.payable)}</span></div>`}
-        <div className="sk" style=${{ height: 44 }}></div><div className="sk" style=${{ height: 44 }}></div><div className="sk" style=${{ height: 44, opacity: .6 }}></div><div className="sk" style=${{ height: 44, opacity: .35 }}></div>
+/* =============================== Guard app (Stage 3) =============================== */
+const nowTime = () => { const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${m} ${ap}`; };
+const VIS_TYPES = { Guest: 'user', Delivery: 'inbox', Cab: 'arrow', Service: 'wrench', Staff: 'building' };
+const PHOTO_TONES = ['#2F6E64', '#35577D', '#B8863A', '#8A5A44', '#5B6B3A'];
+const samplePhoto = (name) => {
+  const c = PHOTO_TONES[name.length % PHOTO_TONES.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="${c}"/><circle cx="60" cy="48" r="22" fill="#F1E3CF"/><path d="M20 120c4-26 20-38 40-38s36 12 40 38z" fill="#F1E3CF"/><rect x="0" y="100" width="120" height="20" fill="rgba(0,0,0,.35)"/><text x="60" y="114" text-anchor="middle" font-family="monospace" font-size="10" fill="#fff">GATE CAM · ${new Date().toTimeString().slice(0, 5)}</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+};
+function VPhoto({ v, size = 40 }) {
+  return v.photo ? html`<img src=${v.photo} alt="" style=${{ width: size, height: size, borderRadius: 12, objectFit: 'cover', flex: 'none' }} />`
+    : html`<span style=${{ width: size, height: size, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--blue-soft)', color: 'var(--blue)', flex: 'none' }}><${Icon} n=${VIS_TYPES[v.type] || 'user'} s=${18} /></span>`;
+}
+const VSTATUS = { inside: ['approved', 'Inside'], out: ['sent', 'Left'], waiting: ['pending', 'Waiting'], denied: ['rejected', 'Turned away'] };
+function residentsOf(fl) { return fl.tenant ? [fl.tenant.name + ' (tenant)', fl.owner.name + ' (owner)'] : [fl.owner.name]; }
+
+function SidePanel({ persona, eyebrow, blurb, title, steps, onSwitch, onLogout, onReset }) {
+  const others = PERSONAS.filter((p) => p.key !== persona.key);
+  return html`<div className="res-side">
+    <div className="eyebrow">${eyebrow}</div><h1>${persona.name}</h1>
+    <p className="muted" style=${{ margin: 0 }}>${blurb}</p>
+    <div className="card card-pad" style=${{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <b style=${{ fontFamily: 'var(--display)', fontWeight: 500, fontSize: 16 }}>${title}</b><ol>${steps.map((s, i) => html`<li key=${i}>${s}</li>`)}</ol></div>
+    <div className="eyebrow" style=${{ marginTop: 4 }}>Switch persona</div>
+    <div className="switch-list">${others.map((p, i) => html`<button key=${p.key} onClick=${() => onSwitch(p.key)}><${Avatar} name=${p.name} i=${i} /><span style=${{ flex: 1 }}><b style=${{ display: 'block' }}>${p.name}</b><span className="muted" style=${{ fontSize: 11.5 }}>${p.dest}</span></span><${Icon} n="arrow" s=${14} /></button>`)}</div>
+    <div className="actions"><button className="btn" onClick=${onLogout}><${Icon} n="logout" s=${16} />Log out</button><${ResetButton} onReset=${onReset} /></div>
+  </div>`;
+}
+const StatusBar = html`<div className="statusbar"><span>9:41</span><span className="cam"></span><span style=${{ display: 'flex', gap: 4, alignItems: 'center' }}>5G <svg width="22" height="11" viewBox="0 0 22 11" aria-hidden="true"><rect x=".5" y=".5" width="18" height="10" rx="2.5" fill="none" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="13" height="7" rx="1.3" fill="currentColor"/><rect x="19.5" y="3.5" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/></svg></span></div>`;
+
+function WalkInSheet({ db, update, toast, onClose }) {
+  const [type, setType] = useState('Delivery'); const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [flat, setFlat] = useState('A-302'); const [purpose, setPurpose] = useState(''); const [vehicle, setVehicle] = useState(''); const [photo, setPhoto] = useState(null);
+  const fl = db.flats.find((f) => f.id === flat);
+  const submit = () => {
+    update((d) => d.visitors.unshift({ id: uid('V'), name: name.trim(), phone: phone.trim(), type, flat, purpose: purpose.trim() || type, vehicle: vehicle.trim(), photo, status: 'waiting', requestedAt: nowTime(), via: 'Walk-in' }));
+    toast(`Approval request sent to ${fl.id}. They can allow it from the app.`); onClose();
+  };
+  return html`<${Sheet} title="Walk-in visitor" sub="No gate pass? Ask the flat to approve from their app." onClose=${onClose}
+    foot=${html`<button className="btn" onClick=${onClose}>Cancel</button><button className="btn primary" disabled=${!name.trim() || !photo} onClick=${submit}>Ask ${flat} to approve</button>`}>
+    <div className="seg">${['Guest', 'Delivery', 'Cab', 'Service'].map((t) => html`<button key=${t} className=${type === t ? 'on' : ''} onClick=${() => setType(t)}>${t}</button>`)}</div>
+    <${Field} label="Visitor photo"><${FilePick} id="wi-photo" img=${photo} onPick=${setPhoto} onSample=${() => setPhoto(samplePhoto(name || 'Visitor'))} label="Take a photo at the gate" /><//>
+    <${Field} label=${type === 'Delivery' ? 'Name and company' : 'Name'}><input id="wi-name" className="input" placeholder=${type === 'Delivery' ? 'Ravi · Amazon' : 'Full name'} value=${name} onInput=${(e) => setName(e.target.value)} /><//>
+    <div className="grid2" style=${{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+      <${Field} label="Going to flat"><select id="wi-flat" className="input" value=${flat} onChange=${(e) => setFlat(e.target.value)}>${db.flats.map((f) => html`<option key=${f.id} value=${f.id}>${f.id}</option>`)}</select><//>
+      <${Field} label="Phone" hint="Optional"><input id="wi-phone" className="input" inputMode="tel" value=${phone} onInput=${(e) => setPhone(e.target.value)} /><//></div>
+    <div className="muted" style=${{ fontSize: 12 }}>${residentsOf(fl).join(' · ')}</div>
+    <div className="grid2" style=${{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+      <${Field} label="Purpose" hint="Optional"><input id="wi-purpose" className="input" placeholder="Parcel" value=${purpose} onInput=${(e) => setPurpose(e.target.value)} /><//>
+      <${Field} label="Vehicle no." hint="Optional"><input id="wi-vehicle" className="input" placeholder="MH12 AB 1234" value=${vehicle} onInput=${(e) => setVehicle(e.target.value.toUpperCase())} /><//></div>
+  <//>`;
+}
+function ScanSheet({ db, onClose, onScan }) {
+  const today = db.gatePasses.filter((p) => p.status === 'active');
+  return html`<${Sheet} title="Scan gate pass" sub="Point the camera at the visitor’s QR code." onClose=${onClose}>
+    <div className="viewfinder"><span className="vf tl"></span><span className="vf tr"></span><span className="vf bl"></span><span className="vf br"></span><span className="scanline"></span><span style=${{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', fontSize: 11.5, color: '#94A099' }}>Camera preview (simulated)</span></div>
+    <div className="eyebrow">Demo: tap a pass to simulate scanning it</div>
+    ${today.length ? html`<div className="list">${today.map((p) => html`<button key=${p.id} className="li" onClick=${() => onScan(p.code)}><${QR} code=${p.code} /><div className="tx"><b>${p.visitor}</b><span>${p.flat} · ${fmtDate(p.date)}</span></div><span className="num" style=${{ fontWeight: 600 }}>${p.code}</span></button>`)}</div>`
+      : html`<div className="empty">No active passes. Create one as Priya or Arjun.</div>`}
+  <//>`;
+}
+
+function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch }) {
+  const [tab, setTab] = useState('gate');
+  const [sheet, setSheet] = useState(null);
+  const [code, setCode] = useState('');
+  const [result, setResult] = useState(null);
+  const [logFilter, setLogFilter] = useState('all');
+  const [q, setQ] = useState('');
+  const bodyRef = useRef(null);
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [tab]);
+  const inside = db.visitors.filter((v) => v.status === 'inside');
+  const waiting = db.visitors.filter((v) => v.status === 'waiting');
+  const entries = db.visitors.filter((v) => v.status === 'inside' || v.status === 'out').length;
+  const expected = db.gatePasses.filter((p) => p.status === 'active' && p.date === TODAY);
+  const check = (c) => {
+    const p = db.gatePasses.find((x) => x.code === c);
+    if (!p) return setResult({ ok: false, msg: `No pass with code ${c}. Check the code, or make a walk-in entry.` });
+    if (p.status === 'used') return setResult({ ok: false, p, msg: `Already used at ${p.usedAt}. A pass works once.` });
+    if (p.status === 'cancelled') return setResult({ ok: false, p, msg: 'The resident cancelled this pass.' });
+    if (p.date !== TODAY) return setResult({ ok: false, p, msg: `This pass is for ${fmtDate(p.date)}, not today.` });
+    setResult({ ok: true, p });
+  };
+  const press = (k) => { setResult(null); const c = k === 'del' ? code.slice(0, -1) : k === 'clr' ? '' : (code + k).slice(0, 6); setCode(c); if (c.length === 6) check(c); };
+  const allow = (p) => {
+    const t = nowTime();
+    update((d) => { const x = d.gatePasses.find((y) => y.id === p.id); x.status = 'used'; x.usedAt = t;
+      d.visitors.unshift({ id: uid('V'), name: p.visitor, phone: p.phone, type: p.type, flat: p.flat, purpose: p.type, photo: null, status: 'inside', inAt: t, via: 'Gate pass ' + p.code }); });
+    toast(`${p.visitor} let in. ${p.createdBy} has been notified.`); setCode(''); setResult(null);
+  };
+  const exit = (v) => { update((d) => { const x = d.visitors.find((y) => y.id === v.id); x.status = 'out'; x.outAt = nowTime(); }); toast(`${v.name} checked out`); };
+  const decide = (v, okd) => { update((d) => { const x = d.visitors.find((y) => y.id === v.id); x.status = okd ? 'inside' : 'denied'; if (okd) x.inAt = nowTime(); x.via = okd ? 'Approved on call' : 'Turned away by guard'; }); toast(okd ? `${v.name} let in` : `${v.name} turned away`); };
+
+  const VRow = (v, actions) => html`<div key=${v.id} className="li" style=${{ alignItems: 'flex-start' }}><${VPhoto} v=${v} />
+    <div className="tx"><b>${v.name}</b><span>${v.type} · <span className="flatno" style=${{ fontSize: 11.5 }}>${v.flat}</span>${v.vehicle ? ' · ' + v.vehicle : ''}</span>
+      <span>${v.status === 'waiting' ? 'Asked at ' + v.requestedAt : (v.inAt ? 'In ' + v.inAt : '') + (v.outAt ? ' · Out ' + v.outAt : '')} · ${v.via}</span>
+      ${actions}</div>
+    <span className=${'pill ' + VSTATUS[v.status][0]}>${VSTATUS[v.status][1]}</span></div>`;
+
+  let body;
+  if (tab === 'gate') body = html`<${Fragment}>
+    <div className="g-stats"><div><b>${inside.length}</b><span>Inside now</span></div><div><b>${entries}</b><span>Entries today</span></div><div><b>${expected.length}</b><span>Passes due</span></div></div>
+    <div className="big-act">
+      <button className="primary" onClick=${() => setTab('verify')}><${Icon} n="shield" s=${26} />Verify pass<span>Code or QR</span></button>
+      <button onClick=${() => setSheet({ kind: 'walkin' })}><${Icon} n="user" s=${26} />Walk-in<span>Ask the flat</span></button>
+    </div>
+    ${waiting.length > 0 && html`<${Fragment}><div className="sec-title"><b>Waiting for approval</b><span className="pill pending">${waiting.length}</span></div>
+      <div className="list">${waiting.map((v) => VRow(v, html`<div style=${{ display: 'flex', gap: 6, marginTop: 8 }}><button className="btn sm danger" onClick=${() => decide(v, false)}>Turn away</button><button className="btn sm" onClick=${() => decide(v, true)}>Approved on call</button></div>`))}</div><//>`}
+    <div className="sec-title"><b>Expected today</b><span className="muted" style=${{ fontSize: 12 }}>${expected.length} passes</span></div>
+    ${expected.length ? html`<div className="list">${expected.map((p) => html`<button key=${p.id} className="li" onClick=${() => { setTab('verify'); setCode(p.code); check(p.code); }}><span style=${{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--teal-soft)', color: 'var(--teal)', flex: 'none' }}><${Icon} n=${PASS_TYPES[p.type]} s=${18} /></span><div className="tx"><b>${p.visitor}</b><span>${p.flat} · ${p.window}</span></div><${Icon} n="chev" s=${15} /></button>`)}</div>`
+      : html`<div className="empty" style=${{ padding: 20 }}>No passes due today.</div>`}
+    <div className="sec-title"><b>Inside now</b><span className="muted" style=${{ fontSize: 12 }}>${inside.length}</span></div>
+    ${inside.length ? html`<div className="list">${inside.map((v) => VRow(v, html`<div style=${{ marginTop: 8 }}><button className="btn sm" onClick=${() => exit(v)}><${Icon} n="logout" s=${14} />Mark exit</button></div>`))}</div>` : html`<div className="empty" style=${{ padding: 20 }}>Nobody inside.</div>`}
+  <//>`;
+  else if (tab === 'verify') body = html`<${Fragment}>
+    <button className="btn primary" style=${{ padding: 14, fontSize: 15 }} onClick=${() => setSheet({ kind: 'scan' })}><${Icon} n="grid" s=${18} />Scan QR code</button>
+    <div className="muted" style=${{ textAlign: 'center', fontSize: 12.5 }}>or type the 6-digit code</div>
+    <div className="code-slots" aria-live="polite">${[0, 1, 2, 3, 4, 5].map((i) => html`<span key=${i} className=${code[i] ? 'f' : ''}>${code[i] || ''}</span>`)}</div>
+    ${result && (result.ok ? html`<div className="verdict ok">
+        <div style=${{ display: 'flex', gap: 10, alignItems: 'center' }}><span className="vbadge"><${Icon} n="check" s=${22} w=${2.4} /></span><div><b style=${{ fontSize: 16 }}>Valid pass</b><div style=${{ fontSize: 12.5 }}>${result.p.window}</div></div></div>
+        <dl className="kv-list" style=${{ margin: 0 }}><dt>Visitor</dt><dd>${result.p.visitor}</dd><dt>Type</dt><dd>${result.p.type}</dd><dt>Flat</dt><dd className="flatno">${result.p.flat}</dd><dt>Created by</dt><dd>${result.p.createdBy}</dd>${result.p.phone && html`<dt>Phone</dt><dd className="num">${result.p.phone}</dd>`}</dl>
+        <button className="btn primary" style=${{ padding: 13, fontSize: 15 }} onClick=${() => allow(result.p)}>Let in</button></div>`
+      : html`<div className="verdict bad"><div style=${{ display: 'flex', gap: 10, alignItems: 'center' }}><span className="vbadge"><${Icon} n="x" s=${22} w=${2.4} /></span><div><b style=${{ fontSize: 16 }}>Don’t let in</b><div style=${{ fontSize: 12.5 }}>${result.msg}</div></div></div>
+        ${result.p && html`<div style=${{ fontSize: 12.5 }}>${result.p.visitor} · ${result.p.flat}</div>`}
+        <button className="btn" onClick=${() => { setCode(''); setResult(null); setSheet({ kind: 'walkin' }); }}>Make a walk-in entry instead</button></div>`)}
+    <div className="keypad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clr', '0', 'del'].map((k) => html`<button key=${k} onClick=${() => press(k)} aria-label=${k === 'del' ? 'Delete' : k === 'clr' ? 'Clear' : k}>${k === 'del' ? html`<${Icon} n="arrow" s=${18} style=${{ transform: 'rotate(180deg)' }} />` : k === 'clr' ? html`<span style=${{ fontSize: 13, fontFamily: 'var(--body)', fontWeight: 600 }}>Clear</span>` : k}</button>`)}</div>
+  <//>`;
+  else if (tab === 'log') { const list = db.visitors.filter((v) => logFilter === 'all' || v.status === logFilter);
+    body = html`<${Fragment}>
+      <div className="chips">${[['all', 'All'], ['inside', 'Inside'], ['out', 'Left'], ['waiting', 'Waiting'], ['denied', 'Turned away']].map(([k, l]) => html`<button key=${k} className=${'chip' + (logFilter === k ? ' on' : '')} onClick=${() => setLogFilter(k)}>${l}<span className="c">${k === 'all' ? db.visitors.length : db.visitors.filter((v) => v.status === k).length}</span></button>`)}</div>
+      ${list.length ? html`<div className="list">${list.map((v) => VRow(v, v.status === 'inside' ? html`<div style=${{ marginTop: 8 }}><button className="btn sm" onClick=${() => exit(v)}><${Icon} n="logout" s=${14} />Mark exit</button></div>` : null))}</div>` : html`<div className="empty">Nothing here.</div>`}
+    <//>`; }
+  else { const list = db.flats.filter((f) => !q || (f.id + f.owner.name + (f.tenant ? f.tenant.name : '')).toLowerCase().includes(q.toLowerCase()));
+    body = html`<${Fragment}>
+      <div className="search"><${Icon} n="search" s=${15} /><input id="g-search" className="input" style=${{ width: '100%' }} placeholder="Flat number or name" value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
+      <div className="list">${list.map((f) => { const who = f.tenant || f.owner; return html`<div key=${f.id} className="li"><span className="flatno" style=${{ width: 48 }}>${f.id}</span><div className="tx"><b>${who.name}</b><span>${f.tenant ? 'Tenant · owner ' + f.owner.name : 'Owner'}</span></div><span className="num" style=${{ fontSize: 12, userSelect: 'all' }}>${who.phone}</span></div>`; })}</div>
+    <//>`; }
+
+  return html`<div className="res-stage">
+    <${SidePanel} persona=${persona} eyebrow="Guard app · Stage 3" title="Try the gate flows" onSwitch=${onSwitch} onLogout=${onLogout} onReset=${onReset}
+      blurb="Ramesh works the main gate on an Android phone. Big buttons, few words, and everything he does reaches the resident straight away."
+      steps=${['Verify: scan Meena Nair’s pass (A-302) and let her in. Her pass shows as used in Priya’s app.', 'Walk-in: add a delivery for A-302, then switch to Priya and allow it from her home screen.', 'Mark visitors out as they leave. Sanjay sees the whole log on the admin side.']} />
+    <div className="device">
+      ${StatusBar}
+      <div className="g-head">
+        <div style=${{ display: 'flex', alignItems: 'center', gap: 10 }}><${Logo} s=${30} /><div style=${{ flex: 1 }}><b style=${{ fontFamily: 'var(--display)', fontWeight: 500, fontSize: 18 }}>Main gate</b><div style=${{ fontSize: 11.5, color: 'var(--panel-muted)' }}>Aldgate Residency · Day shift 8 am – 8 pm</div></div>
+          <button className="icon-btn" style=${{ background: 'var(--panel-2)', borderColor: 'var(--panel-line)', color: 'var(--panel-fg)' }} onClick=${onLogout} aria-label="End shift and log out"><${Icon} n="logout" s=${16} /></button></div>
       </div>
-      <div style=${{ maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div className="eyebrow">Signed in as ${persona.name} · ${persona.role}</div>
-        <h1 style=${{ fontSize: 34, lineHeight: 1.15 }}>The ${isGuard ? 'guard app' : 'resident app'} arrives in ${isGuard ? 'stage 3' : 'stage 2'}</h1>
-        <p className="muted" style=${{ margin: 0 }}>${isGuard ? 'Visitor entry with photo, gate pass verification by QR or OTP, and the visitor log, all on an Android phone at the gate.' : 'Passbook, pay by UPI, add a credit, receipts, complaints, notices, amenity booking and gate passes, in an Android phone frame. Owner and tenant of A-302 will see the same ledger.'}</p>
-        <p className="muted" style=${{ margin: 0, fontSize: 13 }}>Log in as Sanjay (admin) to try the full web dashboard now.</p>
-        <div className="actions"><button className="btn primary" onClick=${onLogout}><${Icon} n="logout" s=${16} />Log out</button><${ResetButton} onReset=${onReset} /></div>
-      </div>
+      <div className="app-body" ref=${bodyRef}>${body}</div>
+      <nav className="tabbar" style=${{ gridTemplateColumns: 'repeat(4, 1fr)' }} aria-label="Guard">${[['gate', 'Gate', 'grid'], ['verify', 'Verify', 'shield'], ['log', 'Visitor log', 'file'], ['flats', 'Flats', 'building']].map(([k, l, ic]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)} aria-current=${tab === k ? 'page' : undefined}><${Icon} n=${ic} s=${20} />${l}${k === 'gate' && waiting.length ? ' · ' + waiting.length : ''}</button>`)}</nav>
+      ${sheet && sheet.kind === 'walkin' && html`<${WalkInSheet} db=${db} update=${update} toast=${toast} onClose=${() => setSheet(null)} />`}
+      ${sheet && sheet.kind === 'scan' && html`<${ScanSheet} db=${db} onClose=${() => setSheet(null)} onScan=${(c) => { setSheet(null); setTab('verify'); setCode(c); check(c); }} />`}
     </div>
   </div>`;
+}
+
+/* =============================== Admin: Visitor log =============================== */
+function Visitors({ db }) {
+  const [f, setF] = useState('all');
+  const list = db.visitors.filter((v) => f === 'all' || v.status === f);
+  const passes = db.gatePasses;
+  return html`<${Fragment}>
+    <${PageHead} eyebrow="Operations" title="Visitor log" sub="Every entry at the main gate today, from gate passes, walk-ins approved by residents, and daily staff." />
+    <div className="metrics">
+      <div className="metric"><span className="eyebrow">Inside now</span><span className="val">${db.visitors.filter((v) => v.status === 'inside').length}</span></div>
+      <div className="metric"><span className="eyebrow">Entries today</span><span className="val">${db.visitors.filter((v) => v.inAt).length}</span></div>
+      <div className="metric"><span className="eyebrow">Waiting at gate</span><span className="val" style=${{ color: 'var(--brass)' }}>${db.visitors.filter((v) => v.status === 'waiting').length}</span></div>
+      <div className="metric"><span className="eyebrow">Active gate passes</span><span className="val">${passes.filter((p) => p.status === 'active').length}</span><span className="sub">${passes.filter((p) => p.status === 'used').length} used</span></div>
+    </div>
+    <div className="card"><div className="card-head"><div className="chips">${[['all', 'All'], ['inside', 'Inside'], ['out', 'Left'], ['waiting', 'Waiting'], ['denied', 'Turned away']].map(([k, l]) => html`<button key=${k} className=${'chip' + (f === k ? ' on' : '')} onClick=${() => setF(k)}>${l}</button>`)}</div><span className="muted" style=${{ fontSize: 12.5 }}>Guard on duty: Ramesh Patil</span></div>
+      <div className="table-wrap"><table className="t"><thead><tr><th>Visitor</th><th>Flat</th><th>In</th><th>Out</th><th>Entry by</th><th>Status</th></tr></thead>
+        <tbody>${list.map((v) => html`<tr key=${v.id}><td><div className="person"><${VPhoto} v=${v} size=${32} /><div>${v.name}<small>${v.type}${v.vehicle ? ' · ' + v.vehicle : ''}</small></div></div></td><td className="flatno">${v.flat}</td><td className="num">${v.inAt || '—'}</td><td className="num">${v.outAt || '—'}</td><td style=${{ fontSize: 12.5 }}>${v.via}</td><td><span className=${'pill ' + VSTATUS[v.status][0]}>${VSTATUS[v.status][1]}</span></td></tr>`)}</tbody></table></div></div>
+  <//>`;
 }
 
 /* =============================== App =============================== */
@@ -1762,7 +1959,7 @@ function App() {
   if (!persona) view = html`<${Login} onLogin=${(p) => { setPersona(p); window.scrollTo(0, 0); }} />`;
   else if (persona.key === 'admin') view = html`<${AdminApp} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} />`;
   else if (persona.key === 'owner' || persona.key === 'tenant') view = html`<${ResidentApp} key=${persona.key} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${(k) => { setPersona(PERSONAS.find((p) => p.key === k)); window.scrollTo(0, 0); }} />`;
-  else view = html`<${ComingSoon} persona=${persona} db=${db} onLogout=${logout} onReset=${reset} />`;
+  else view = html`<${GuardApp} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${(k) => { setPersona(PERSONAS.find((p) => p.key === k)); window.scrollTo(0, 0); }} />`;
   return html`<${Fragment}>${view}<div className="toast-zone" aria-live="polite">${toasts.map((t) => html`<div key=${t.id} className="toast"><${Icon} n="check" s=${15} />${t.msg}</div>`)}</div><//>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
