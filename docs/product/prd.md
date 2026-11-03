@@ -4,7 +4,7 @@
 |---|---|
 | Product | Saral Society (repo: `housing-society-management`) |
 | Owner | Sanket Joshi |
-| Status | Draft v1, 2026-11-03 |
+| Status | Draft v1.1, 2026-11-03 (§11 items 1–4 settled) |
 | Clickable demo | `demo/index.html` on branch `demo/clickable-mockup-stage-1` |
 
 This PRD describes the **whole product**: what is already built in this repo
@@ -173,6 +173,11 @@ Details: [`payments.md`](../features/payments.md),
 
 ### 7.5 Payments and collections — Built
 
+- A resident can pay **any amount above zero**, not only the full payable.
+  Paying more than Outstanding leaves the excess as available credit. There
+  is no separate credit claim; an expense a resident paid on the society's
+  behalf is submitted as a deposit flagged "expense to settle against
+  maintenance" (decided 2026-11-03, §11).
 - Resident starts a payment, which creates a **payment intent**. The amount
   is locked when the intent is created, and the intent stays open until
   proof is submitted or the resident cancels it. One open intent per
@@ -270,21 +275,28 @@ Details: [`society-onboarding/`](../features/society-onboarding/).
 
 Details: [`notifications/`](../features/notifications/).
 
-### 7.12 Complaints — Designed
+### 7.12 Complaints — Designed, with 2026-11-03 changes
 
-As designed in this repo:
+Designed in this repo, with two product changes decided on 2026-11-03
+(§11). The feature docs in `complaints/` still describe the earlier
+owner-only, no-notification design and must be updated before building.
 
-- Owners log a complaint with title, possible solution and one optional
-  image. Tenants have no complaint access.
-- Society-wide ranked list on the owner dashboard; owners can upvote,
-  including their own, as a toggle.
+- **Owners and tenants** can log a complaint with title, possible solution
+  and one optional image. *(Changed: was owner-only.)*
+- Society-wide ranked list on the resident dashboard; owners and tenants
+  can upvote, including their own, as a toggle.
 - Admin moves status freely between Open, In Progress, Resolved and
   Rejected. Rejected is the only moderation tool.
-- Owner may edit or delete only while Open with zero upvotes.
-- No notifications and no audit log in the first version.
-
-The demo additionally shows tenants raising complaints, an assignee field
-and WhatsApp updates; see §11.
+- The resident who raised it may edit or delete it only while Open with
+  zero upvotes.
+- **Assignee** *(new)*: admin can record who is handling it (a vendor or a
+  committee member) and add an update note the resident can see.
+- **Notifications** *(new)*: the resident who raised the complaint is told
+  on WhatsApp and email when its status changes or an update note is
+  added, through the existing notification pipeline (`COMPLAINT_UPDATED`,
+  `COMPLAINT_RESOLVED` events). Each WhatsApp message uses one credit.
+- Not audit-logged (complaints are not financial; see
+  [decision 0008](../decisions/0008-complaints-not-audit-logged.md)).
 
 Details: [`complaints/`](../features/complaints/),
 [decision 0007](../decisions/0007-complaints-back-in-scope.md).
@@ -345,7 +357,8 @@ Guard app:
 | Edit receipt template and signatures | ✓ | | | |
 | Record society expenses | ✓ | | | |
 | Bill other charges | ✓ | | | |
-| Raise complaint | | ✓ | per §11 | |
+| Raise or upvote complaint | | ✓ | ✓ | |
+| Assign and update complaint | ✓ | | | |
 | Publish notices | ✓ | | | |
 | Request amenity booking | | ✓ | ✓ | |
 | Create gate pass | | ✓ | ✓ | |
@@ -395,20 +408,26 @@ Explicitly out of the four phases above:
 - iOS apps; Marathi and Hindi UI.
 - Multi-society admin UX (switching between societies in one session).
 
-## 11. Decisions to reconcile
+## 11. Decisions between the demo and the built app
 
-The clickable demo was built from sales discussions and differs from the
-built app in these places. Each needs a decision before the related phase is
-built; until then the built behaviour stands.
+The clickable demo was built from sales discussions and differed from the
+built app in several places.
 
-| # | Topic | Built app / feature docs | Demo / sales discussion | Proposed |
+### Settled (2026-11-03)
+
+| # | Topic | Decision | Follow-up |
+|---|---|---|---|
+| 1 | Credit as a row type | Keep the built model: no Credit type ([0003](../decisions/0003-credit-lifecycle.md)). Overpaying a deposit creates available credit; a reimbursable expense is a deposit flagged "expense to settle". | Restyle the demo's "Add credit" as a flagged deposit |
+| 2 | Pay amount | Any amount above zero, as built. No full-payable-only restriction. | Update the demo's pay sheet to allow editing the amount |
+| 3 | Complaints for tenants | Tenants can raise and upvote complaints, same as owners. | Update `complaints/01-requirements.md` (Decision 1) and add a decision record superseding owner-only |
+| 4 | Complaint notifications and assignee | In scope: assignee field, resident-visible update notes, WhatsApp and email on status change. | Update `complaints/01-requirements.md` (Decision 9) and the notification event list |
+
+### Still open
+
+| # | Topic | Built app / `CLAUDE.md` | Demo / sales discussion | Proposed |
 |---|---|---|---|---|
-| 1 | Credit as a row type | Removed for good ([0003](../decisions/0003-credit-lifecycle.md)); overpaying a deposit creates available credit; a payment can be flagged as an expense to settle | Separate "Add credit" claim with its own CREDIT row and receipt | Keep the built model; restyle the demo's Add credit as a deposit flagged "expense to settle" |
-| 2 | Pay amount | Any amount above zero; excess becomes available credit | Full payable only; partial via credit | Decide whether to restrict the pay flow to the full payable |
-| 3 | Complaints for tenants | Owner-only | Tenants can raise complaints | Decide; tenants live in the flat and see most issues |
-| 4 | Complaint notifications and assignee | None in v1 | WhatsApp updates and an assignee field | Add in a later complaints iteration |
 | 5 | Notices, amenity booking, gate passes, visitors | Listed as out of scope in `CLAUDE.md` | Shown as Phase 2–4 features | If the client buys them, update `CLAUDE.md` "Do not touch" and add a decision record before building |
-| 6 | Payment gateway for WhatsApp credit packs | `CLAUDE.md` rules out payment gateways (meant for resident payments) | Credit packs bought through a payment link | Allow a payment link for the society's own credit purchases only; record as a decision |
+| 6 | Payment link for WhatsApp credit packs | `CLAUDE.md` rules out payment gateways (meant for resident payments) | Credit packs bought through a payment link | Allow a payment link for the society's own credit purchases only; record as a decision |
 
 ## 12. Success metrics
 
