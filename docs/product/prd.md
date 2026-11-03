@@ -6,6 +6,7 @@
 | Owner | Sanket Joshi |
 | Status | Draft v1.1, 2026-11-03 (§11 items 1–4 settled) |
 | Clickable demo | `demo/index.html` on branch `demo/clickable-mockup-stage-1` |
+| Client proposal | [`proposal.md`](./proposal.md) (draft) |
 
 This PRD describes the **whole product**: what is already built in this repo
 and what the full platform will add. It is the product-level "what and
