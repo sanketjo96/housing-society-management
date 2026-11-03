@@ -4,8 +4,10 @@ Static site, no build step. Open `index.html` in a browser.
 
 - `index.html` — landing page
 - `favicon.svg` — brand mark
-- `demo/index.html` — the clickable demo (copy of `demo/index.html` from the
-  `demo/clickable-mockup-stage-1` branch, wrapped as a full HTML document)
+- `demo/` — static copy of the clickable demo from the
+  `demo/clickable-mockup-stage-1` branch (`index.html`, `js/`, `db.json`,
+  `db.seed.json`). With no API behind it, it runs on `db.json` in the
+  browser.
 
 ## Publishing
 
