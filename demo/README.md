@@ -1,11 +1,53 @@
-# Saral Society — clickable demo (Stages 1–3)
+# Saral Society — clickable demo
 
-A UI-only mockup for showing the product to prospective societies. It is
-separate from the real app in `client/` and `server/`: no backend, no
-database, all data lives in memory and resets on reload.
+The full Saral Society front end (admin web dashboard, resident app and guard
+app) running on mock data. UI only: no real backend, nothing touches the
+production app in `client/` and `server/`.
 
-Open `index.html` in a browser (it loads React 18.3.1 and htm 3.1.1 from
-public CDNs).
+## Run it with json-server (data is saved)
+
+```sh
+cd demo
+npm install
+npm start
+```
+
+Open <http://localhost:3001>. json-server serves the app and the API from the
+same port, and saves every change to `db.json`. The badge in the bottom-left
+corner reads **Live API · localhost:3001**.
+
+To start over: use **Reset demo** in the app, or stop the server, run
+`npm run reset`, and start it again.
+
+`npm run start:watch` also reloads `db.json` when you edit it by hand. Don't
+use it while clicking through the app: json-server reloads after its own
+writes too, and requests made during a reload fail.
+
+## Run it without a server (data stays in the browser)
+
+Any static host works, for example GitHub Pages or `npx serve .`. With no API
+answering, the app loads `db.json` as sample data and keeps changes only in
+that browser tab. The badge reads **Sample data · this browser only**.
+
+Opening `index.html` straight from disk (`file://`) doesn't work, because
+browsers block loading `db.json` that way.
+
+## Point it at another API
+
+- `?api=http://localhost:4000` in the URL, or
+- set `apiBase` in `js/config.js` (`''` forces sample data in memory).
+
+## Files
+
+| File | What it is |
+|---|---|
+| `index.html` | Page shell and styles |
+| `js/app.js` | All screens (React 18 + htm, no build step) |
+| `js/api.js` | Data layer: loads data, turns each change into REST calls |
+| `js/config.js` | Which API to use |
+| `db.json` | Mock data that json-server reads and writes |
+| `db.seed.json` | Original mock data, used by Reset demo |
+| `API.md` | Endpoints, data fields, and every write action with the endpoint a real backend should provide |
 
 ## Logins
 
@@ -16,53 +58,15 @@ public CDNs).
 | Arjun Mehta, Tenant A-302 | tenant@saralsociety.demo | Resident app |
 | Ramesh Patil, Guard | guard@saralsociety.demo | Guard app |
 
-Password for all: `demo123`. Persona cards on the login page sign in with one tap.
+Password for all: `demo123`. The persona cards on the login page sign in with
+one tap.
 
-## Stage 1 scope
-
-Login page plus admin screens: Dashboard, Payment review (receipt check
-before approval, reject with reason, cash/cheque entry), Billing, Receipts,
-Flats & residents (passbook, details, occupancy history, bulk import),
-Expenses, Complaints, Amenity booking, Notices, Notifications (WhatsApp
-credits, delivery log), Settings (CHS receipt template, signatures).
-
-Some screens (notices, amenity booking, gate passes) show features that are
-out of scope for the current MVP in `CLAUDE.md`; they are here as roadmap
-for the sales demo only.
-
-## Stage 2 scope
-
-Resident app in an Android phone frame (full screen on a real phone), for
-Priya (owner) and Arjun (tenant) of A-302, who share one passbook:
-
-- Home: payable card, pay status banners, quick actions, notices, coming up.
-- Pay: full payable only, UPI app picker, payment intent that persists until
-  proof is uploaded or cancelled, screenshot upload.
-- Add credit, passbook (Outstanding / Credit / Payable, filters, receipts).
-- Requests: complaints and amenity bookings, with slot clash check.
-- Gate passes with QR and 6-digit code.
-- Profile: my details (flat and rate locked; owner, occupancy, tenant editable).
-
-Everything shares live state with the admin view: a payment submitted by a
-resident appears in Payment review, and the receipt shows up in the passbook
-once approved.
-
-## Stage 3 scope
-
-Guard app for Ramesh at the main gate, in the same phone frame:
-
-- Gate home: inside now, entries today, passes due, waiting approvals.
-- Verify pass: 6-digit keypad or simulated QR scan. Clear valid / don't let
-  in verdicts (wrong code, already used, cancelled, wrong date).
-- Walk-in: photo, name, flat, purpose, vehicle. The flat's residents get an
-  Allow / Deny card on their home screen; the guard can also record an
-  approval taken on a call.
-- Visitor log with mark-exit, and a flats directory with phone numbers.
-- Admin: new Visitor log page under Operations.
-
-## Cross-role flows to show
+## Flows to show
 
 1. Priya pays, Sanjay approves, Arjun sees the receipt.
 2. Priya creates a gate pass, Ramesh verifies it, the pass shows as used.
 3. Ramesh logs a walk-in for A-302, Priya allows it from her phone.
 4. Arjun raises a complaint, Sanjay resolves it, Arjun sees the update.
+
+Notices, amenity booking and gate passes are shown as roadmap features. They
+are out of scope for the current MVP in `CLAUDE.md`.
