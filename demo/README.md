@@ -46,12 +46,24 @@ so edit that file to change what visitors see.
 | File | What it is |
 |---|---|
 | `index.html` | Page shell and styles |
-| `js/app.js` | All screens (React 18 + htm, no build step) |
+| `js/main.js` | Entry point: loads data, picks the app for the signed-in persona |
+| `js/core.js` | Shared helpers: React/htm, icons, formatting, balance maths (`flatSummary`, `rateFor`) |
+| `js/ui.js` | Shared components: Modal, Drawer, Sheet, Field, Receipt, Facade, persona side panel |
+| `js/features/*.js` | One file per feature (payments, billing, notices, gate, …): its admin screen and resident sheets |
+| `js/apps/*.js` | The three shells: admin web, resident phone app, guard phone app, plus the login page |
 | `js/api.js` | Data layer: loads data, turns each change into REST calls |
 | `js/config.js` | Which API to use |
 | `db.json` | Mock data that json-server reads and writes |
 | `db.seed.json` | Original mock data, used by Reset demo |
 | `API.md` | Endpoints, data fields, and every write action with the endpoint a real backend should provide |
+
+React 18 and htm load from a CDN; the modules are native ES modules, so there
+is still no build step.
+
+Imports only point one way: `core` → `ui` → `features` → `apps` → `main`.
+A feature never imports another feature; anything two features share moves
+down into `core.js` or `ui.js`. This keeps a client-specific change in one
+feature file from breaking the rest of the demo.
 
 ## Logins
 

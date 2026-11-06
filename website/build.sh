@@ -13,13 +13,16 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$root/_site}"
 
 rm -rf "$out"
-mkdir -p "$out/demo/js"
+mkdir -p "$out/demo"
 
 cp "$root/website/index.html" "$root/website/favicon.svg" "$out/"
 
-cp "$root/demo/index.html" "$root/demo/favicon.svg" "$out/demo/"
-cp "$root/demo/js/"*.js "$out/demo/js/"
-cp "$root/demo/db.seed.json" "$out/demo/db.seed.json"
+# Everything in demo/ is published except tooling and docs, so new modules,
+# client presets and data files are picked up without editing this script.
+tar -C "$root/demo" -cf - \
+  --exclude='./node_modules' --exclude='./tests' --exclude='./package.json' \
+  --exclude='./package-lock.json' --exclude='./README.md' --exclude='./API.md' \
+  --exclude='./.gitignore' --exclude='./db.json' . | tar -C "$out/demo" -xf -
 cp "$root/demo/db.seed.json" "$out/demo/db.json"
 
 touch "$out/.nojekyll"
