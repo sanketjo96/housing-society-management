@@ -100,7 +100,10 @@ features they have asked for. Open it with `?client=<id>`, which loads
 A preset always runs on sample data in the visitor's browser, even when
 json-server is running, so a client demo never changes the shared data. The
 building view, wing names and flat counts come from the data, so a `data`
-file with a different number of floors or flats renders correctly.
+file with a different number of floors or flats renders correctly, as long as
+it has the same shape as `db.seed.json`: `wing`, `floor` and `unit` on every
+flat, and `society.display`, `society.locality`, `society.stamp` and
+`meta.trend` (see `API.md`).
 
 ## From client request to built feature
 
