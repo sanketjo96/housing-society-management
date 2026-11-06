@@ -114,10 +114,14 @@ const setToday = (v) => { TODAY = v; };
 const setPersonas = (v) => { PERSONAS = v; };
 const personaBy = (key) => PERSONAS.find((p) => p.key === key) || null;
 const personaName = (key, fallback = '') => { const p = personaBy(key); return p ? p.name : fallback; };
-// Features a client preset can switch off (clients/*.json "features"). Everything is on unless set to false.
+// Features a client preset can switch on or off (clients/*.json "features").
+// Shared features are on unless a preset sets them to false. A feature built
+// for one client's request goes in OFF_BY_DEFAULT, so the shared demo stays
+// as it is and only that client's preset ("features": { "<name>": true }) shows it.
+const OFF_BY_DEFAULT = new Set([]);
 let FEATURES = {};
 const setFeatures = (f) => { FEATURES = f || {}; };
-const on = (name) => FEATURES[name] !== false;
+const on = (name) => (name in FEATURES ? FEATURES[name] !== false : !OFF_BY_DEFAULT.has(name));
 const nowStamp = () => { const d = new Date(); return `${TODAY} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 function unpaidPeriods(db, flatId) {
   const rows = db.ledger.filter((r) => r.flat === flatId);
@@ -128,4 +132,4 @@ function unpaidPeriods(db, flatId) {
 }
 const nowTime = () => { const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${m} ${ap}`; };
 
-export { setToday, setPersonas, personaBy, personaName, FEATURES, setFeatures, on, MONTHS_LONG, WEEKDAYS, longDate, firstName, wingsLabel, useState, useMemo, useEffect, useRef, Fragment, html, P, Icon, Logo, TODAY, inr, MONTHS, fmtDate, shortDate, periodLabel, initials, uid, daysBetween, words, AV_TONES, Avatar, rateFor, getIntent, flatSummary, STATUS_LABEL, PERSONAS, nowStamp, unpaidPeriods, nowTime };
+export { setToday, setPersonas, personaBy, personaName, FEATURES, OFF_BY_DEFAULT, setFeatures, on, MONTHS_LONG, WEEKDAYS, longDate, firstName, wingsLabel, useState, useMemo, useEffect, useRef, Fragment, html, P, Icon, Logo, TODAY, inr, MONTHS, fmtDate, shortDate, periodLabel, initials, uid, daysBetween, words, AV_TONES, Avatar, rateFor, getIntent, flatSummary, STATUS_LABEL, PERSONAS, nowStamp, unpaidPeriods, nowTime };

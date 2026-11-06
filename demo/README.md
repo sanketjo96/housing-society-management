@@ -102,6 +102,40 @@ json-server is running, so a client demo never changes the shared data. The
 building view, wing names and flat counts come from the data, so a `data`
 file with a different number of floors or flats renders correctly.
 
+## From client request to built feature
+
+The demo is where a client's idea is tried out before anyone writes backend
+code. Its output is the PRD; the real app on `main` is built from the PRD.
+
+1. **Log it.** Add a row to [`docs/product/requests.md`](../docs/product/requests.md)
+   with status *Requested*.
+2. **Branch.** Create `demo/<client>-<feature>` from `product`. Pushes to
+   `product` republish the public site, so work on the branch.
+3. **Prototype.**
+   - Give the client a preset if they don't have one: copy
+     `clients/example.json` to `clients/<client>.json`.
+   - A change to an existing feature goes in that feature's file in
+     `js/features/`. A new feature gets a new file there, wired into the app
+     shell that shows it (`js/apps/`).
+   - If only this client should see it, add its name to `OFF_BY_DEFAULT` in
+     `js/core.js` and switch it on in their preset (`"features": { "<name>": true }`).
+     The shared demo stays as it is.
+   - Map the new screens in `js/prd.js`. Use the next free §7 number and
+     status `new`, or mark an existing section `requested` in the preset's
+     `prd` block.
+4. **Show it.** Run it locally (`npm start`, then `?client=<client>`), or merge
+   to `product` once it can't affect the shared demo and send the client the
+   link (`…/demo/?client=<client>#admin/<screen>`). Set the request to
+   *Prototyped*.
+5. **Write it down.** When the client agrees, add or update the PRD §7
+   section: what it does, who uses it, acceptance criteria, and the demo link.
+   If it reverses an earlier decision, add a record in `docs/decisions/`. Set
+   the request to *Agreed* and merge to `product`.
+6. **Build it on `main`** from the PRD section, not from the demo code. The
+   demo's data model and `API.md` are a prototype, not the backend contract.
+   When it ships, change the section to *Built* in both the PRD and
+   `js/prd.js`, and set the request to *Built*.
+
 ## Point it at another API
 
 - `?api=http://localhost:4000` in the URL, or

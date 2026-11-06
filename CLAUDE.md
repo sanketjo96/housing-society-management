@@ -101,6 +101,11 @@ isolation mechanism and why it's a plain function, not middleware).
   agreed, a feature goes into the PRD and is then built in `client/` +
   `server/` on `main`. `website/build.sh` + `.github/workflows/publish-site.yml`
   publish `website/` and `demo/` to `gh-pages` — never edit `gh-pages` by hand.
+  Client requests are logged in `docs/product/requests.md`; the steps from
+  request to built feature are in `demo/README.md`. Build from the PRD, not
+  from demo code: the demo's data model and `demo/API.md` are a prototype,
+  not the backend contract. When a PRD §7 status changes, update
+  `demo/js/prd.js` to match.
 - **`docs/features/_status.md`** — detailed build/scope/pending status per
   feature.
 - **`docs/architecture/`** — cross-cutting technical design (backend

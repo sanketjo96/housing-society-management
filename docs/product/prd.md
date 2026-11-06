@@ -112,7 +112,29 @@ after it (Phase 4).
 ## 7. Functional requirements
 
 Status key: **Built** = live in this repo · **Designed** = feature doc
-exists, not built · **New** = not yet designed in this repo (demo only).
+exists, not built · **New** = not yet designed in this repo (demo only) ·
+**Requested** = a client asked for it and it is being prototyped in the
+demo (tracked in [`requests.md`](./requests.md)).
+
+The demo shows each section's status on screen; `demo/js/prd.js` holds the
+same mapping, so change both when a status changes.
+
+**See it in the demo** (sample data, signs in as that person):
+
+| § | Screen |
+|---|---|
+| 7.2 | [Flats and residents](https://sanketjo96.github.io/housing-society-management/demo/#admin/flats) · [resident profile](https://sanketjo96.github.io/housing-society-management/demo/#owner/profile) |
+| 7.3 | [Billing](https://sanketjo96.github.io/housing-society-management/demo/#admin/billing) |
+| 7.4 | [Passbook](https://sanketjo96.github.io/housing-society-management/demo/#owner/passbook) |
+| 7.5 | [Payment review](https://sanketjo96.github.io/housing-society-management/demo/#admin/review) · [resident pay](https://sanketjo96.github.io/housing-society-management/demo/#owner/home) |
+| 7.6 | [Receipts](https://sanketjo96.github.io/housing-society-management/demo/#admin/receipts) · [receipt settings](https://sanketjo96.github.io/housing-society-management/demo/#admin/settings) |
+| 7.7 | [Admin dashboard](https://sanketjo96.github.io/housing-society-management/demo/#admin/dashboard) |
+| 7.9 | [Expenses](https://sanketjo96.github.io/housing-society-management/demo/#admin/expenses) |
+| 7.11 | [Notifications](https://sanketjo96.github.io/housing-society-management/demo/#admin/notifications) |
+| 7.12 | [Complaints (admin)](https://sanketjo96.github.io/housing-society-management/demo/#admin/complaints) · [resident](https://sanketjo96.github.io/housing-society-management/demo/#tenant/requests) |
+| 7.13 | [Notices](https://sanketjo96.github.io/housing-society-management/demo/#admin/notices) |
+| 7.14 | [Amenity booking](https://sanketjo96.github.io/housing-society-management/demo/#admin/amenities) · [resident](https://sanketjo96.github.io/housing-society-management/demo/#owner/requests/bookings) |
+| 7.15 | [Visitor log](https://sanketjo96.github.io/housing-society-management/demo/#admin/visitors) · [gate passes](https://sanketjo96.github.io/housing-society-management/demo/#owner/gate) · [guard app](https://sanketjo96.github.io/housing-society-management/demo/#guard/gate) |
 
 ### 7.1 Accounts and access — Built
 
