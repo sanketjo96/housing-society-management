@@ -200,9 +200,13 @@ host; the deployed Docker stack reads the root `.env` instead — see
 - Public self-signup (accounts are always admin- or owner-provisioned).
 - Payment gateway integration (Razorpay etc.) — UPI deep-link + manual proof
   verification only.
-- Notices/announcements, gate/visitor management.
+- Notices/announcements, gate/visitor management — until a client agrees to
+  them: the demo prototypes both (PRD §7.13, §7.15), and they come into scope
+  only when marked *Agreed* in `docs/product/requests.md`. See
+  `docs/decisions/0009-demo-features-enter-scope-through-requests.md`.
 - Per-square-foot billing (flat-rate only).
-- Facility booking, formal expense-report generation, polls, document vault.
+- Facility booking (same gate as above, PRD §7.14), formal expense-report
+  generation, polls, document vault.
 - Multi-society admin UX (society switching, cross-society views) — a
   society can be onboarded at the platform level, but there's no UI to
   manage more than one from a single admin session.

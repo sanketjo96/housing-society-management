@@ -153,7 +153,10 @@ code. Its output is the PRD; the real app on `main` is built from the PRD.
 5. **Write it down.** When the client agrees, add or update the PRD §7
    section: what it does, who uses it, acceptance criteria, and the demo link.
    If it reverses an earlier decision, add a record in `docs/decisions/`. Set
-   the request to *Agreed* and merge to `product`.
+   the request to *Agreed* and merge to `product`. If the feature is on
+   `CLAUDE.md`'s out-of-scope list (notices, gate passes, facility booking),
+   *Agreed* is what brings it into scope: remove its bullet there on `main`
+   (see `docs/decisions/0009-…`).
 6. **Build it on `main`** from the PRD section, not from the demo code. The
    demo's data model and `API.md` are a prototype, not the backend contract.
    When it ships, change the section to *Built* in both the PRD and
