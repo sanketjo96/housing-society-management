@@ -22,9 +22,16 @@ links only work in the built `_site/`.
 ## Publishing
 
 Don't edit the `gh-pages` branch by hand. Every push to the `product` branch
-that touches `website/` or `demo/` runs `.github/workflows/publish-site.yml`,
-which runs `build.sh` and replaces `gh-pages` with the result. It can also be
-run by hand from the repo's Actions tab ("Publish site" → Run workflow).
+that touches `website/`, `demo/` or `docs/product/` runs
+`.github/workflows/publish-site.yml`. It first runs the demo checks
+(`npm test` in `demo/`); only if they pass does it run `build.sh` and replace
+`gh-pages` with the result. A failing check leaves the live site as it was:
+see the run in the repo's Actions tab.
+
+Pushes to `demo/*` branches run the same checks without publishing, so a
+client change can be checked on GitHub before it is merged into `product`.
+The workflow can also be run by hand from the Actions tab ("Publish site" →
+Run workflow).
 
 The demo is published with `demo/db.seed.json` as its data, so changes made
 while clicking through a local json-server session never reach the public

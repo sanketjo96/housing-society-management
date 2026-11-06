@@ -1,13 +1,17 @@
 name: Publish site
 
-# Rebuilds the gh-pages branch (marketing site + clickable demo) whenever the
-# site or the demo changes on the product branch.
+# Tests the demo, then rebuilds the gh-pages branch (marketing site +
+# clickable demo) when the site or the demo changes on the product branch.
+#
+# On demo/* branches the tests run but nothing is published, so a client
+# change can be checked on GitHub before it reaches the public site.
 on:
   push:
-    branches: [product]
+    branches: [product, 'demo/**']
     paths:
       - 'website/**'
       - 'demo/**'
+      - 'docs/product/**'
       - '.github/workflows/publish-site.yml'
   workflow_dispatch:
 
@@ -15,11 +19,32 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-site
+  group: publish-site-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The demo checks borrow Playwright from e2e/ and json-server from demo/.
+      - name: Install test tools
+        run: |
+          (cd e2e && npm ci && npx playwright install --with-deps chromium)
+          (cd demo && npm ci)
+
+      - name: Demo checks
+        run: cd demo && npm test
+
   publish:
+    needs: test
+    if: github.ref == 'refs/heads/product'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
