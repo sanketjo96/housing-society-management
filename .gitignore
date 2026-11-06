@@ -1,3 +1,4 @@
 .env
 *.log
 server/scripts/seed-real-roster.ts
+_site/

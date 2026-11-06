@@ -95,6 +95,12 @@ isolation mechanism and why it's a plain function, not middleware).
 - **`docs/product/prd.md`** — product requirements for the whole platform
   (built + planned phases), and the open decisions between the demo and the
   built app.
+- **`product` branch** — the clickable demo (`demo/`), product docs
+  (`docs/product/`) and marketing site (`website/`) live together here. The
+  demo is a front-end-only prototype for trying features with clients; once
+  agreed, a feature goes into the PRD and is then built in `client/` +
+  `server/` on `main`. `website/build.sh` + `.github/workflows/publish-site.yml`
+  publish `website/` and `demo/` to `gh-pages` — never edit `gh-pages` by hand.
 - **`docs/features/_status.md`** — detailed build/scope/pending status per
   feature.
 - **`docs/architecture/`** — cross-cutting technical design (backend

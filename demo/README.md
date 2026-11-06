@@ -32,6 +32,10 @@ that browser tab. The badge reads **Sample data · this browser only**.
 Opening `index.html` straight from disk (`file://`) doesn't work, because
 browsers block loading `db.json` that way.
 
+The public copy at `/demo/` on the marketing site is built from this folder
+automatically (see `website/README.md`). It uses `db.seed.json` as its data,
+so edit that file to change what visitors see.
+
 ## Point it at another API
 
 - `?api=http://localhost:4000` in the URL, or
