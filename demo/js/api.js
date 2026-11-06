@@ -8,8 +8,11 @@
  *             PUT    /<collection>/<id>   replace a record
  *             DELETE /<collection>/<id>   delete a record
  *             PUT    /<singleton>         replace settings / meta / society
- *   memory  No API reachable (GitHub Pages, static preview). db.json is loaded
- *           as seed data and changes live only in the browser tab.
+ *   memory  No API reachable (GitHub Pages, static preview), or a client preset.
+ *           db.json is loaded as seed data and changes are saved in this
+ *           browser's localStorage, so they survive a reload. The saved copy is
+ *           keyed by client preset and by a fingerprint of the seed, so editing
+ *           the seed starts everyone on the new data. Reset clears it.
  *
  * The app never calls fetch itself. Screens change a copy of the data inside
  * update('actionName', fn); this layer diffs before/after and sends the REST
@@ -35,7 +38,10 @@
   var base = null;
   var mode = 'memory';
   var queue = Promise.resolve();
-  var opts = {};   // from init(): { seedUrl, resetUrl, memoryOnly } (client presets use these)
+  var opts = {};   // from init(): { seedUrl, resetUrl, memoryOnly, storeId } (client presets use these)
+  var storeKey = null;   // localStorage key for memory mode, null when saving isn't possible
+  var saved = false;     // true while memory-mode changes are being saved in this browser
+  var STORE_PREFIX = 'saral-demo:data:';
 
   function join(path) { return base.replace(/\/+$/, '') + '/' + path; }
 
@@ -85,13 +91,56 @@
     });
   }
 
+  // Small, stable string hash (FNV-1a) used to fingerprint the seed text.
+  function fingerprint(text) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(36);
+  }
+
+  // Memory mode: use the copy saved in this browser if it was made from the
+  // same seed, else the seed itself. Older copies for this preset are removed.
+  function loadMemory() {
+    var url = opts.seedUrl || cfg.seedUrl || 'db.json';
+    return fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('GET ' + url + ' → ' + r.status);
+      return r.text();
+    }).then(function (text) {
+      var seed = JSON.parse(text);
+      var scope = STORE_PREFIX + (opts.storeId || 'default') + ':';
+      storeKey = scope + fingerprint(text);
+      saved = false;
+      try {
+        for (var i = localStorage.length - 1; i >= 0; i--) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(scope) === 0 && k !== storeKey) localStorage.removeItem(k);
+        }
+        var kept = localStorage.getItem(storeKey);
+        saved = true;
+        if (kept) return normalise(JSON.parse(kept));
+      } catch (e) { saved = false; storeKey = null; }
+      return normalise(seed);
+    });
+  }
+
+  // Save memory-mode data. If the browser refuses (storage full or blocked),
+  // stop trying and tell the app once through SaralApi.onSaveFailed.
+  function save(db) {
+    if (!storeKey) return;
+    try { localStorage.setItem(storeKey, JSON.stringify(db)); }
+    catch (e) {
+      storeKey = null; saved = false;
+      if (typeof window.SaralApi.onSaveFailed === 'function') window.SaralApi.onSaveFailed(e);
+    }
+  }
+
   function init(options) {
     opts = options || {};
     var list = candidates();
     var tryNext = function (i) {
       if (i >= list.length) {
         base = null; mode = 'memory';
-        return getJSON(opts.seedUrl || cfg.seedUrl || 'db.json').then(function (db) { return { db: normalise(db), mode: mode, base: null }; });
+        return loadMemory().then(function (db) { return { db: db, mode: mode, base: null, saved: saved }; });
       }
       return loadFrom(list[i]).then(function (db) { mode = 'server'; return { db: db, mode: mode, base: base }; })
         .catch(function () { return tryNext(i + 1); });
@@ -134,7 +183,7 @@
   // Send the REST calls for one action. Calls run one after another, and
   // actions run in the order they happened.
   function sync(action, before, after) {
-    if (mode !== 'server') return Promise.resolve([]);
+    if (mode !== 'server') { save(after); return Promise.resolve([]); }
     var ops = diff(before, after);
     if (!ops.length) return Promise.resolve([]);
     var run = queue.then(function () {
@@ -155,12 +204,17 @@
   function reset(current) {
     return getJSON(opts.resetUrl || opts.seedUrl || cfg.seedResetUrl || 'db.seed.json').then(function (seed) {
       var db = normalise(seed);
+      if (mode !== 'server') {
+        try { if (storeKey) localStorage.removeItem(storeKey); } catch (e) { /* storage blocked */ }
+        return db;
+      }
       return sync('resetDemo', current, db).then(function () { return db; });
     });
   }
 
   window.SaralApi = {
     init: init, sync: sync, reset: reset, reload: reload, diff: diff, stamp: stamp,
-    get mode() { return mode; }, get base() { return base; },
+    get mode() { return mode; }, get base() { return base; }, get saved() { return saved; },
+    onSaveFailed: null,
   };
 })();

@@ -27,11 +27,11 @@ function applyPreset(db, preset) {
 }
 
 /* =============================== App =============================== */
-function DataBadge({ mode, base, labels, onLabels, preset }) {
+function DataBadge({ mode, base, saved, labels, onLabels, preset }) {
   let host = '';
   try { host = base ? new URL(base, location.href).host : ''; } catch (e) {}
-  return html`<div className=${'data-badge ' + mode} title=${mode === 'server' ? 'Reading and writing through the REST API at ' + base : 'No API found. Using db.json in this browser; changes are lost on reload.'}>
-    <i></i>${preset ? html`<b>${preset.name || preset.id}</b> · ` : null}${mode === 'server' ? 'Live API · ' + host : 'Sample data · this browser only'}
+  return html`<div className=${'data-badge ' + mode} title=${mode === 'server' ? 'Reading and writing through the REST API at ' + base : saved ? 'Sample data. Your changes are saved in this browser until you use Reset demo.' : 'Sample data. Changes are lost when you reload.'}>
+    <i></i>${preset ? html`<b>${preset.name || preset.id}</b> · ` : null}${mode === 'server' ? 'Live API · ' + host : saved ? 'Sample data · saved in this browser' : 'Sample data · this tab only'}
     <button className=${'lbl-toggle' + (labels ? ' on' : '')} onClick=${onLabels} aria-pressed=${labels} title="Show which PRD section each screen demonstrates, and its status">PRD labels ${labels ? 'on' : 'off'}</button></div>`;
 }
 function Boot({ state, msg }) {
@@ -60,8 +60,8 @@ function App() {
       presetRef.current = preset;
       setFeatures(preset && preset.features); setPrdOverrides(preset && preset.prd);
       // A preset always runs on sample data in the browser, never on the shared json-server data.
-      return SaralApi.init(preset ? { memoryOnly: true, seedUrl: preset.data } : undefined);
-    }).then((r) => { apply(applyPreset(r.db, presetRef.current)); openRoute(); setBoot({ state: 'ready', mode: r.mode, base: r.base }); })
+      return SaralApi.init(preset ? { memoryOnly: true, seedUrl: preset.data, storeId: preset.id } : undefined);
+    }).then((r) => { apply(applyPreset(r.db, presetRef.current)); openRoute(); setBoot({ state: 'ready', mode: r.mode, base: r.base, saved: !!r.saved }); })
       .catch((e) => setBoot({ state: 'error', msg: e.message }));
     window.addEventListener('hashchange', openRoute);
     return () => window.removeEventListener('hashchange', openRoute);
@@ -78,6 +78,8 @@ function App() {
       SaralApi.reload().then(apply).catch(() => {});
     });
   };
+  // If the browser stops accepting saves (storage full), say so once and keep going in memory.
+  SaralApi.onSaveFailed = () => { setBoot((b) => ({ ...b, saved: false })); toast('This browser won’t store more demo changes. They’ll stay until you reload.'); };
   const reset = () => { SaralApi.reset(dbRef.current).then((d) => { apply(applyPreset(d, presetRef.current)); toast('Demo data restored'); }).catch((e) => { console.error(e); toast('Couldn’t restore the demo data'); }); };
   // A link (#owner/passbook) signs in as that persona and opens that screen.
   function openRoute() {
@@ -96,6 +98,6 @@ function App() {
   else if (persona.key === 'admin') view = html`<${AdminApp} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} />`;
   else if (persona.key === 'owner' || persona.key === 'tenant') view = html`<${ResidentApp} key=${persona.key} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${onSwitch} />`;
   else view = html`<${GuardApp} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${onSwitch} />`;
-  return html`<${Fragment}>${view}<${DataBadge} mode=${boot.mode} base=${boot.base} labels=${labels} onLabels=${toggleLabels} preset=${presetRef.current} /><div className="toast-zone" aria-live="polite">${toasts.map((t) => html`<div key=${t.id} className="toast"><${Icon} n="check" s=${15} />${t.msg}</div>`)}</div><//>`;
+  return html`<${Fragment}>${view}<${DataBadge} mode=${boot.mode} base=${boot.base} saved=${boot.saved} labels=${labels} onLabels=${toggleLabels} preset=${presetRef.current} /><div className="toast-zone" aria-live="polite">${toasts.map((t) => html`<div key=${t.id} className="toast"><${Icon} n="check" s=${15} />${t.msg}</div>`)}</div><//>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);

@@ -23,11 +23,20 @@ To start over: use **Reset demo** in the app, or stop the server, run
 use it while clicking through the app: json-server reloads after its own
 writes too, and requests made during a reload fail.
 
-## Run it without a server (data stays in the browser)
+## Run it without a server (data is saved in the browser)
 
 Any static host works, for example GitHub Pages or `npx serve .`. With no API
-answering, the app loads `db.json` as sample data and keeps changes only in
-that browser tab. The badge reads **Sample data · this browser only**.
+answering, the app loads `db.json` as sample data and saves changes in that
+browser (localStorage), so a client can click through, close the tab, and
+come back to the same state. The badge reads **Sample data · saved in this
+browser**. **Reset demo** clears it.
+
+Each client preset keeps its own saved copy. The copy is tied to a
+fingerprint of the sample data, so when you change `db.seed.json` and
+republish, visitors start on the new data instead of an old saved copy. If
+the browser refuses to store more (private mode, or storage full after many
+uploaded screenshots), the demo keeps working for that tab and the badge
+switches to **this tab only**.
 
 Opening `index.html` straight from disk (`file://`) doesn't work, because
 browsers block loading `db.json` that way.
