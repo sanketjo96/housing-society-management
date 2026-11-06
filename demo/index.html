@@ -162,6 +162,10 @@ button.unit:hover { transform: scale(1.12); }
   .mobile-nav button { flex: none; border: 1px solid var(--panel-line); background: transparent; color: var(--panel-fg); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
   .mobile-nav button.on { background: var(--panel-fg); color: var(--panel); }
   .me .who { display: none; }
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .crumb { min-width: 0; }
+  .me { gap: 6px; }
+  .topbar .btn .lbl { display: none; }
 }
 
 /* ---------- Surfaces ---------- */
@@ -169,7 +173,7 @@ button.unit:hover { transform: scale(1.12); }
 .card-pad { padding: 20px 22px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 22px; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; }
 .card-head h2 { font-size: 18px; }
-.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.metrics { display: grid; grid-template-columns: var(--cols, repeat(4, minmax(0, 1fr))); gap: 14px; }
 .metric { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
 .metric .val { font-family: var(--display); font-size: 30px; line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums lining-nums; }
 .metric .sub { font-size: 12px; color: var(--muted); }
@@ -177,8 +181,9 @@ button.unit:hover { transform: scale(1.12); }
 .metric.hero .eyebrow, .metric.hero .sub { color: var(--panel-muted); }
 .metric.hero .val { color: #F1D9AE; }
 @media (max-width: 1080px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
-@media (max-width: 1080px) { .split { grid-template-columns: 1fr; } }
+/* Pages set their own columns through --cols; narrow screens stack them regardless. */
+.split { display: grid; grid-template-columns: var(--cols, minmax(0, 1fr) 340px); gap: 18px; align-items: start; }
+@media (max-width: 1080px) { .split { grid-template-columns: minmax(0, 1fr); } }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 500; }
 .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }

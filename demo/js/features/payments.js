@@ -54,7 +54,7 @@ function Review({ db, update, toast, openReceipt }) {
     <${PageHead} eyebrow="Collections" title="Payment review" sub="Residents upload a payment screenshot or a credit claim. Nothing counts toward a flat’s balance until you approve it.">
       <button className="btn" onClick=${() => setManual(true)}><${Icon} n="cash" s=${16} />Record cash or cheque</button>
     <//>
-    ${pending.length ? html`<div className="split" style=${{ gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)' }}>
+    ${pending.length ? html`<div className="split" style=${{ '--cols': 'minmax(0, 300px) minmax(0, 1fr)' }}>
       <div className="card"><div className="card-head"><h2>Waiting</h2><span className="pill pending">${pending.length}</span></div>
         <div className="queue">${pending.map((p) => html`<button key=${p.id} className="qi" style=${cur && cur.id === p.id ? { background: 'var(--surface-2)', boxShadow: 'inset 3px 0 0 var(--brass-bright)' } : null} onClick=${() => setSel(p.id)}>
           <span className="tx"><b><span className="flatno">${p.flat}</span> · ${p.payer}</b><span><span className=${'tag ' + p.type} style=${{ marginRight: 6 }}>${p.type}</span>${shortDate(p.date)}</span></span><b className="num">${inr(p.amount)}</b></button>`)}</div></div>

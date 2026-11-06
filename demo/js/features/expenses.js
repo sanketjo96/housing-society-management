@@ -16,12 +16,12 @@ function Expenses({ db, update, toast }) {
       <button className="btn" onClick=${() => toast('Exported income-expenditure-Aug-Nov-2026.xlsx (download is simulated in the demo)')}><${Icon} n="download" s=${16} />I&E statement</button>
       <button className="btn primary" onClick=${() => setAdd(true)}><${Icon} n="plus" s=${16} />Add expense</button>
     <//>
-    <div className="metrics" style=${{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+    <div className="metrics" style=${{ '--cols': 'repeat(3, minmax(0, 1fr))' }}>
       <div className="metric"><span className="eyebrow">Income · Aug–Nov</span><span className="val">${inr(income)}</span><span className="sub">Approved maintenance deposits</span></div>
       <div className="metric"><span className="eyebrow">Expenditure · Aug–Nov</span><span className="val">${inr(spent)}</span><span className="sub">${db.expenses.length} entries</span></div>
       <div className="metric hero"><span className="eyebrow">Surplus</span><span className="val">${inr(income - spent)}</span><span className="sub">Carried to the sinking and repair funds</span></div>
     </div>
-    <div className="split" style=${{ gridTemplateColumns: 'minmax(0, 1fr) 360px' }}>
+    <div className="split" style=${{ '--cols': 'minmax(0, 1fr) 360px' }}>
       <div className="card"><div className="card-head"><h2>Ledger</h2></div><div className="table-wrap"><table className="t"><thead><tr><th>Date</th><th>Category</th><th>Paid to</th><th>Mode</th><th className="r">Amount</th></tr></thead>
         <tbody>${db.expenses.map((e) => html`<tr key=${e.id}><td className="muted num" style=${{ fontSize: 12.5 }}>${fmtDate(e.date)}</td><td>${e.category}</td><td>${e.vendor}</td><td><span className="tag">${e.mode}</span></td><td className="r num">${inr(e.amount)}</td></tr>`)}</tbody></table></div></div>
       <div className="card"><div className="card-head"><h2>Where it went</h2></div>

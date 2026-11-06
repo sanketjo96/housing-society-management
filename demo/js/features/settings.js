@@ -13,7 +13,7 @@ function Settings({ db, update, toast }) {
       ${dirty && html`<button className="btn" onClick=${() => setD({ ...db.settings })}>Discard</button>`}
       <button className="btn primary" disabled=${!dirty} onClick=${() => { update('saveSettings', (x) => { x.settings = { ...d }; }); toast('Saved. New receipts use this template.'); }}>${dirty ? 'Save changes' : 'Saved'}</button>
     <//>
-    <div className="split" style=${{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)' }}>
+    <div className="split" style=${{ '--cols': 'minmax(0, 1fr) minmax(0, 1.1fr)' }}>
       <div style=${{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="card card-pad" style=${{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <h2 style=${{ fontSize: 18 }}>Society</h2>

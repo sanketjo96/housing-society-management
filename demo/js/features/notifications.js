@@ -14,7 +14,7 @@ function Notifications({ db, update, toast }) {
   const used = db.messages.reduce((t, m) => t + (m.status === 'failed' ? 0 : m.count || 1), 0);
   return html`<${Fragment}>
     <${PageHead} eyebrow="Communication" title="Notifications" sub="WhatsApp reminders run on prepaid credits. One message to one resident uses one credit; failed messages are refunded." />
-    <div className="split" style=${{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' }}>
+    <div className="split" style=${{ '--cols': 'minmax(0, 1fr) minmax(0, 1fr)' }}>
       <div style=${{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="metric hero" style=${{ padding: 22 }}><span className="eyebrow">WhatsApp credits</span><span className="val" style=${{ fontSize: 40 }}>${db.meta.credits}</span><span className="sub">About ${Math.floor(db.meta.credits / 30)} months of reminders at your current usage · ${used} used since August</span>
           <div style=${{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>${packs.map((p) => html`<button key=${p.c} className="btn sm" style=${{ background: 'var(--panel-2)', borderColor: 'var(--panel-line)', color: 'var(--panel-fg)' }} onClick=${() => setBuy(p)}>${p.c.toLocaleString('en-IN')} credits · ₹${p.p.toLocaleString('en-IN')}</button>`)}</div></div>

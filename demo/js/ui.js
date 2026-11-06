@@ -87,7 +87,7 @@ function ResetButton({ onReset }) {
   const [ask, setAsk] = useState(false);
   useEffect(() => { if (!ask) return; const t = setTimeout(() => setAsk(false), 4000); return () => clearTimeout(t); }, [ask]);
   return ask ? html`<span className="reset-confirm"><button className="btn sm danger" onClick=${() => { setAsk(false); onReset(); }}>Reset all demo data</button><button className="btn sm ghost" onClick=${() => setAsk(false)}>Keep</button></span>`
-    : html`<button className="btn sm ghost" onClick=${() => setAsk(true)} title="Restore the original demo data"><${Icon} n="reset" s=${15} />Reset demo</button>`;
+    : html`<button className="btn sm ghost" onClick=${() => setAsk(true)} title="Restore the original demo data"><${Icon} n="reset" s=${15} /><span className="lbl">Reset demo</span></button>`;
 }
 function Sheet({ title, sub, onClose, children, foot }) {
   return html`<div className="sheet-scrim" onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
