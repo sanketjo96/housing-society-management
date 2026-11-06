@@ -92,6 +92,9 @@ isolation mechanism and why it's a plain function, not middleware).
 ## Documentation map
 
 - **`docs/features/_index.md`** — every feature, one line each. Start here.
+- **`docs/product/prd.md`** — product requirements for the whole platform
+  (built + planned phases), and the open decisions between the demo and the
+  built app.
 - **`docs/features/_status.md`** — detailed build/scope/pending status per
   feature.
 - **`docs/architecture/`** — cross-cutting technical design (backend
