@@ -126,7 +126,8 @@ code. Its output is the PRD; the real app on `main` is built from the PRD.
    - Map the new screens in `js/prd.js`. Use the next free §7 number and
      status `new`, or mark an existing section `requested` in the preset's
      `prd` block.
-4. **Show it.** Run it locally (`npm start`, then `?client=<client>`), or merge
+4. **Check it.** Run `npm test` in `demo/` (setup in `tests/README.md`).
+   **Show it.** Run it locally (`npm start`, then `?client=<client>`), or merge
    to `product` once it can't affect the shared demo and send the client the
    link (`…/demo/?client=<client>#admin/<screen>`). Set the request to
    *Prototyped*.
@@ -158,6 +159,7 @@ code. Its output is the PRD; the real app on `main` is built from the PRD.
 | `js/apps/*.js` | The three shells: admin web, resident phone app, guard phone app, plus the login page |
 | `js/api.js` | Data layer: loads data, turns each change into REST calls |
 | `clients/*.json` | Client presets (see above) |
+| `tests/` | Automated checks: `npm test` (see `tests/README.md`) |
 | `js/config.js` | Which API to use |
 | `db.json` | Mock data that json-server reads and writes |
 | `db.seed.json` | Original mock data, used by Reset demo |

@@ -34,7 +34,7 @@ branch → `gh-pages`, `/ (root)`). Pages on a private repo needs a paid
 GitHub plan; otherwise make the repo public or host `_site/` elsewhere
 (Cloudflare Pages, Netlify).
 
-## Before going live
+## Contact address
 
-Replace the `[contact email]` placeholder in the closing section
-(`data-contact`) with the real contact address.
+The closing section links to sanketjoshi96@gmail.com (the `data-contact`
+element in `index.html`). Change it there if the address changes.

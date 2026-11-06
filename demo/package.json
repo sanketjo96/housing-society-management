@@ -6,7 +6,8 @@
   "scripts": {
     "start": "json-server db.json --port 3001 --static .",
     "start:watch": "json-server --watch db.json --port 3001 --static .",
-    "reset": "node -e \"require('fs').copyFileSync('db.seed.json','db.json'); console.log('db.json restored from db.seed.json. Restart npm start to load it.')\""
+    "reset": "node -e \"require('fs').copyFileSync('db.seed.json','db.json'); console.log('db.json restored from db.seed.json. Restart npm start to load it.')\"",
+    "test": "bash tests/run.sh"
   },
   "devDependencies": {
     "json-server": "0.17.4"
