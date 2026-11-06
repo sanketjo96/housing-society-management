@@ -7,6 +7,7 @@ repo's `demo/` folder, so there is only one copy of the demo.
 - `index.html` — landing page
 - `favicon.svg` — brand mark
 - `build.sh` — assembles the published site into `_site/`
+- `preview.jpg` (and `demo/preview.jpg`) — link-preview images, made by `make-previews.mjs`
 
 ## Preview locally
 
@@ -38,3 +39,20 @@ GitHub plan; otherwise make the repo public or host `_site/` elsewhere
 
 The closing section links to sanketjoshi96@gmail.com (the `data-contact`
 element in `index.html`). Change it there if the address changes.
+
+## Link previews
+
+When someone shares a link on WhatsApp, LinkedIn or Slack, the card shows
+`preview.jpg` (landing page) or `demo/preview.jpg` (demo), set by the `og:`
+tags in each page's `<head>`. After a visible design change, remake them
+from the real pages and commit the images:
+
+```sh
+node website/make-previews.mjs   # needs Playwright from e2e/ (cd e2e && npm ci)
+```
+
+The tags use absolute URLs (`https://sanketjo96.github.io/…`). If the site
+moves to its own domain, change them in both `index.html` files.
+
+WhatsApp caches a link's preview for a long time. To see a new one, share
+the link with something extra on the end, e.g. `?v=2`.

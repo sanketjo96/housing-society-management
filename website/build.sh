@@ -15,7 +15,7 @@ out="${1:-$root/_site}"
 rm -rf "$out"
 mkdir -p "$out/demo"
 
-cp "$root/website/index.html" "$root/website/favicon.svg" "$out/"
+cp "$root/website/index.html" "$root/website/favicon.svg" "$root/website/preview.jpg" "$out/"
 
 # Everything in demo/ is published except tooling and docs, so new modules,
 # client presets and data files are picked up without editing this script.
