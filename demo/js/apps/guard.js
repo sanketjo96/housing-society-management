@@ -1,10 +1,15 @@
 import { Fragment, Icon, Logo, TODAY, fmtDate, html, nowTime, uid, useEffect, useRef, useState } from '../core.js';
-import { SidePanel, StatusBar } from '../ui.js';
+import { PrdTag, SidePanel, StatusBar } from '../ui.js';
+import { setRoute } from '../route.js';
 import { PASS_TYPES, ScanSheet, VPhoto, VSTATUS, WalkInSheet } from '../features/gate.js';
 
 /* =============================== Guard app (Stage 3) =============================== */
-function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch }) {
-  const [tab, setTab] = useState('gate');
+const TABS = ['gate', 'verify', 'log', 'flats'];
+function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch, screen, seq, labels }) {
+  const [tab, setTab] = useState(() => (TABS.includes(screen) ? screen : 'gate'));
+  // The URL follows the tab (#guard/verify), and a changed link moves the tab.
+  useEffect(() => { setRoute(persona.key, tab); }, [tab]);
+  useEffect(() => { if (TABS.includes(screen) && screen !== tab) setTab(screen); }, [screen, seq]);
   const [sheet, setSheet] = useState(null);
   const [code, setCode] = useState('');
   const [result, setResult] = useState(null);
@@ -89,7 +94,7 @@ function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch }) {
         <div style=${{ display: 'flex', alignItems: 'center', gap: 10 }}><${Logo} s=${30} /><div style=${{ flex: 1 }}><b style=${{ fontFamily: 'var(--display)', fontWeight: 500, fontSize: 18 }}>Main gate</b><div style=${{ fontSize: 11.5, color: 'var(--panel-muted)' }}>Aldgate Residency · Day shift 8 am – 8 pm</div></div>
           <button className="icon-btn" style=${{ background: 'var(--panel-2)', borderColor: 'var(--panel-line)', color: 'var(--panel-fg)' }} onClick=${onLogout} aria-label="End shift and log out"><${Icon} n="logout" s=${16} /></button></div>
       </div>
-      <div className="app-body" ref=${bodyRef}>${body}</div>
+      <div className="app-body" ref=${bodyRef}>${labels && html`<div className="prd-strip"><${PrdTag} id=${'guard/' + tab} /></div>`}${body}</div>
       <nav className="tabbar" style=${{ gridTemplateColumns: 'repeat(4, 1fr)' }} aria-label="Guard">${[['gate', 'Gate', 'grid'], ['verify', 'Verify', 'shield'], ['log', 'Visitor log', 'file'], ['flats', 'Flats', 'building']].map(([k, l, ic]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)} aria-current=${tab === k ? 'page' : undefined}><${Icon} n=${ic} s=${20} />${l}${k === 'gate' && waiting.length ? ' · ' + waiting.length : ''}</button>`)}</nav>
       ${sheet && sheet.kind === 'walkin' && html`<${WalkInSheet} db=${db} update=${update} toast=${toast} onClose=${() => setSheet(null)} />`}
       ${sheet && sheet.kind === 'scan' && html`<${ScanSheet} db=${db} onClose=${() => setSheet(null)} onScan=${(c) => { setSheet(null); setTab('verify'); setCode(c); check(c); }} />`}

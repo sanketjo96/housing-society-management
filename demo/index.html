@@ -460,6 +460,19 @@ button.li:hover { background: var(--surface-2); }
 .data-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--brass-bright); }
 .data-badge.server i { background: var(--teal); box-shadow: 0 0 0 3px var(--teal-soft); }
 @media (max-width: 900px) { .data-badge { display: none; } }
+.data-badge .lbl-toggle { margin-left: 4px; font: inherit; font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.data-badge .lbl-toggle.on { background: var(--teal-soft); border-color: transparent; color: var(--teal-strong); }
+.prd-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1.3; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; vertical-align: middle; letter-spacing: 0; text-transform: none; }
+.prd-tag b { font-family: var(--mono); font-weight: 600; }
+.prd-tag.t-built { background: var(--teal-soft); color: var(--teal-strong); }
+.prd-tag.t-partly { background: var(--blue-soft); color: var(--blue); }
+.prd-tag.t-designed { background: var(--surface-2); color: var(--ink-2); border-color: var(--line); }
+.prd-tag.t-new { background: var(--brass-soft); color: var(--brass); }
+.prd-tag.t-requested { background: var(--coral-soft); color: var(--coral); }
+.prd-tag.compact { font-size: 10px; padding: 1px 6px; margin-left: auto; }
+.side .nav .prd-tag.compact + .count { margin-left: 6px; }
+.tiles .prd-tag.compact { margin: 3px auto 0; font-size: 9.5px; }
+.prd-strip { display: flex; justify-content: flex-start; }
 </style>
 
 <div id="root"></div>

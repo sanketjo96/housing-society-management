@@ -1,16 +1,22 @@
 import { Avatar, Fragment, Icon, Logo, PERSONAS, TODAY, flatSummary, fmtDate, getIntent, html, inr, nowTime, shortDate, useEffect, useRef, useState } from '../core.js';
-import { Receipt, ResetButton, Sheet, Toggle } from '../ui.js';
+import { PrdTag, Receipt, ResetButton, Sheet, Toggle } from '../ui.js';
+import { setRoute } from '../route.js';
 import { BookSheet } from '../features/amenities.js';
 import { ComplaintSheet } from '../features/complaints.js';
 import { CreditSheet, PaySheet } from '../features/payments.js';
 import { MyDetails } from '../features/flats.js';
 import { PASS_TYPES, PassSheet, PassView, VPhoto } from '../features/gate.js';
 
-function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch }) {
-  const [tab, setTab] = useState('home');
+const TABS = ['home', 'passbook', 'requests', 'gate', 'profile'];
+function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch, screen, sub, seq, labels }) {
+  const [tab, setTab] = useState(() => (TABS.includes(screen) ? screen : 'home'));
   const [sheet, setSheet] = useState(null);
   const [filter, setFilter] = useState('all');
-  const [reqTab, setReqTab] = useState('complaints');
+  const [reqTab, setReqTab] = useState(() => (screen === 'requests' && sub === 'bookings' ? 'bookings' : 'complaints'));
+  // The URL follows the tab (#owner/passbook), and a changed link moves the tab.
+  const bookingsOpen = tab === 'requests' && reqTab === 'bookings';
+  useEffect(() => { setRoute(persona.key, tab, bookingsOpen ? 'bookings' : null); }, [tab, bookingsOpen]);
+  useEffect(() => { if (TABS.includes(screen) && screen !== tab) setTab(screen); if (screen === 'requests') setReqTab(sub === 'bookings' ? 'bookings' : 'complaints'); }, [screen, sub, seq]);
   const bodyRef = useRef(null);
   const fl = db.flats.find((f) => f.id === persona.flat);
   useEffect(() => { update('recordLogin', (d) => { const x = d.flats.find((f) => f.id === persona.flat); x.lastLogin = TODAY; }); }, []);
@@ -59,10 +65,10 @@ function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch }
     ${lastPay && lastPay.status === 'rejected' && html`<div className="banner bad"><${Icon} n="alert" s=${17} style=${{ flex: 'none', marginTop: 1 }} /><div><b>Payment of ${inr(lastPay.amount)} was rejected</b>${lastPay.rejectReason}</div></div>`}
     ${lastPay && lastPay.status === 'approved' && lastPay.reviewedOn === TODAY && html`<button className="banner ok" style=${{ border: 'none', textAlign: 'left', width: '100%' }} onClick=${() => setSheet({ kind: 'receipt', no: lastPay.receiptNo })}><${Icon} n="check" s=${17} style=${{ flex: 'none', marginTop: 1, color: 'var(--teal)' }} /><div><b>Payment approved</b>Receipt ${lastPay.receiptNo} is ready. Tap to view.</div></button>`}
     <div className="tiles">
-      <button onClick=${() => setSheet({ kind: 'credit' })}><span className="ti" style=${{ color: 'var(--brass)' }}><${Icon} n="wallet" s=${21} /></span>Add credit</button>
-      <button onClick=${() => setSheet({ kind: 'complaint' })}><span className="ti" style=${{ color: 'var(--coral)' }}><${Icon} n="wrench" s=${21} /></span>Complaint</button>
-      <button onClick=${() => setSheet({ kind: 'book' })}><span className="ti" style=${{ color: 'var(--teal)' }}><${Icon} n="calendar" s=${21} /></span>Book</button>
-      <button onClick=${() => setSheet({ kind: 'newpass' })}><span className="ti" style=${{ color: 'var(--blue)' }}><${Icon} n="shield" s=${21} /></span>Gate pass</button>
+      <button onClick=${() => setSheet({ kind: 'credit' })}><span className="ti" style=${{ color: 'var(--brass)' }}><${Icon} n="wallet" s=${21} /></span>Add credit${labels && html`<${PrdTag} id="resident/tile/credit" compact />`}</button>
+      <button onClick=${() => setSheet({ kind: 'complaint' })}><span className="ti" style=${{ color: 'var(--coral)' }}><${Icon} n="wrench" s=${21} /></span>Complaint${labels && html`<${PrdTag} id="resident/tile/complaint" compact />`}</button>
+      <button onClick=${() => setSheet({ kind: 'book' })}><span className="ti" style=${{ color: 'var(--teal)' }}><${Icon} n="calendar" s=${21} /></span>Book${labels && html`<${PrdTag} id="resident/tile/book" compact />`}</button>
+      <button onClick=${() => setSheet({ kind: 'newpass' })}><span className="ti" style=${{ color: 'var(--blue)' }}><${Icon} n="shield" s=${21} /></span>Gate pass${labels && html`<${PrdTag} id="resident/tile/newpass" compact />`}</button>
     </div>
     <div className="sec-title"><b>Notices</b><span className="muted" style=${{ fontSize: 12 }}>${notices.filter((n) => !reads.includes(n.id)).length} unread</span></div>
     <div className="list">${notices.slice(0, 4).map((n) => html`<button key=${n.id} className="li" onClick=${() => openNotice(n)}>${n.pinned ? html`<span style=${{ color: 'var(--brass)' }}><${Icon} n="pin" s=${16} /></span>` : html`<span style=${{ color: 'var(--muted)' }}><${Icon} n="megaphone" s=${16} /></span>`}<div className="tx"><b>${n.title}</b><span>${fmtDate(n.date)}</span></div>${!reads.includes(n.id) && html`<span className="dot" aria-label="Unread"></span>`}</button>`)}</div>
@@ -141,7 +147,7 @@ function ResidentApp({ db, update, persona, onLogout, onReset, toast, onSwitch }
           : html`<${Logo} s=${32} /><div style=${{ flex: 1, minWidth: 0 }}><h2 style=${{ fontSize: 19 }}>Hi ${first}</h2><div className="sub">Flat ${fl.id} · ${persona.key === 'tenant' ? 'Tenant' : 'Owner'}</div></div>`}
         <button className="icon-btn" aria-label="Profile" onClick=${() => setTab('profile')} style=${{ borderRadius: '50%', padding: 0, border: 'none' }}><${Avatar} name=${persona.name} size=${34} /></button>
       </div>
-      <div className="app-body" ref=${bodyRef}>${body}</div>
+      <div className="app-body" ref=${bodyRef}>${labels && html`<div className="prd-strip"><${PrdTag} id=${'resident/' + tab + (bookingsOpen ? '/bookings' : '')} /></div>`}${body}</div>
       <nav className="tabbar" aria-label="Resident">${[['home', 'Home', 'grid'], ['passbook', 'Passbook', 'receipt'], ['requests', 'Requests', 'wrench'], ['gate', 'Gate pass', 'shield'], ['profile', 'Profile', 'user']].map(([k, l, ic]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)} aria-current=${tab === k ? 'page' : undefined}><${Icon} n=${ic} s=${20} />${l}</button>`)}</nav>
       ${sheet && sheet.kind === 'pay' && html`<${PaySheet} ...${sp} />`}
       ${sheet && sheet.kind === 'credit' && html`<${CreditSheet} ...${sp} />`}

@@ -36,6 +36,35 @@ The public copy at `/demo/` on the marketing site is built from this folder
 automatically (see `website/README.md`). It uses `db.seed.json` as its data,
 so edit that file to change what visitors see.
 
+## Link to a screen
+
+Every screen has its own link, `#<persona>/<screen>`. Opening one signs in as
+that persona straight away (it's a demo), so you can send a client the exact
+screen to look at, or link to it from the PRD.
+
+| Persona | Screens |
+|---|---|
+| `admin` | `dashboard`, `review`, `billing`, `receipts`, `flats`, `expenses`, `complaints`, `amenities`, `visitors`, `notices`, `notifications`, `settings` |
+| `owner`, `tenant` | `home`, `passbook`, `requests` (`requests/bookings` for the bookings tab), `gate`, `profile` |
+| `guard` | `gate`, `verify`, `log`, `flats` |
+
+For example `…/demo/#owner/passbook` or `…/demo/#admin/notices`. The address
+bar follows you as you move around, so you can also just copy it. Older links
+like `#billing` still open the admin page.
+
+## PRD labels
+
+Each screen shows which PRD section it demonstrates and that section's status
+(Built, Partly built, Designed, New, or Requested). Nav items and home-screen
+tiles are tagged only when the feature isn't built yet, so a client can see
+what is live and what is a proposal.
+
+Labels are on by default. Turn them off with **PRD labels** in the
+bottom-left badge (the choice is remembered in that browser), or with
+`?labels=0` / `?labels=1` in the link. The mapping lives in `js/prd.js` and
+follows the section headings in `docs/product/prd.md` §7; update both
+together.
+
 ## Point it at another API
 
 - `?api=http://localhost:4000` in the URL, or
@@ -48,6 +77,8 @@ so edit that file to change what visitors see.
 | `index.html` | Page shell and styles |
 | `js/main.js` | Entry point: loads data, picks the app for the signed-in persona |
 | `js/core.js` | Shared helpers: React/htm, icons, formatting, balance maths (`flatSummary`, `rateFor`) |
+| `js/prd.js` | Which PRD section each screen demonstrates, and its status |
+| `js/route.js` | Screen links (`#owner/passbook`) |
 | `js/ui.js` | Shared components: Modal, Drawer, Sheet, Field, Receipt, Facade, persona side panel |
 | `js/features/*.js` | One file per feature (payments, billing, notices, gate, …): its admin screen and resident sheets |
 | `js/apps/*.js` | The three shells: admin web, resident phone app, guard phone app, plus the login page |
@@ -60,7 +91,7 @@ so edit that file to change what visitors see.
 React 18 and htm load from a CDN; the modules are native ES modules, so there
 is still no build step.
 
-Imports only point one way: `core` → `ui` → `features` → `apps` → `main`.
+Imports only point one way: `core`, `prd`, `route` → `ui` → `features` → `apps` → `main`.
 A feature never imports another feature; anything two features share moves
 down into `core.js` or `ui.js`. This keeps a client-specific change in one
 feature file from breaking the rest of the demo.

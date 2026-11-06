@@ -1,4 +1,5 @@
 import { Avatar, Fragment, Icon, PERSONAS, STATUS_LABEL, flatSummary, fmtDate, html, useEffect, useState, words } from './core.js';
+import { prdFor } from './prd.js';
 
 /* =============================== Shared UI =============================== */
 function Modal({ title, sub, onClose, children, foot, wide }) {
@@ -122,4 +123,14 @@ function SidePanel({ persona, eyebrow, blurb, title, steps, onSwitch, onLogout, 
 }
 const StatusBar = html`<div className="statusbar"><span>9:41</span><span className="cam"></span><span style=${{ display: 'flex', gap: 4, alignItems: 'center' }}>5G <svg width="22" height="11" viewBox="0 0 22 11" aria-hidden="true"><rect x=".5" y=".5" width="18" height="10" rx="2.5" fill="none" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="13" height="7" rx="1.3" fill="currentColor"/><rect x="19.5" y="3.5" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/></svg></span></div>`;
 
-export { Modal, Drawer, Field, Locked, Toggle, PageHead, Facade, Legend, Receipt, ResetButton, Sheet, FilePick, QR, SidePanel, StatusBar };
+/* =============================== PRD labels =============================== */
+// Shows which PRD section a screen demonstrates and how far along it is.
+// compact: status only, and nothing for Built (for nav items and tiles).
+function PrdTag({ id, compact }) {
+  const p = prdFor(id);
+  if (!p || (compact && p.status === 'built')) return null;
+  const title = `PRD §${p.section} ${p.title} · ${p.label}${p.note ? ' · ' + p.note : ''}`;
+  return html`<span className=${'prd-tag t-' + p.status + (compact ? ' compact' : '')} title=${title}>${compact ? p.label : html`<b>§${p.section}</b> ${p.title} · ${p.label}`}</span>`;
+}
+
+export { PrdTag, Modal, Drawer, Field, Locked, Toggle, PageHead, Facade, Legend, Receipt, ResetButton, Sheet, FilePick, QR, SidePanel, StatusBar };

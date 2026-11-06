@@ -1,5 +1,6 @@
 import { Avatar, Fragment, Icon, Logo, fmtDate, html, useEffect, useState } from '../core.js';
-import { Modal, Receipt, ResetButton } from '../ui.js';
+import { Modal, PrdTag, Receipt, ResetButton } from '../ui.js';
+import { setRoute } from '../route.js';
 import { Amenities } from '../features/amenities.js';
 import { Billing } from '../features/billing.js';
 import { Complaints } from '../features/complaints.js';
@@ -22,13 +23,16 @@ const NAV = [
   ['Society', [['settings', 'Settings', 'sliders']]],
 ];
 const NAV_FLAT = NAV.flatMap(([, items]) => items);
-function AdminApp({ db, update, persona, onLogout, onReset, toast }) {
-  const [page, setPage] = useState(() => { const h = (location.hash || '').slice(1); return NAV_FLAT.some((n) => n[0] === h) ? h : 'dashboard'; });
+const isPage = (p) => NAV_FLAT.some((n) => n[0] === p);
+function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, seq, labels }) {
+  const [page, setPage] = useState(() => (isPage(screen) ? screen : 'dashboard'));
   const [flatOpen, setFlatOpen] = useState(null);
   const [newFlat, setNewFlat] = useState(false);
   const [receiptNo, setReceiptNo] = useState(null);
-  const go = (p) => { setPage(p); try { history.replaceState(null, '', '#' + p); } catch (e) {} window.scrollTo(0, 0); };
-  useEffect(() => { const h = () => { const x = location.hash.slice(1); if (NAV_FLAT.some((n) => n[0] === x)) setPage(x); }; window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
+  const go = (p) => { setPage(p); window.scrollTo(0, 0); };
+  // The URL follows the page (#admin/billing), and a changed link moves the page.
+  useEffect(() => { setRoute(persona.key, page); }, [page]);
+  useEffect(() => { if (isPage(screen) && screen !== page) setPage(screen); }, [screen, seq]);
   const pendingCount = db.ledger.filter((r) => r.status === 'pending').length;
   const openCount = db.complaints.filter((c) => c.status === 'open').length;
   const counts = { review: pendingCount, complaints: openCount, amenities: db.bookings.filter((b) => b.status === 'requested').length };
@@ -41,13 +45,13 @@ function AdminApp({ db, update, persona, onLogout, onReset, toast }) {
       <div className="brand"><${Logo} s=${30} /><span className="brand-name">Saral Society</span></div>
       <div className="soc"><b>Aldgate Residency</b><span>Wing A · 24 flats · Baner, Pune</span></div>
       <nav className="nav" aria-label="Admin">${NAV.map(([g, items]) => html`<${Fragment} key=${g}><div className="nav-group">${g}</div>
-        ${items.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)} aria-current=${page === k ? 'page' : undefined}><${Icon} n=${ic} s=${17} />${l}${counts[k] ? html`<span className="count">${counts[k]}</span>` : null}</button>`)}<//>`)}</nav>
+        ${items.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)} aria-current=${page === k ? 'page' : undefined}><${Icon} n=${ic} s=${17} />${l}${labels && html`<${PrdTag} id=${'admin/' + k} compact />`}${counts[k] ? html`<span className="count">${counts[k]}</span>` : null}</button>`)}<//>`)}</nav>
       <div style=${{ marginTop: 'auto', fontSize: 11, color: 'var(--panel-muted)', padding: '0 10px' }}>Demo build · Stages 1–3<br/>Designed by Sanket Joshi</div>
     </aside>
     <div className="main">
       <div className="mobile-nav">${NAV_FLAT.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)}><${Icon} n=${ic} s=${14} />${l}${counts[k] ? ' · ' + counts[k] : ''}</button>`)}</div>
       <header className="topbar">
-        <span className="crumb">Admin · <b>${label}</b></span>
+        <span className="crumb">Admin · <b>${label}</b>${labels && html` <${PrdTag} id=${'admin/' + page} />`}</span>
         <div className="me"><${ResetButton} onReset=${onReset} />
           <div className="who"><b>${persona.name}</b><span>${persona.role}</span></div><${Avatar} name=${persona.name} />
           <button className="icon-btn" onClick=${onLogout} title="Log out" aria-label="Log out"><${Icon} n="logout" s=${16} /></button></div>
