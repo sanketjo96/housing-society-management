@@ -6,6 +6,7 @@ import { GuardApp } from './apps/guard.js';
 import { Login } from './apps/login.js';
 import { ResidentApp } from './apps/resident.js';
 import { labelsInitial, saveLabels, setPrdOverrides } from './prd.js';
+import { PITCH, Tour } from './tour.js';
 import { clearRoute, parseRoute } from './route.js';
 
 /* =============================== Client presets =============================== */
@@ -50,8 +51,9 @@ function App() {
   const presetRef = useRef(null);
   const [persona, setPersona] = useState(null);
   const [route, setRouteState] = useState(null); // { screen, sub } from the link
-  const [labels, setLabels] = useState(labelsInitial);
-  const toggleLabels = () => { setLabels((v) => { saveLabels(!v); return !v; }); };
+  // Pitch mode starts with labels off and doesn't remember the toggle, so the visitor's own choice is kept.
+  const [labels, setLabels] = useState(() => (PITCH ? false : labelsInitial()));
+  const toggleLabels = () => { setLabels((v) => { if (!PITCH) saveLabels(!v); return !v; }); };
   const [toasts, setToasts] = useState([]);
   const toast = (msg) => { const id = Math.random(); setToasts((t) => [...t, { id, msg }]); setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600); };
   const apply = (d) => { dbRef.current = d; if (d.meta && d.meta.today) setToday(d.meta.today); setPersonas((d.users || []).filter((u) => u.key !== 'guard' || on('gate'))); setDb(d); };
@@ -98,6 +100,6 @@ function App() {
   else if (persona.key === 'admin') view = html`<${AdminApp} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} />`;
   else if (persona.key === 'owner' || persona.key === 'tenant') view = html`<${ResidentApp} key=${persona.key} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${onSwitch} />`;
   else view = html`<${GuardApp} ...${nav} db=${db} update=${update} persona=${persona} onLogout=${logout} onReset=${reset} toast=${toast} onSwitch=${onSwitch} />`;
-  return html`<${Fragment}>${view}<${DataBadge} mode=${boot.mode} base=${boot.base} saved=${boot.saved} labels=${labels} onLabels=${toggleLabels} preset=${presetRef.current} /><div className="toast-zone" aria-live="polite">${toasts.map((t) => html`<div key=${t.id} className="toast"><${Icon} n="check" s=${15} />${t.msg}</div>`)}</div><//>`;
+  return html`<${Fragment}>${view}<${DataBadge} mode=${boot.mode} base=${boot.base} saved=${boot.saved} labels=${labels} onLabels=${toggleLabels} preset=${presetRef.current} />${PITCH && html`<${Tour} db=${db} onReset=${reset} />`}<div className="toast-zone" aria-live="polite">${toasts.map((t) => html`<div key=${t.id} className="toast"><${Icon} n="check" s=${15} />${t.msg}</div>`)}</div><//>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);

@@ -16,6 +16,8 @@ dependencies.
 
 ## Run
 
+The tests load React from a CDN, so they need a network connection.
+
 ```sh
 cd demo && npm test
 ```
@@ -25,6 +27,7 @@ cd demo && npm test
 | `routes.mjs` | Screen links (`#owner/passbook`), link changes, old `#billing` links, fallbacks, logout, PRD labels toggle |
 | `presets.mjs` | The example client preset: branding, hidden features, "Requested" override, reset, unknown or invalid names |
 | `persist.mjs` | Saved data survives reload, per-preset copies, reset, edited seed, full storage, json-server writes, presets never writing to json-server |
+| `pitch.mjs` | Pitch mode on desktop and phone: labels off without changing the saved choice, the guide's three steps and buttons, reload, hide, start again |
 
 Each prints one PASS or FAIL line per check and exits non-zero on a failure.
 

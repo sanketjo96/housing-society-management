@@ -18,7 +18,7 @@ trap 'rm -rf "$site"' EXIT
 "$repo/website/build.sh" "$site" >/dev/null
 
 fail=0
-for t in routes presets persist; do
+for t in routes presets persist pitch; do
   echo "== $t"
   if node "$here/$t.mjs" "$site"; then :; else fail=1; fi
 done

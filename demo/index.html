@@ -461,6 +461,21 @@ button.li:hover { background: var(--surface-2); }
 .visitor-ask { background: var(--surface); border: 1.5px solid var(--brass-bright); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 
 /* ---------- Data source badge ---------- */
+/* Pitch-mode guide (js/tour.js): bottom right on desktop, above the tab bar on phones. */
+.tour { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 70; width: min(340px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.tour-head { display: flex; align-items: center; justify-content: space-between; }
+.tour-head .icon-btn { width: 28px; height: 28px; }
+.tour b { font-family: var(--display); font-weight: 500; font-size: 17px; }
+.tour p { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.tour-dots { display: flex; gap: 5px; margin: 4px 0 2px; }
+.tour-dots i { width: 22px; height: 4px; border-radius: 2px; background: var(--line); }
+.tour-dots i.on { background: var(--teal); }
+.tour-pill { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 70; display: inline-flex; gap: 6px; align-items: center; font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 0; background: var(--teal); color: var(--on-teal); box-shadow: var(--shadow-lg); cursor: pointer; }
+/* Out of the way while a sheet, popup or drawer is open. */
+body:has(.scrim, .sheet-scrim, .drawer) :is(.tour, .tour-pill) { display: none; }
+.tour .short { display: none; }
+@media (max-width: 900px) { .tour.here .short { display: block; } .tour.here .long:not(:only-of-type) { display: none; } .tour.here .tour-dots { display: none; } .tour.here { padding: 10px 14px; gap: 4px; } .tour.here b { font-size: 15px; } }
+@media (max-width: 900px) { .tour, .tour-pill { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(78px + env(safe-area-inset-bottom, 0px)); } }
 .data-badge { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; padding: 6px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); box-shadow: var(--shadow); }
 .data-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--brass-bright); }
 .data-badge.server i { background: var(--teal); box-shadow: 0 0 0 3px var(--teal-soft); }

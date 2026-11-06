@@ -26,7 +26,7 @@ const NAV_FLAT = NAV.flatMap(([, items]) => items);
 // Pages that belong to a feature a client preset can switch off.
 const FEATURE_OF = { complaints: 'complaints', amenities: 'amenities', visitors: 'gate', notices: 'notices', notifications: 'notifications', expenses: 'expenses' };
 const navOn = () => NAV.map(([g, items]) => [g, items.filter(([k]) => on(FEATURE_OF[k] || k))]).filter(([, items]) => items.length);
-function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, seq, labels }) {
+function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, sub, seq, labels }) {
   const nav = navOn();
   const navFlat = nav.flatMap(([, items]) => items);
   const isPage = (p) => navFlat.some((n) => n[0] === p);
@@ -41,7 +41,8 @@ function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, seq, 
   const pendingCount = db.ledger.filter((r) => r.status === 'pending').length;
   const openCount = db.complaints.filter((c) => c.status === 'open').length;
   const counts = { review: pendingCount, complaints: openCount, amenities: db.bookings.filter((b) => b.status === 'requested').length };
-  const props = { db, update, toast, go, openFlat: setFlatOpen, setNewFlat, openReceipt: setReceiptNo };
+  // focus: the third part of a link (#admin/review/<entry id>) picks an item on the page.
+  const props = { db, update, toast, go, openFlat: setFlatOpen, setNewFlat, openReceipt: setReceiptNo, focus: screen === page ? sub : null, seq };
   const Page = { dashboard: Dashboard, flats: Flats, billing: Billing, review: Review, receipts: Receipts, expenses: Expenses, complaints: Complaints, notices: Notices, amenities: Amenities, notifications: Notifications, settings: Settings, visitors: Visitors }[page];
   const label = navFlat.find((n) => n[0] === page)[1];
   const rcpt = receiptNo && db.receipts.find((r) => r.no === receiptNo);

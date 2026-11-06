@@ -74,6 +74,25 @@ bottom-left badge (the choice is remembered in that browser), or with
 follows the section headings in `docs/product/prd.md` §7; update both
 together.
 
+## Pitch mode
+
+For investors, or for a link someone will click through on their own
+(often on a phone, where the side panel with the demo steps is hidden), add
+`?pitch=1`:
+
+```
+…/demo/?pitch=1
+…/demo/?client=example&pitch=1
+```
+
+- PRD labels are off for that visit. The visitor's saved labels choice isn't
+  changed.
+- A small guide walks through the payment loop: Priya pays, Sanjay approves,
+  the receipt is ready. Each step has a button that opens the right screen.
+  The guide works out the step from the data, so it keeps up when someone
+  switches person, reloads, or uses Reset demo. It hides while a sheet or
+  popup is open, and can be collapsed to a small button.
+
 ## Client presets
 
 A preset tailors the demo for one client without touching the shared demo:
@@ -153,6 +172,7 @@ code. Its output is the PRD; the real app on `main` is built from the PRD.
 | `js/main.js` | Entry point: loads data, picks the app for the signed-in persona |
 | `js/core.js` | Shared helpers: React/htm, icons, formatting, balance maths (`flatSummary`, `rateFor`) |
 | `js/prd.js` | Which PRD section each screen demonstrates, and its status |
+| `js/tour.js` | Pitch mode and its guide |
 | `js/route.js` | Screen links (`#owner/passbook`) |
 | `js/ui.js` | Shared components: Modal, Drawer, Sheet, Field, Receipt, Facade, persona side panel |
 | `js/features/*.js` | One file per feature (payments, billing, notices, gate, …): its admin screen and resident sheets |

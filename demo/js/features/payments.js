@@ -19,10 +19,12 @@ function ProofShot({ e, db }) {
     <div className="kv"><span>From</span><b>${e.payer}</b></div>
     <div className="kv"><span>Date</span><b>${fmtDate(e.date)}</b></div></div>`;
 }
-function Review({ db, update, toast, openReceipt }) {
+function Review({ db, update, toast, openReceipt, focus, seq }) {
   const pending = db.ledger.filter((r) => r.status === 'pending').sort((a, b) => a.date.localeCompare(b.date));
   const reviewed = db.ledger.filter((r) => r.type !== 'SYSTEM' && r.status !== 'pending' && r.reviewedOn).sort((a, b) => b.reviewedOn.localeCompare(a.reviewedOn));
-  const [sel, setSel] = useState(pending[0] ? pending[0].id : null);
+  const focused = (id) => (id && pending.some((p) => p.id === id) ? id : null);
+  const [sel, setSel] = useState(() => focused(focus) || (pending[0] ? pending[0].id : null));
+  useEffect(() => { if (focused(focus)) setSel(focus); }, [focus, seq]);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [approve, setApprove] = useState(null);
