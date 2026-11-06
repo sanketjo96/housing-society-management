@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the published site into a temp folder and runs the demo checks
-# against it: screen links, client presets, and saved data / json-server mode.
+# against it: PRD labels vs the PRD, screen links, client presets, saved data /
+# json-server mode, and pitch mode.
 #
 #   npm test                      # from demo/
 #   bash tests/run.sh             # same
@@ -18,6 +19,8 @@ trap 'rm -rf "$site"' EXIT
 "$repo/website/build.sh" "$site" >/dev/null
 
 fail=0
+echo "== prd-sync"
+node "$here/prd-sync.mjs" || fail=1
 for t in routes presets persist pitch; do
   echo "== $t"
   if node "$here/$t.mjs" "$site"; then :; else fail=1; fi

@@ -24,6 +24,7 @@ cd demo && npm test
 
 | Script | Checks |
 |---|---|
+| `prd-sync.mjs` | The demo's PRD labels (`js/prd.js`) match `docs/product/prd.md`: section titles, statuses, the PRD's demo links, preset overrides. No browser |
 | `routes.mjs` | Screen links (`#owner/passbook`), link changes, old `#billing` links, fallbacks, logout, PRD labels toggle |
 | `presets.mjs` | The example client preset: branding, hidden features, "Requested" override, reset, unknown or invalid names |
 | `persist.mjs` | Saved data survives reload, per-preset copies, reset, edited seed, full storage, json-server writes, presets never writing to json-server |
