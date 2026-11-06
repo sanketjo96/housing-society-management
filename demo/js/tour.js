@@ -11,7 +11,7 @@
  * persona, reloading and Reset demo: a pending payment from the owner's
  * flat means "approve"; that payment approved means "done"; otherwise "pay".
  */
-import { html, useState, Icon, inr, firstName, personaBy } from './core.js';
+import { html, useState, useEffect, Icon, inr, firstName, personaBy } from './core.js';
 
 let PITCH = false;
 try { PITCH = new URLSearchParams(location.search).get('pitch') === '1'; } catch (e) { /* no URL */ }
@@ -30,6 +30,13 @@ function tourStep(db) {
 
 function Tour({ db, onReset }) {
   const [open, setOpen] = useState(true);
+  // Re-check where we are whenever the screen changes (see route.js).
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener('saral:route', bump); window.addEventListener('hashchange', bump);
+    return () => { window.removeEventListener('saral:route', bump); window.removeEventListener('hashchange', bump); };
+  }, []);
   const s = tourStep(db);
   if (!s) return null;
   // Already on the step's screen: no need for the button (and on a phone the guide gets smaller).

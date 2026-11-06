@@ -39,6 +39,12 @@ async function loop(label, viewport) {
   await cta(); await wait();
   check(`${label}: guide opens the owner's app`, (await page.evaluate(() => location.hash)) === '#owner/home');
   check(`${label}: no PRD labels in pitch mode`, (await page.locator('.prd-tag, .prd-strip').count()) === 0);
+  if (viewport.width < 480) check(`${label}: tab bar visible without scrolling`, await page.locator('.tabbar').evaluate((e) => e.getBoundingClientRect().bottom <= innerHeight + 1));
+  check(`${label}: no button when already there`, (await page.locator('.tour .btn.primary').count()) === 0);
+  await page.locator('.tabbar button', { hasText: 'Passbook' }).click(); await wait(200);
+  check(`${label}: button back after leaving the screen`, (await page.locator('.tour .btn.primary').count()) === 1);
+  await cta(); await wait();
+  check(`${label}: button returns to the owner's home`, (await page.evaluate(() => location.hash)) === '#owner/home');
   check(`${label}: guide stays inside the screen`, await page.locator('.tour').evaluate((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
   await shot('2-owner');
   await page.locator('.pay-card button').click();

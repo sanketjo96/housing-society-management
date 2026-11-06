@@ -18,14 +18,19 @@ function parseRoute(hash, personaKeys) {
 }
 
 // Replace (not push) so moving between screens doesn't fill the back button.
+// replaceState fires no event, so 'saral:route' tells anything outside the
+// app that shows where you are (the pitch-mode guide) that the screen changed.
+const routed = () => window.dispatchEvent(new CustomEvent('saral:route'));
 function setRoute(persona, screen, sub) {
   const h = '#' + [persona, screen, sub].filter(Boolean).map(encodeURIComponent).join('/');
   if (location.hash === h) return;
   try { history.replaceState(null, '', location.pathname + location.search + h); } catch (e) { /* sandboxed */ }
+  routed();
 }
 
 function clearRoute() {
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* sandboxed */ }
+  routed();
 }
 
 export { parseRoute, setRoute, clearRoute };
