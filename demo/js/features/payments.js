@@ -2,7 +2,7 @@ import { Fragment, Icon, TODAY, flatSummary, fmtDate, getIntent, html, inr, nowS
 import { Field, FilePick, Modal, PageHead, Receipt, Sheet } from '../ui.js';
 
 /* =============================== Admin: Payment review =============================== */
-function ProofShot({ e }) {
+function ProofShot({ e, db }) {
   const blur = e.status === 'rejected';
   if (e.proofImg) return html`<div className="proof" style=${{ padding: 6 }}><img src=${e.proofImg} alt="Uploaded proof" style=${{ width: '100%', borderRadius: 14 }} /></div>`;
   if (e.type === 'CREDIT') return html`<div className="proof" style=${{ borderRadius: 10, borderWidth: 1, borderColor: '#D9D4C7', background: '#FFFDF6', alignItems: 'stretch', gap: 8 }}>
@@ -14,7 +14,7 @@ function ProofShot({ e }) {
     <span className="ok"><${Icon} n="check" s=${24} w=${2.6} /></span>
     <span style=${{ fontSize: 12, color: '#1E8E5A', fontWeight: 600 }}>Payment successful</span>
     <span className="amt">₹${e.amount.toLocaleString('en-IN')}</span>
-    <span style=${{ fontSize: 10.5, color: '#666' }}>to Aldgate Residency CHS</span>
+    <span style=${{ fontSize: 10.5, color: '#666' }}>to ${db.society.short}</span>
     <div className="kv" style=${{ marginTop: 6 }}><span>UPI ref</span><b>${e.ref.replace('UTR ', '')}</b></div>
     <div className="kv"><span>From</span><b>${e.payer}</b></div>
     <div className="kv"><span>Date</span><b>${fmtDate(e.date)}</b></div></div>`;
@@ -61,7 +61,7 @@ function Review({ db, update, toast, openReceipt }) {
       ${cur && html`<div className="card">
         <div className="card-head"><div><h2>${cur.type === 'CREDIT' ? 'Credit claim' : 'Payment proof'} · ${cur.flat}</h2><span className="muted" style=${{ fontSize: 12.5 }}>Submitted ${cur.submittedAt} by ${cur.payer}</span></div><span className=${'tag ' + cur.type}>${cur.type}</span></div>
         <div className="card-pad" style=${{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <${ProofShot} e=${cur} />
+          <${ProofShot} e=${cur} db=${db} />
           <div style=${{ flex: 1, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <dl className="kv-list" style=${{ margin: 0 }}>
               <dt>Amount claimed</dt><dd className="num" style=${{ fontSize: 18 }}>${inr(cur.amount)}</dd>
@@ -93,7 +93,7 @@ function Review({ db, update, toast, openReceipt }) {
   <//>`;
 }
 function ManualPayment({ db, onClose, onNext }) {
-  const [flat, setFlat] = useState('A-602');
+  const [flat, setFlat] = useState(() => (db.flats.some((f) => f.id === 'A-602') ? 'A-602' : db.flats[0].id));
   const fl = db.flats.find((f) => f.id === flat);
   const sum = flatSummary(db, flat);
   const [amount, setAmount] = useState(sum.payable || 3000);
@@ -116,8 +116,8 @@ function ManualPayment({ db, onClose, onNext }) {
   <//>`;
 }
 
-const SAMPLE_SHOT = (amount, payer) => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420"><rect width="300" height="420" rx="18" fill="#ffffff"/><text x="20" y="30" font-family="sans-serif" font-size="12" fill="#888">9:41</text><circle cx="150" cy="96" r="32" fill="#1E8E5A"/><path d="M135 96l10 10 20-20" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="150" y="160" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1E8E5A">Payment successful</text><text x="150" y="205" text-anchor="middle" font-family="sans-serif" font-size="36" font-weight="700" fill="#1A1F1D">₹${amount.toLocaleString('en-IN')}</text><text x="150" y="232" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#666">to Aldgate Residency CHS</text><line x1="24" y1="262" x2="276" y2="262" stroke="#eee"/><text x="24" y="290" font-family="sans-serif" font-size="12" fill="#666">UPI ref</text><text x="276" y="290" text-anchor="end" font-family="monospace" font-size="12" fill="#1A1F1D">6308${Math.floor(10000000 + Math.random() * 89999999)}</text><text x="24" y="320" font-family="sans-serif" font-size="12" fill="#666">From</text><text x="276" y="320" text-anchor="end" font-family="sans-serif" font-size="12" fill="#1A1F1D">${payer}</text><text x="24" y="350" font-family="sans-serif" font-size="12" fill="#666">Date</text><text x="276" y="350" text-anchor="end" font-family="sans-serif" font-size="12" fill="#1A1F1D">03 Nov 2026</text></svg>`;
+const SAMPLE_SHOT = (amount, payer, payee) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420"><rect width="300" height="420" rx="18" fill="#ffffff"/><text x="20" y="30" font-family="sans-serif" font-size="12" fill="#888">9:41</text><circle cx="150" cy="96" r="32" fill="#1E8E5A"/><path d="M135 96l10 10 20-20" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="150" y="160" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1E8E5A">Payment successful</text><text x="150" y="205" text-anchor="middle" font-family="sans-serif" font-size="36" font-weight="700" fill="#1A1F1D">₹${amount.toLocaleString('en-IN')}</text><text x="150" y="232" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#666">to ${payee}</text><line x1="24" y1="262" x2="276" y2="262" stroke="#eee"/><text x="24" y="290" font-family="sans-serif" font-size="12" fill="#666">UPI ref</text><text x="276" y="290" text-anchor="end" font-family="monospace" font-size="12" fill="#1A1F1D">6308${Math.floor(10000000 + Math.random() * 89999999)}</text><text x="24" y="320" font-family="sans-serif" font-size="12" fill="#666">From</text><text x="276" y="320" text-anchor="end" font-family="sans-serif" font-size="12" fill="#1A1F1D">${payer}</text><text x="24" y="350" font-family="sans-serif" font-size="12" fill="#666">Date</text><text x="276" y="350" text-anchor="end" font-family="sans-serif" font-size="12" fill="#1A1F1D">03 Nov 2026</text></svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 };
 const SAMPLE_BILL = (amount, note) => {
@@ -153,7 +153,7 @@ function PaySheet({ db, fl, persona, update, toast, onClose }) {
   return html`<${Sheet} title="Upload payment proof" sub=${`Started ${intent.at.slice(11)} in ${intent.app} by ${intent.by}`} onClose=${onClose}
     foot=${html`<button className="btn danger" onClick=${cancel}>Cancel payment</button><button className="btn primary" disabled=${!img} onClick=${submit}>Submit for review</button>`}>
     <div className="locked-amt"><div><div className="eyebrow">Amount paid</div><b className="num">${inr(amount)}</b></div><span className="lock"><${Icon} n="lock" s=${12} /> Locked</span></div>
-    <${Field} label="Payment screenshot"><${FilePick} id="pay-file" img=${img} onPick=${setImg} onSample=${() => setImg(SAMPLE_SHOT(amount, persona.name))} label="The confirmation screen from your UPI app" /><//>
+    <${Field} label="Payment screenshot"><${FilePick} id="pay-file" img=${img} onPick=${setImg} onSample=${() => setImg(SAMPLE_SHOT(amount, persona.name, db.society.short))} label="The confirmation screen from your UPI app" /><//>
     <${Field} label="UPI reference (UTR)" hint="Optional"><input id="pay-utr" className="input num" inputMode="numeric" placeholder="12-digit number" value=${utr} onInput=${(e) => setUtr(e.target.value)} /><//>
   <//>`;
 }

@@ -3,15 +3,34 @@
     "today": "2026-11-03",
     "nextReceipt": 65,
     "credits": 412,
-    "upiId": "aldgate.chs@cosmos"
+    "upiId": "aldgate.chs@cosmos",
+    "trend": [
+      {
+        "m": "Jun",
+        "b": 78000,
+        "c": 78000
+      },
+      {
+        "m": "Jul",
+        "b": 78000,
+        "c": 76500
+      }
+    ]
   },
   "society": {
     "name": "Aldgate Residency Co-operative Housing Society Ltd.",
     "short": "Aldgate Residency CHS",
+    "display": "Aldgate Residency",
+    "locality": "Baner, Pune",
     "address": "Survey No. 112/4, Baner–Pashan Link Road, Baner, Pune 411045",
     "regNo": "PNA/PNA(4)/HSG/(TC)/18452/2019",
     "accountNo": "XXXX XXXX 4471 (Cosmos Bank, Baner)",
-    "bookNo": "03"
+    "bookNo": "03",
+    "stamp": [
+      "ALDGATE",
+      "RESIDENCY",
+      "CHS · PUNE"
+    ]
   },
   "settings": {
     "baseRate": 3000,

@@ -1,4 +1,4 @@
-import { Avatar, Fragment, Icon, Logo, fmtDate, html, useEffect, useState } from '../core.js';
+import { Avatar, Fragment, Icon, Logo, fmtDate, html, on, useEffect, useState, wingsLabel } from '../core.js';
 import { Modal, PrdTag, Receipt, ResetButton } from '../ui.js';
 import { setRoute } from '../route.js';
 import { Amenities } from '../features/amenities.js';
@@ -23,8 +23,13 @@ const NAV = [
   ['Society', [['settings', 'Settings', 'sliders']]],
 ];
 const NAV_FLAT = NAV.flatMap(([, items]) => items);
-const isPage = (p) => NAV_FLAT.some((n) => n[0] === p);
+// Pages that belong to a feature a client preset can switch off.
+const FEATURE_OF = { complaints: 'complaints', amenities: 'amenities', visitors: 'gate', notices: 'notices', notifications: 'notifications', expenses: 'expenses' };
+const navOn = () => NAV.map(([g, items]) => [g, items.filter(([k]) => on(FEATURE_OF[k] || k))]).filter(([, items]) => items.length);
 function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, seq, labels }) {
+  const nav = navOn();
+  const navFlat = nav.flatMap(([, items]) => items);
+  const isPage = (p) => navFlat.some((n) => n[0] === p);
   const [page, setPage] = useState(() => (isPage(screen) ? screen : 'dashboard'));
   const [flatOpen, setFlatOpen] = useState(null);
   const [newFlat, setNewFlat] = useState(false);
@@ -38,18 +43,18 @@ function AdminApp({ db, update, persona, onLogout, onReset, toast, screen, seq, 
   const counts = { review: pendingCount, complaints: openCount, amenities: db.bookings.filter((b) => b.status === 'requested').length };
   const props = { db, update, toast, go, openFlat: setFlatOpen, setNewFlat, openReceipt: setReceiptNo };
   const Page = { dashboard: Dashboard, flats: Flats, billing: Billing, review: Review, receipts: Receipts, expenses: Expenses, complaints: Complaints, notices: Notices, amenities: Amenities, notifications: Notifications, settings: Settings, visitors: Visitors }[page];
-  const label = NAV_FLAT.find((n) => n[0] === page)[1];
+  const label = navFlat.find((n) => n[0] === page)[1];
   const rcpt = receiptNo && db.receipts.find((r) => r.no === receiptNo);
   return html`<div className="shell">
     <aside className="side">
       <div className="brand"><${Logo} s=${30} /><span className="brand-name">Saral Society</span></div>
-      <div className="soc"><b>Aldgate Residency</b><span>Wing A · 24 flats · Baner, Pune</span></div>
-      <nav className="nav" aria-label="Admin">${NAV.map(([g, items]) => html`<${Fragment} key=${g}><div className="nav-group">${g}</div>
+      <div className="soc"><b>${db.society.display || db.society.short}</b><span>${wingsLabel(db.flats)} · ${db.flats.length} flats${db.society.locality ? ' · ' + db.society.locality : ''}</span></div>
+      <nav className="nav" aria-label="Admin">${nav.map(([g, items]) => html`<${Fragment} key=${g}><div className="nav-group">${g}</div>
         ${items.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)} aria-current=${page === k ? 'page' : undefined}><${Icon} n=${ic} s=${17} />${l}${labels && html`<${PrdTag} id=${'admin/' + k} compact />`}${counts[k] ? html`<span className="count">${counts[k]}</span>` : null}</button>`)}<//>`)}</nav>
       <div style=${{ marginTop: 'auto', fontSize: 11, color: 'var(--panel-muted)', padding: '0 10px' }}>Demo build · Stages 1–3<br/>Designed by Sanket Joshi</div>
     </aside>
     <div className="main">
-      <div className="mobile-nav">${NAV_FLAT.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)}><${Icon} n=${ic} s=${14} />${l}${counts[k] ? ' · ' + counts[k] : ''}</button>`)}</div>
+      <div className="mobile-nav">${navFlat.map(([k, l, ic]) => html`<button key=${k} className=${page === k ? 'on' : ''} onClick=${() => go(k)}><${Icon} n=${ic} s=${14} />${l}${counts[k] ? ' · ' + counts[k] : ''}</button>`)}</div>
       <header className="topbar">
         <span className="crumb">Admin · <b>${label}</b>${labels && html` <${PrdTag} id=${'admin/' + page} />`}</span>
         <div className="me"><${ResetButton} onReset=${onReset} />

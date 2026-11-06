@@ -29,7 +29,7 @@ function Notifications({ db, update, toast }) {
       </div>
       <div className="card card-pad" style=${{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><h2 style=${{ fontSize: 18 }}>Overdue reminder</h2><span className="tag">UTILITY TEMPLATE</span></div>
-        <div className="wa"><div className="bubble"><b>Aldgate Residency CHS</b><br/>Hello Arjun, maintenance for flat <b>A-302</b> is overdue.<br/><br/>Amount payable: <b>₹9,000</b><br/>Covers: Sep 2026, Oct 2026<br/><br/>Pay by UPI and upload the screenshot in the app.<small>10:00 am</small><div className="btns">Open passbook</div></div></div>
+        <div className="wa"><div className="bubble"><b>${db.society.short}</b><br/>Hello Arjun, maintenance for flat <b>A-302</b> is overdue.<br/><br/>Amount payable: <b>₹9,000</b><br/>Covers: Sep 2026, Oct 2026<br/><br/>Pay by UPI and upload the screenshot in the app.<small>10:00 am</small><div className="btns">Open passbook</div></div></div>
         <p className="muted" style=${{ fontSize: 12.5, margin: 0 }}>Templates are approved by Meta. Name, flat, amount and months are filled in from the passbook for each resident.</p>
       </div>
     </div>

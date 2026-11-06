@@ -65,6 +65,34 @@ bottom-left badge (the choice is remembered in that browser), or with
 follows the section headings in `docs/product/prd.md` §7; update both
 together.
 
+## Client presets
+
+A preset tailors the demo for one client without touching the shared demo:
+their society's name and branding, which features they see, and which
+features they have asked for. Open it with `?client=<id>`, which loads
+`clients/<id>.json`:
+
+```
+…/demo/?client=example
+…/demo/?client=example#admin/notices
+```
+
+`clients/example.json` is a worked example. Copy it to start a new client.
+
+| Field | What it does |
+|---|---|
+| `name` | Shown in the bottom-left badge |
+| `society` | Laid over `society` in the data: `name`, `short`, `display`, `locality`, `address`, `regNo`, `accountNo`, `stamp` |
+| `meta`, `settings` | Laid over the same objects in the data, e.g. `meta.upiId`, `settings.baseRate` |
+| `features` | Set a feature to `false` to hide it everywhere (nav, home tiles, tabs, dashboard): `complaints`, `notices`, `amenities`, `gate` (gate passes, visitor log and the guard persona), `notifications`, `expenses` |
+| `prd` | Overrides a PRD section's status for this client, e.g. `{ "7.13": { "status": "requested", "note": "Asked for on 12 Nov" } }` |
+| `data` | Optional path to a full data file (same shape as `db.seed.json`), e.g. `clients/acme.db.json`, for a client whose flats and people differ |
+
+A preset always runs on sample data in the visitor's browser, even when
+json-server is running, so a client demo never changes the shared data. The
+building view, wing names and flat counts come from the data, so a `data`
+file with a different number of floors or flats renders correctly.
+
 ## Point it at another API
 
 - `?api=http://localhost:4000` in the URL, or
@@ -83,6 +111,7 @@ together.
 | `js/features/*.js` | One file per feature (payments, billing, notices, gate, …): its admin screen and resident sheets |
 | `js/apps/*.js` | The three shells: admin web, resident phone app, guard phone app, plus the login page |
 | `js/api.js` | Data layer: loads data, turns each change into REST calls |
+| `clients/*.json` | Client presets (see above) |
 | `js/config.js` | Which API to use |
 | `db.json` | Mock data that json-server reads and writes |
 | `db.seed.json` | Original mock data, used by Reset demo |

@@ -35,6 +35,7 @@
   var base = null;
   var mode = 'memory';
   var queue = Promise.resolve();
+  var opts = {};   // from init(): { seedUrl, resetUrl, memoryOnly } (client presets use these)
 
   function join(path) { return base.replace(/\/+$/, '') + '/' + path; }
 
@@ -64,6 +65,7 @@
   }
 
   function candidates() {
+    if (opts.memoryOnly) return [];
     var q = null;
     try { q = new URLSearchParams(location.search).get('api'); } catch (e) {}
     if (q) return [q];
@@ -83,12 +85,13 @@
     });
   }
 
-  function init() {
+  function init(options) {
+    opts = options || {};
     var list = candidates();
     var tryNext = function (i) {
       if (i >= list.length) {
         base = null; mode = 'memory';
-        return getJSON(cfg.seedUrl || 'db.json').then(function (db) { return { db: normalise(db), mode: mode, base: null }; });
+        return getJSON(opts.seedUrl || cfg.seedUrl || 'db.json').then(function (db) { return { db: normalise(db), mode: mode, base: null }; });
       }
       return loadFrom(list[i]).then(function (db) { mode = 'server'; return { db: db, mode: mode, base: base }; })
         .catch(function () { return tryNext(i + 1); });
@@ -150,7 +153,7 @@
   // Restore the original sample data (db.seed.json). In server mode the
   // differences are written back so the API matches the seed again.
   function reset(current) {
-    return getJSON(cfg.seedResetUrl || 'db.seed.json').then(function (seed) {
+    return getJSON(opts.resetUrl || opts.seedUrl || cfg.seedResetUrl || 'db.seed.json').then(function (seed) {
       var db = normalise(seed);
       return sync('resetDemo', current, db).then(function () { return db; });
     });

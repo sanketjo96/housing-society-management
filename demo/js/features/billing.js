@@ -1,4 +1,4 @@
-import { Fragment, Icon, TODAY, fmtDate, html, inr, periodLabel, rateFor, uid, useState } from '../core.js';
+import { Fragment, Icon, TODAY, fmtDate, html, inr, periodLabel, personaName, rateFor, uid, useState } from '../core.js';
 import { Field, PageHead } from '../ui.js';
 
 /* =============================== Admin: Billing =============================== */
@@ -15,7 +15,7 @@ function Billing({ db, update, toast }) {
   const generate = () => {
     update('generateCharges', (d) => {
       d.flats.forEach((fl) => { if (!d.ledger.some((r) => r.flat === fl.id && r.type === 'SYSTEM' && r.period === '2026-11')) d.ledger.push({ id: uid('sys'), flat: fl.id, date: TODAY, type: 'SYSTEM', amount: rateFor(fl, d.settings), status: 'approved', payer: 'System', period: '2026-11', note: 'Maintenance · Nov 2026' }); });
-      d.runs.push({ period: '2026-11', date: TODAY, flats: d.flats.length, total: d.flats.reduce((t, fl) => t + rateFor(fl, d.settings), 0), by: 'Sanjay Gujarathi' });
+      d.runs.push({ period: '2026-11', date: TODAY, flats: d.flats.length, total: d.flats.reduce((t, fl) => t + rateFor(fl, d.settings), 0), by: personaName('admin', 'Admin') });
       d.messages.unshift({ id: uid('M'), at: '2026-11-03 10:15', to: `All residents (${d.flats.length})`, template: 'monthly_bill', status: 'sent', count: d.flats.length });
       d.meta.credits -= d.flats.length;
     });

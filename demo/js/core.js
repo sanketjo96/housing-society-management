@@ -56,6 +56,13 @@ function Logo({ s = 30 }) {
 let TODAY = '2026-11-03'; // set from db.meta.today on load
 const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+// 'Tuesday, 3 November 2026'
+const longDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}, ${d} ${MONTHS_LONG[m - 1]} ${y}`; };
+const firstName = (n) => String(n || '').split(' ')[0];
+// 'Wing A' or 'Wings A, B'
+const wingsLabel = (flats) => { const w = [...new Set(flats.map((f) => f.wing))].sort(); return (w.length > 1 ? 'Wings ' : 'Wing ') + w.join(', '); };
 const fmtDate = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d} ${MONTHS[+m - 1]} ${y}`; };
 const shortDate = (iso) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTHS[+m - 1]}`; };
 const periodLabel = (p) => { const [y, m] = p.split('-'); return `${MONTHS[+m - 1]} ${y}`; };
@@ -105,6 +112,12 @@ let PERSONAS = []; // demo users, loaded from the users collection
 // values through ES module live bindings but can't assign them, so they use these.
 const setToday = (v) => { TODAY = v; };
 const setPersonas = (v) => { PERSONAS = v; };
+const personaBy = (key) => PERSONAS.find((p) => p.key === key) || null;
+const personaName = (key, fallback = '') => { const p = personaBy(key); return p ? p.name : fallback; };
+// Features a client preset can switch off (clients/*.json "features"). Everything is on unless set to false.
+let FEATURES = {};
+const setFeatures = (f) => { FEATURES = f || {}; };
+const on = (name) => FEATURES[name] !== false;
 const nowStamp = () => { const d = new Date(); return `${TODAY} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 function unpaidPeriods(db, flatId) {
   const rows = db.ledger.filter((r) => r.flat === flatId);
@@ -115,4 +128,4 @@ function unpaidPeriods(db, flatId) {
 }
 const nowTime = () => { const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${m} ${ap}`; };
 
-export { setToday, setPersonas, useState, useMemo, useEffect, useRef, Fragment, html, P, Icon, Logo, TODAY, inr, MONTHS, fmtDate, shortDate, periodLabel, initials, uid, daysBetween, words, AV_TONES, Avatar, rateFor, getIntent, flatSummary, STATUS_LABEL, PERSONAS, nowStamp, unpaidPeriods, nowTime };
+export { setToday, setPersonas, personaBy, personaName, FEATURES, setFeatures, on, MONTHS_LONG, WEEKDAYS, longDate, firstName, wingsLabel, useState, useMemo, useEffect, useRef, Fragment, html, P, Icon, Logo, TODAY, inr, MONTHS, fmtDate, shortDate, periodLabel, initials, uid, daysBetween, words, AV_TONES, Avatar, rateFor, getIntent, flatSummary, STATUS_LABEL, PERSONAS, nowStamp, unpaidPeriods, nowTime };

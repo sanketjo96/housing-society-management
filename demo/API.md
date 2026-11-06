@@ -40,8 +40,8 @@ to `db.json` in memory.
 
 | Resource | Fields |
 |---|---|
-| `meta` | `today` (demo date, `YYYY-MM-DD`), `nextReceipt` (next receipt serial), `credits` (WhatsApp credit balance), `upiId` |
-| `society` | `name`, `short`, `address`, `regNo`, `accountNo`, `bookNo` (read-only in the app) |
+| `meta` | `today` (demo date, `YYYY-MM-DD`), `nextReceipt` (next receipt serial), `credits` (WhatsApp credit balance), `upiId`, `trend` (billed/collected for months before the passbook data starts: `[{m, b, c}]`) |
+| `society` | `name`, `short`, `display` (name in headers, e.g. "Aldgate Residency"), `locality`, `address`, `regNo`, `accountNo`, `bookNo`, `stamp` (lines of the receipt stamp) (read-only in the app) |
 | `settings` | `baseRate`, `tenantMultiplier`, `receiptPrefix`, `footerNote`, `secretaryName`, `treasurerName`, `secretarySig`, `treasurerSig` (data URLs), `reminderDay`, `overdueAfter`, `autoMonthly`, `autoOverdue`, `autoReceipt`, `emailCopy` |
 
 ## Collections

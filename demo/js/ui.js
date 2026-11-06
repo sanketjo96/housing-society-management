@@ -1,4 +1,4 @@
-import { Avatar, Fragment, Icon, PERSONAS, STATUS_LABEL, flatSummary, fmtDate, html, useEffect, useState, words } from './core.js';
+import { Avatar, Fragment, Icon, PERSONAS, STATUS_LABEL, flatSummary, fmtDate, html, useEffect, useState, wingsLabel, words } from './core.js';
 import { prdFor } from './prd.js';
 
 /* =============================== Shared UI =============================== */
@@ -32,14 +32,19 @@ function Toggle({ on, onChange, label }) {
 function PageHead({ eyebrow, title, sub, children }) {
   return html`<div className="page-head"><div>${eyebrow && html`<div className="eyebrow" style=${{ marginBottom: 6 }}>${eyebrow}</div>`}<h1>${title}</h1>${sub && html`<p>${sub}</p>`}</div>${children && html`<div className="actions">${children}</div>`}</div>`;
 }
+// Floors and units come from the flats; the login page (no data) shows a fixed sample building.
 function Facade({ db, onPick, big }) {
+  const flats = db ? db.flats : null;
+  const floors = flats ? [...new Set(flats.map((f) => f.floor))].sort((a, b) => b - a) : [6, 5, 4, 3, 2, 1];
+  const unitsOn = (f) => (flats ? flats.filter((x) => x.floor === f).sort((a, b) => a.unit - b.unit).map((x) => x.id) : [1, 2, 3, 4].map((u) => 'A-' + (f * 100 + u)));
+  const cols = flats ? Math.max(1, ...floors.map((f) => unitsOn(f).length)) : 4;
   return html`<div className="facade-wrap">
     <div className="roof"></div>
-    <div className="facade" style=${big ? { maxWidth: 'none' } : null}>
-      ${[6, 5, 4, 3, 2, 1].map((f) => html`<${Fragment} key=${f}>
+    <div className="facade" style=${big || cols !== 4 ? { ...(big ? { maxWidth: 'none' } : {}), ...(cols !== 4 ? { gridTemplateColumns: `auto repeat(${cols}, 1fr)` } : {}) } : null}>
+      ${floors.map((f) => html`<${Fragment} key=${f}>
         <span className="fl">${f}</span>
-        ${[1, 2, 3, 4].map((u) => {
-          const id = 'A-' + (f * 100 + u);
+        ${unitsOn(f).map((id, i) => {
+          const u = i + 1;
           const st = db ? flatSummary(db, id).status : (['settled', 'settled', 'settled', 'settled', 'pending', 'overdue', 'settled', 'due'][(f * 4 + u) % 8]);
           const cls = 'unit ' + st;
           return onPick ? html`<button key=${u} className=${cls} title=${id + ' · ' + STATUS_LABEL[st]} aria-label=${id + ' ' + STATUS_LABEL[st]} onClick=${() => onPick(id)}></button>`
@@ -47,7 +52,7 @@ function Facade({ db, onPick, big }) {
         })}
       <//>`)}
     </div>
-    <div className="ground">WING A</div>
+    <div className="ground">${flats ? wingsLabel(flats).toUpperCase() : 'WING A'}</div>
   </div>`;
 }
 function Legend() {
@@ -70,7 +75,7 @@ function Receipt({ r, db, flat, compact }) {
       <tbody>${r.particulars.map((p, i) => html`<tr key=${i}><td>${p.label}</td><td className="r">${p.amount.toLocaleString('en-IN')}.00</td></tr>`)}
       <tr><td style=${{ fontWeight: 600 }}>Total</td><td className="r" style=${{ fontWeight: 700 }}>${total.toLocaleString('en-IN')}.00</td></tr></tbody></table>
     <div style=${{ fontSize: 11, color: '#5C564B', fontFamily: 'var(--body)' }}>${s.footerNote}</div>
-    <div className="stamp">ALDGATE<br/>RESIDENCY<br/>CHS · PUNE</div>
+    <div className="stamp">${(db.society.stamp || [db.society.short]).map((l, i) => html`<${Fragment} key=${i}>${i ? html`<br/>` : null}${l}<//>`)}</div>
     <div className="sigs">
       <div className="sig"><div className="ink">${s.secretarySig ? html`<img src=${s.secretarySig} alt="Secretary signature" />` : s.secretaryName.split(' ')[0]}</div><div className="ln">${s.secretaryName}<br/>Hon. Secretary</div></div>
       <div className="sig"><div className="ink">${s.treasurerSig ? html`<img src=${s.treasurerSig} alt="Treasurer signature" />` : s.treasurerName.split(' ')[0]}</div><div className="ln">${s.treasurerName}<br/>Hon. Treasurer</div></div>

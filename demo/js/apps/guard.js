@@ -1,10 +1,23 @@
-import { Fragment, Icon, Logo, TODAY, fmtDate, html, nowTime, uid, useEffect, useRef, useState } from '../core.js';
+import { Fragment, Icon, Logo, TODAY, firstName, fmtDate, html, nowTime, personaBy, personaName, uid, useEffect, useRef, useState } from '../core.js';
 import { PrdTag, SidePanel, StatusBar } from '../ui.js';
 import { setRoute } from '../route.js';
 import { PASS_TYPES, ScanSheet, VPhoto, VSTATUS, WalkInSheet } from '../features/gate.js';
 
 /* =============================== Guard app (Stage 3) =============================== */
 const TABS = ['gate', 'verify', 'log', 'flats'];
+// Demo script for the side panel, written from whoever and whatever is in the data.
+function guardSteps(db) {
+  const owner = personaBy('owner');
+  const ownerName = owner ? firstName(owner.name) : 'the resident';
+  const flat = owner ? owner.flat : db.flats[0].id;
+  const live = db.gatePasses.filter((p) => p.status === 'active' && p.date === TODAY);
+  const pass = live.find((p) => p.flat === flat) || live[0];
+  return [
+    pass ? `Verify: scan ${pass.visitor}’s pass (${pass.flat}) and let them in. The pass shows as used in the resident’s app.` : 'Verify: create a gate pass as a resident, then scan it here.',
+    `Walk-in: add a delivery for ${flat}, then switch to ${ownerName} and allow it from the home screen.`,
+    `Mark visitors out as they leave. ${firstName(personaName('admin', 'The admin'))} sees the whole log on the admin side.`,
+  ];
+}
 function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch, screen, seq, labels }) {
   const [tab, setTab] = useState(() => (TABS.includes(screen) ? screen : 'gate'));
   // The URL follows the tab (#guard/verify), and a changed link moves the tab.
@@ -86,12 +99,12 @@ function GuardApp({ db, update, persona, onLogout, onReset, toast, onSwitch, scr
 
   return html`<div className="res-stage">
     <${SidePanel} persona=${persona} eyebrow="Guard app · Stage 3" title="Try the gate flows" onSwitch=${onSwitch} onLogout=${onLogout} onReset=${onReset}
-      blurb="Ramesh works the main gate on an Android phone. Big buttons, few words, and everything he does reaches the resident straight away."
-      steps=${['Verify: scan Meena Nair’s pass (A-302) and let her in. Her pass shows as used in Priya’s app.', 'Walk-in: add a delivery for A-302, then switch to Priya and allow it from her home screen.', 'Mark visitors out as they leave. Sanjay sees the whole log on the admin side.']} />
+      blurb=${firstName(persona.name) + ' works the main gate on an Android phone. Big buttons, few words, and everything he does reaches the resident straight away.'}
+      steps=${guardSteps(db)} />
     <div className="device">
       ${StatusBar}
       <div className="g-head">
-        <div style=${{ display: 'flex', alignItems: 'center', gap: 10 }}><${Logo} s=${30} /><div style=${{ flex: 1 }}><b style=${{ fontFamily: 'var(--display)', fontWeight: 500, fontSize: 18 }}>Main gate</b><div style=${{ fontSize: 11.5, color: 'var(--panel-muted)' }}>Aldgate Residency · Day shift 8 am – 8 pm</div></div>
+        <div style=${{ display: 'flex', alignItems: 'center', gap: 10 }}><${Logo} s=${30} /><div style=${{ flex: 1 }}><b style=${{ fontFamily: 'var(--display)', fontWeight: 500, fontSize: 18 }}>Main gate</b><div style=${{ fontSize: 11.5, color: 'var(--panel-muted)' }}>${db.society.display || db.society.short} · Day shift 8 am – 8 pm</div></div>
           <button className="icon-btn" style=${{ background: 'var(--panel-2)', borderColor: 'var(--panel-line)', color: 'var(--panel-fg)' }} onClick=${onLogout} aria-label="End shift and log out"><${Icon} n="logout" s=${16} /></button></div>
       </div>
       <div className="app-body" ref=${bodyRef}>${labels && html`<div className="prd-strip"><${PrdTag} id=${'guard/' + tab} /></div>`}${body}</div>

@@ -1,14 +1,15 @@
-import { Avatar, Fragment, Icon, STATUS_LABEL, TODAY, daysBetween, flatSummary, html, inr, shortDate, useMemo, useState } from '../core.js';
+import { Avatar, Fragment, Icon, STATUS_LABEL, TODAY, daysBetween, firstName, flatSummary, html, inr, longDate, on, personaName, shortDate, useMemo, useState, wingsLabel } from '../core.js';
 import { Facade, Legend, PageHead } from '../ui.js';
 
 /* =============================== Admin: Dashboard =============================== */
 function TrendChart({ db }) {
   const billedNov = db.ledger.filter((r) => r.type === 'SYSTEM' && r.period === '2026-11').reduce((s, r) => s + r.amount, 0);
+  const billed = (p) => db.ledger.filter((r) => r.type === 'SYSTEM' && r.period === p).reduce((s, r) => s + r.amount, 0);
   const collected = (p) => db.ledger.filter((r) => r.type === 'DEPOSIT' && r.status === 'approved' && r.period === p).reduce((s, r) => s + r.amount, 0);
   const data = [
-    { m: 'Jun', b: 78000, c: 78000 }, { m: 'Jul', b: 78000, c: 76500 },
-    { m: 'Aug', b: 78000, c: collected('2026-08') }, { m: 'Sep', b: 78000, c: collected('2026-09') },
-    { m: 'Oct', b: 78000, c: collected('2026-10') + db.ledger.filter((r) => r.type === 'DEPOSIT' && r.status === 'approved' && !r.period && r.date >= '2026-11-01').reduce((s, r) => s + r.amount, 0) },
+    ...(db.meta.trend || []), // months before the passbook data starts
+    { m: 'Aug', b: billed('2026-08'), c: collected('2026-08') }, { m: 'Sep', b: billed('2026-09'), c: collected('2026-09') },
+    { m: 'Oct', b: billed('2026-10'), c: collected('2026-10') + db.ledger.filter((r) => r.type === 'DEPOSIT' && r.status === 'approved' && !r.period && r.date >= '2026-11-01').reduce((s, r) => s + r.amount, 0) },
     { m: 'Nov', b: billedNov, c: 0, now: true },
   ];
   const W = 520, H = 190, padL = 40, padB = 24, top = 10, max = 90000;
@@ -43,19 +44,19 @@ function Dashboard({ db, go, openFlat, toast }) {
   list = [...list].sort((a, b) => { const av = sort.k === 'flat' ? a.fl.id : a[sort.k]; const bv = sort.k === 'flat' ? b.fl.id : b[sort.k]; return (av > bv ? 1 : av < bv ? -1 : 0) * sort.d; });
   const SH = ({ k, label, r }) => html`<th className=${r ? 'r' : ''}><button className=${sort.k === k ? 'on' : ''} onClick=${() => setSort({ k, d: sort.k === k ? -sort.d : -1 })}>${label}${sort.k === k && html`<${Icon} n=${sort.d < 0 ? 'down' : 'up'} s=${12} />`}</button></th>`;
   return html`<${Fragment}>
-    <${PageHead} eyebrow="Tuesday, 3 November 2026" title="Good morning, Sanjay" sub=${`Here is where ${db.society.short} stands today. ${counts.overdue} flats are overdue and ${pendingRows.length} payments are waiting for your review.`}>
+    <${PageHead} eyebrow=${longDate(TODAY)} title=${'Good morning, ' + firstName(personaName('admin', 'there'))} sub=${`Here is where ${db.society.short} stands today. ${counts.overdue} flats are overdue and ${pendingRows.length} payments are waiting for your review.`}>
       <button className="btn" onClick=${() => toast('Exported dues-2026-11-03.xlsx (download is simulated in the demo)')}><${Icon} n="download" s=${16} />Export dues</button>
       <button className="btn primary" onClick=${() => go('review')}><${Icon} n="inbox" s=${16} />Review payments</button>
     <//>
     <div className="metrics">
-      <div className="metric hero"><span className="eyebrow">Total receivable</span><span className="val">${inr(total)}</span><span className="sub">${counts.overdue + counts.due + counts.pending} of 24 flats have a balance</span></div>
+      <div className="metric hero"><span className="eyebrow">Total receivable</span><span className="val">${inr(total)}</span><span className="sub">${counts.overdue + counts.due + counts.pending} of ${db.flats.length} flats have a balance</span></div>
       <div className="metric"><span className="eyebrow">October collection</span><span className="val">${Math.round((octPaid / octBilled) * 100)}%</span><div className="bar"><i style=${{ width: (octPaid / octBilled) * 100 + '%' }}></i></div><span className="sub">${inr(octPaid)} of ${inr(octBilled)} billed</span></div>
       <div className="metric"><span className="eyebrow">Awaiting review</span><span className="val" style=${{ color: 'var(--brass)' }}>${pendingRows.length}</span><span className="sub">${inr(pendingRows.reduce((s, r) => s + r.amount, 0))} in proofs and credits</span></div>
-      <div className="metric"><span className="eyebrow">Resident adoption</span><span className="val">${active}<span style=${{ fontSize: 18, color: 'var(--muted)' }}> / 24</span></span><span className="sub">flats logged in during the last 30 days</span></div>
+      <div className="metric"><span className="eyebrow">Resident adoption</span><span className="val">${active}<span style=${{ fontSize: 18, color: 'var(--muted)' }}> / ${db.flats.length}</span></span><span className="sub">flats logged in during the last 30 days</span></div>
     </div>
     <div className="split">
       <div className="card">
-        <div className="card-head"><div><h2>Billed vs collected</h2><span className="muted" style=${{ fontSize: 12.5 }}>Monthly maintenance, Wing A</span></div>
+        <div className="card-head"><div><h2>Billed vs collected</h2><span className="muted" style=${{ fontSize: 12.5 }}>Monthly maintenance, ${wingsLabel(db.flats)}</span></div>
           <div className="legend" style=${{ color: 'var(--muted)' }}><span><i style=${{ background: 'var(--sunken)', border: '1px solid var(--line)' }}></i>Billed</span><span><i style=${{ background: 'var(--teal)' }}></i>Collected</span></div></div>
         <div className="card-pad" style=${{ paddingTop: 12 }}><${TrendChart} db=${db} /></div>
       </div>
@@ -86,10 +87,10 @@ function Dashboard({ db, go, openFlat, toast }) {
       <div className="card">
         <div className="card-head"><h2>Needs your attention</h2></div>
         <div className="queue">
-          ${!novRun && html`<button className="qi" onClick=${() => go('billing')}><span className="ic" style=${{ background: 'var(--blue-soft)', color: 'var(--blue)' }}><${Icon} n="zap" s=${17} /></span><span className="tx"><b>Generate November charges</b><span>24 flats · scheduled run is due</span></span><${Icon} n="chev" s=${16} /></button>`}
+          ${!novRun && html`<button className="qi" onClick=${() => go('billing')}><span className="ic" style=${{ background: 'var(--blue-soft)', color: 'var(--blue)' }}><${Icon} n="zap" s=${17} /></span><span className="tx"><b>Generate November charges</b><span>${db.flats.length} flats · scheduled run is due</span></span><${Icon} n="chev" s=${16} /></button>`}
           ${pendingRows.map((r) => html`<button key=${r.id} className="qi" onClick=${() => go('review')}><span className="ic" style=${{ background: 'var(--brass-soft)', color: 'var(--brass)' }}><${Icon} n=${r.type === 'CREDIT' ? 'wallet' : 'inbox'} s=${17} /></span><span className="tx"><b>${r.type === 'CREDIT' ? 'Credit claim' : 'Payment proof'} · ${r.flat}</b><span>${r.payer} · ${inr(r.amount)}</span></span><${Icon} n="chev" s=${16} /></button>`)}
-          ${openComplaints.slice(0, 2).map((c) => html`<button key=${c.id} className="qi" onClick=${() => go('complaints')}><span className="ic" style=${{ background: 'var(--coral-soft)', color: 'var(--coral)' }}><${Icon} n="wrench" s=${17} /></span><span className="tx"><b>${c.title}</b><span>${c.flat} · ${c.status === 'open' ? 'Open' : 'In progress'} · ${daysBetween(c.date, TODAY)}d</span></span><${Icon} n="chev" s=${16} /></button>`)}
-          ${reqBookings.map((b) => html`<button key=${b.id} className="qi" onClick=${() => go('amenities')}><span className="ic" style=${{ background: 'var(--teal-soft)', color: 'var(--teal)' }}><${Icon} n="calendar" s=${17} /></span><span className="tx"><b>Booking request · ${db.amenities.find((a) => a.id === b.amenity).name}</b><span>${b.flat} · ${shortDate(b.date)}, ${b.slot}</span></span><${Icon} n="chev" s=${16} /></button>`)}
+          ${on('complaints') && openComplaints.slice(0, 2).map((c) => html`<button key=${c.id} className="qi" onClick=${() => go('complaints')}><span className="ic" style=${{ background: 'var(--coral-soft)', color: 'var(--coral)' }}><${Icon} n="wrench" s=${17} /></span><span className="tx"><b>${c.title}</b><span>${c.flat} · ${c.status === 'open' ? 'Open' : 'In progress'} · ${daysBetween(c.date, TODAY)}d</span></span><${Icon} n="chev" s=${16} /></button>`)}
+          ${on('amenities') && reqBookings.map((b) => html`<button key=${b.id} className="qi" onClick=${() => go('amenities')}><span className="ic" style=${{ background: 'var(--teal-soft)', color: 'var(--teal)' }}><${Icon} n="calendar" s=${17} /></span><span className="tx"><b>Booking request · ${db.amenities.find((a) => a.id === b.amenity).name}</b><span>${b.flat} · ${shortDate(b.date)}, ${b.slot}</span></span><${Icon} n="chev" s=${16} /></button>`)}
         </div>
       </div>
     </div>

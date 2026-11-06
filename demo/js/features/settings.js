@@ -1,11 +1,12 @@
-import { Fragment, Icon, TODAY, html, useState } from '../core.js';
+import { Fragment, Icon, TODAY, html, personaBy, useState } from '../core.js';
 import { Field, Locked, PageHead, Receipt } from '../ui.js';
 
 /* =============================== Admin: Settings =============================== */
 function Settings({ db, update, toast }) {
   const [d, setD] = useState(() => ({ ...db.settings }));
   const dirty = JSON.stringify(d) !== JSON.stringify(db.settings);
-  const sample = { no: d.receiptPrefix + String(db.meta.nextReceipt).padStart(4, '0'), flat: 'A-302', date: TODAY, payer: 'Arjun Mehta', mode: 'UPI', ref: 'UTR 630611842207', particulars: [{ label: 'Maintenance charges · Sep 2026', amount: 4500 }, { label: 'Maintenance charges · Oct 2026', amount: 4500 }] };
+  const sampleFlat = db.flats.find((f) => f.id === (personaBy('owner') || {}).flat) || db.flats[0];
+  const sample = { no: d.receiptPrefix + String(db.meta.nextReceipt).padStart(4, '0'), flat: sampleFlat.id, date: TODAY, payer: sampleFlat.tenant ? sampleFlat.tenant.name : sampleFlat.owner.name, mode: 'UPI', ref: 'UTR 630611842207', particulars: [{ label: 'Maintenance charges · Sep 2026', amount: 4500 }, { label: 'Maintenance charges · Oct 2026', amount: 4500 }] };
   const onSig = (key) => (e) => { const file = e.target.files && e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => setD((x) => ({ ...x, [key]: r.result })); r.readAsDataURL(file); };
   return html`<${Fragment}>
     <${PageHead} eyebrow="Society" title="Settings" sub="Society details and the receipt every resident receives. Receipts follow the standard CHS format.">

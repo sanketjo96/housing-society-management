@@ -1,4 +1,4 @@
-import { Avatar, Icon, Logo, PERSONAS, html, useState } from '../core.js';
+import { Avatar, Icon, Logo, PERSONAS, html, personaBy, useState } from '../core.js';
 import { Facade, Field, Legend } from '../ui.js';
 
 /* =============================== Login =============================== */
@@ -42,7 +42,7 @@ function Login({ onLogin }) {
     <div className="personas">
       <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <div><div className="eyebrow">Demo personas</div><div style=${{ fontFamily: 'var(--display)', fontSize: 19, marginTop: 2 }}>Tap a person to step into their view</div></div>
-        <span className="muted" style=${{ fontSize: 12.5 }}>Owner and tenant of A-302 share one flat ledger</span></div>
+        <span className="muted" style=${{ fontSize: 12.5 }}>${personaBy('owner') && personaBy('tenant') ? `Owner and tenant of ${personaBy('owner').flat} share one flat ledger` : 'Each flat has one ledger'}</span></div>
       <div className="persona-row">
         ${PERSONAS.map((p, i) => html`<button key=${p.key} className="persona" onClick=${() => onLogin(p)}>
           <div style=${{ display: 'flex', gap: 10, alignItems: 'center' }}><${Avatar} name=${p.name} i=${i} />

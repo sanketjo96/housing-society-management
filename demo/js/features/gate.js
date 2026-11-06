@@ -1,4 +1,4 @@
-import { Fragment, Icon, TODAY, fmtDate, html, nowTime, uid, useState } from '../core.js';
+import { Fragment, Icon, TODAY, firstName, fmtDate, html, nowTime, personaBy, personaName, uid, useState } from '../core.js';
 import { Field, FilePick, PageHead, QR, Sheet } from '../ui.js';
 
 const PASS_TYPES = { Guest: 'user', Delivery: 'inbox', Cab: 'arrow', Service: 'wrench' };
@@ -15,8 +15,8 @@ function PassSheet({ fl, persona, update, toast, onClose, onCreated }) {
     <${Field} label="Valid"><div className="chips">${['Morning · 9 am – 1 pm', 'Afternoon · 1 pm – 5 pm', 'Evening · 4 pm – 9 pm', 'All day'].map((w) => html`<button key=${w} className=${'chip' + (win === w ? ' on' : '')} onClick=${() => setWin(w)}>${w}</button>`)}</div><//>
   <//>`;
 }
-function PassView({ p, update, toast, onClose }) {
-  const share = () => { const t = `Gate pass for ${p.visitor} · Aldgate Residency, flat ${p.flat}. Code ${p.code}, valid ${fmtDate(p.date)}, ${p.window}.`; try { navigator.clipboard.writeText(t).then(() => toast('Pass details copied. Paste them in WhatsApp.'), () => toast('Copy not allowed here')); } catch (e) { toast('Copy not allowed here'); } };
+function PassView({ db, p, update, toast, onClose }) {
+  const share = () => { const t = `Gate pass for ${p.visitor} · ${db.society.display || db.society.short}, flat ${p.flat}. Code ${p.code}, valid ${fmtDate(p.date)}, ${p.window}.`; try { navigator.clipboard.writeText(t).then(() => toast('Pass details copied. Paste them in WhatsApp.'), () => toast('Copy not allowed here')); } catch (e) { toast('Copy not allowed here'); } };
   return html`<${Sheet} title=${p.visitor} sub=${`${p.type} · ${fmtDate(p.date)} · ${p.window}`} onClose=${onClose}
     foot=${p.status === 'active' ? html`<button className="btn danger" onClick=${() => { update('cancelGatePass', (d) => { d.gatePasses.find((x) => x.id === p.id).status = 'cancelled'; }); toast('Pass cancelled'); onClose(); }}>Cancel pass</button><button className="btn primary" onClick=${share}><${Icon} n="chat" s=${16} />Share</button>` : null}>
     <div style=${{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '6px 0' }}>
@@ -42,7 +42,7 @@ const VSTATUS = { inside: ['approved', 'Inside'], out: ['sent', 'Left'], waiting
 function residentsOf(fl) { return fl.tenant ? [fl.tenant.name + ' (tenant)', fl.owner.name + ' (owner)'] : [fl.owner.name]; }
 
 function WalkInSheet({ db, update, toast, onClose }) {
-  const [type, setType] = useState('Delivery'); const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [flat, setFlat] = useState('A-302'); const [purpose, setPurpose] = useState(''); const [vehicle, setVehicle] = useState(''); const [photo, setPhoto] = useState(null);
+  const [type, setType] = useState('Delivery'); const [name, setName] = useState(''); const [phone, setPhone] = useState(''); const [flat, setFlat] = useState(() => { const o = personaBy('owner'); return o && db.flats.some((f) => f.id === o.flat) ? o.flat : db.flats[0].id; }); const [purpose, setPurpose] = useState(''); const [vehicle, setVehicle] = useState(''); const [photo, setPhoto] = useState(null);
   const fl = db.flats.find((f) => f.id === flat);
   const submit = () => {
     update('logWalkIn', (d) => d.visitors.unshift({ id: uid('V'), name: name.trim(), phone: phone.trim(), type, flat, purpose: purpose.trim() || type, vehicle: vehicle.trim(), photo, status: 'waiting', requestedAt: nowTime(), via: 'Walk-in' }));
@@ -68,7 +68,7 @@ function ScanSheet({ db, onClose, onScan }) {
     <div className="viewfinder"><span className="vf tl"></span><span className="vf tr"></span><span className="vf bl"></span><span className="vf br"></span><span className="scanline"></span><span style=${{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', fontSize: 11.5, color: '#94A099' }}>Camera preview (simulated)</span></div>
     <div className="eyebrow">Demo: tap a pass to simulate scanning it</div>
     ${today.length ? html`<div className="list">${today.map((p) => html`<button key=${p.id} className="li" onClick=${() => onScan(p.code)}><${QR} code=${p.code} /><div className="tx"><b>${p.visitor}</b><span>${p.flat} · ${fmtDate(p.date)}</span></div><span className="num" style=${{ fontWeight: 600 }}>${p.code}</span></button>`)}</div>`
-      : html`<div className="empty">No active passes. Create one as Priya or Arjun.</div>`}
+      : html`<div className="empty">No active passes. Create one as ${[personaName('owner'), personaName('tenant')].filter(Boolean).map(firstName).join(' or ') || 'a resident'}.</div>`}
   <//>`;
 }
 
@@ -86,7 +86,7 @@ function Visitors({ db }) {
       <div className="metric"><span className="eyebrow">Waiting at gate</span><span className="val" style=${{ color: 'var(--brass)' }}>${db.visitors.filter((v) => v.status === 'waiting').length}</span></div>
       <div className="metric"><span className="eyebrow">Active gate passes</span><span className="val">${passes.filter((p) => p.status === 'active').length}</span><span className="sub">${passes.filter((p) => p.status === 'used').length} used</span></div>
     </div>
-    <div className="card"><div className="card-head"><div className="chips">${[['all', 'All'], ['inside', 'Inside'], ['out', 'Left'], ['waiting', 'Waiting'], ['denied', 'Turned away']].map(([k, l]) => html`<button key=${k} className=${'chip' + (f === k ? ' on' : '')} onClick=${() => setF(k)}>${l}</button>`)}</div><span className="muted" style=${{ fontSize: 12.5 }}>Guard on duty: Ramesh Patil</span></div>
+    <div className="card"><div className="card-head"><div className="chips">${[['all', 'All'], ['inside', 'Inside'], ['out', 'Left'], ['waiting', 'Waiting'], ['denied', 'Turned away']].map(([k, l]) => html`<button key=${k} className=${'chip' + (f === k ? ' on' : '')} onClick=${() => setF(k)}>${l}</button>`)}</div><span className="muted" style=${{ fontSize: 12.5 }}>Guard on duty: ${personaName('guard', '—')}</span></div>
       <div className="table-wrap"><table className="t"><thead><tr><th>Visitor</th><th>Flat</th><th>In</th><th>Out</th><th>Entry by</th><th>Status</th></tr></thead>
         <tbody>${list.map((v) => html`<tr key=${v.id}><td><div className="person"><${VPhoto} v=${v} size=${32} /><div>${v.name}<small>${v.type}${v.vehicle ? ' · ' + v.vehicle : ''}</small></div></div></td><td className="flatno">${v.flat}</td><td className="num">${v.inAt || '—'}</td><td className="num">${v.outAt || '—'}</td><td style=${{ fontSize: 12.5 }}>${v.via}</td><td><span className=${'pill ' + VSTATUS[v.status][0]}>${VSTATUS[v.status][1]}</span></td></tr>`)}</tbody></table></div></div>
   <//>`;
