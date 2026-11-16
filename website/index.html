@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Saral Society</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Maintenance billing, UPI collection and CHS-format receipts for housing societies of 10 to 150 flats.">
+<meta name="description" content="Run your housing society from one place: maintenance billing with CHS receipts, expenses, complaints, notices, bookings and the gate, for societies of 10 to 150 flats.">
 <!-- Link previews (WhatsApp, LinkedIn, Slack…). URLs must be absolute: change them if the site moves to its own domain. Images: website/make-previews.mjs -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Saral Society">
-<meta property="og:title" content="Saral Society: every flat’s dues, in one passbook">
-<meta property="og:description" content="Maintenance billing, UPI collection and CHS-format receipts for housing societies of 10 to 150 flats.">
+<meta property="og:title" content="Saral Society: run your whole society from one place">
+<meta property="og:description" content="Billing and CHS receipts, expenses, complaints, notices, bookings and the gate, for housing societies of 10 to 150 flats.">
 <meta property="og:url" content="https://sanketjo96.github.io/housing-society-management/">
 <meta property="og:image" content="https://sanketjo96.github.io/housing-society-management/preview.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The Saral Society landing page: every flat’s dues, in one passbook">
+<meta property="og:image:alt" content="The Saral Society landing page: run your whole society from one place">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -226,6 +226,9 @@ section { padding-block: 96px; }
 @media (max-width: 860px) { .price { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .price .bands { grid-template-columns: 1fr; } }
 
+/* ---------- Roadmap ---------- */
+.soon { align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--brass); background: var(--brass-soft); padding: 3px 10px; border-radius: 999px; }
+
 /* ---------- FAQ ---------- */
 .faq { max-width: 820px; }
 .faq details { border-top: 1px solid var(--line); padding: 20px 0; }
@@ -255,7 +258,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
       <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#22302B"/><rect x="7" y="7" width="7.5" height="7.5" rx="1.6" fill="#2F6E64"/><rect x="17.5" y="7" width="7.5" height="7.5" rx="1.6" fill="#2F6E64"/><rect x="7" y="17.5" width="7.5" height="7.5" rx="1.6" fill="#2F6E64"/><rect x="17.5" y="17.5" width="7.5" height="7.5" rx="1.6" fill="#B8863A"/><rect x="16.5" y="16.5" width="9.5" height="9.5" rx="2.4" fill="none" stroke="#F1F4EE" stroke-width="1"/></svg>
       Saral Society</a>
     <nav class="nav-links" aria-label="Sections">
-      <a href="#how">How it works</a><a href="#features">Features</a><a href="#receipts">Receipts</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+      <a href="#features">Features</a><a href="#how">Billing</a><a href="#receipts">Receipts</a><a href="#roadmap">Roadmap</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
     </nav>
     <a class="btn gold" href="demo/index.html">Try the demo</a>
   </div>
@@ -267,14 +270,14 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
     <div class="wrap hero-grid">
       <div class="hero-copy">
         <div class="eyebrow">For housing societies of 10 to 150 flats</div>
-        <h1 style="margin-top: 18px;">Every flat’s dues, in <em>one passbook.</em></h1>
-        <p class="lede">Saral Society bills every flat on the 1st, lets residents pay by UPI, and sends a numbered CHS receipt to their WhatsApp the moment the treasurer approves.</p>
+        <h1 style="margin-top: 18px;">Your whole society, run from <em>one place.</em></h1>
+        <p class="lede">Saral Society takes care of the society’s money, its residents and its gate: dues and CHS receipts, expenses, complaints, notices and clubhouse bookings, all in one dashboard for the committee and one app for residents.</p>
         <div class="hero-ctas">
           <a class="btn gold" href="demo/index.html">Try the live demo
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-          <a class="btn line" href="#how">See how it works</a>
+          <a class="btn line" href="#features">See what it does</a>
         </div>
-        <div class="hero-note"><span>✓ Works in any browser</span><span>✓ Money goes straight to the society’s account</span><span>✓ Owner and tenant rates</span></div>
+        <div class="hero-note"><span>✓ Works in any browser</span><span>✓ Money goes straight to the society’s account</span><span>✓ Built for committees, not property managers</span></div>
       </div>
       <div class="stage" aria-hidden="true">
         <div class="building">
@@ -295,7 +298,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
         </div>
         <div class="float ok">
           <span class="tick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
-          <span><b>Payment approved</b><br><span style="color: #9AA59E; font-size: 12px;">by the Treasurer · just now</span></span>
+          <span><b>Complaint resolved</b><br><span style="color: #9AA59E; font-size: 12px;">Water leak, A-302 · plumber sent</span></span>
         </div>
       </div>
     </div>
@@ -306,28 +309,12 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
     <div class="wrap">
       <div class="sec-head">
         <div class="eyebrow">Why societies switch</div>
-        <h2>Your treasurer shouldn’t need a spreadsheet, a WhatsApp group and a carbon receipt book.</h2>
+        <h2>Your committee shouldn’t need a spreadsheet, five WhatsApp groups and a carbon receipt book.</h2>
       </div>
       <div class="swap">
-        <article><span class="was">A spreadsheet of who owes what</span><h3>A passbook that balances itself</h3><p>Each flat has one ledger. Charges, payments and credit add up on their own, so dues are never a matter of opinion.</p></article>
-        <article><span class="was">UPI screenshots lost in a group chat</span><h3>One queue to review payments</h3><p>Residents upload the screenshot against their flat. The treasurer sees the amount and reference beside it, and approves or rejects with a reason.</p></article>
-        <article><span class="was">Receipts written by hand, or not at all</span><h3>Numbered receipts, sent instantly</h3><p>Every approval issues the next receipt number in the standard co-operative society format, signed and on the resident’s WhatsApp within seconds.</p></article>
-      </div>
-    </div>
-  </section>
-
-  <!-- How it works -->
-  <section id="how" style="padding-top: 24px;">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">How it works</div>
-        <h2>One month of maintenance, start to finish.</h2>
-      </div>
-      <div class="steps">
-        <div class="step"><span class="n">1 · On the 1st</span><h3>Charges go out</h3><p>Every flat gets its monthly charge, at the owner or tenant rate depending on who lived there. Bills reach residents on WhatsApp and email.</p><span class="who">Automatic</span></div>
-        <div class="step"><span class="n">2 · Any day</span><h3>Residents pay by UPI</h3><p>They pay straight to the society’s UPI or bank account and upload the screenshot. Paying extra is fine; it’s kept as credit.</p><span class="who">Owner or tenant</span></div>
-        <div class="step"><span class="n">3 · Same day</span><h3>Treasurer approves</h3><p>One queue, proof beside each payment. Approving shows the receipt first, so nothing goes out wrong.</p><span class="who">Committee</span></div>
-        <div class="step"><span class="n">4 · Seconds later</span><h3>Receipt arrives</h3><p>A numbered, signed PDF receipt lands on WhatsApp and email, and the flat’s passbook updates for owner and tenant alike.</p><span class="who">Automatic</span></div>
+        <article><span class="was">A spreadsheet of who owes what, and a carbon receipt book</span><h3>Dues and receipts that keep themselves</h3><p>Each flat has one passbook. Residents pay by UPI, the treasurer approves from one queue, and a numbered CHS receipt reaches their WhatsApp in seconds.</p></article>
+        <article><span class="was">Complaints and notices lost in the group chat</span><h3>Every request tracked to done</h3><p>Residents raise complaints and book the clubhouse in the app. The committee assigns, updates and publishes notices, and everyone sees where things stand.</p></article>
+        <article><span class="was">Expenses on paper slips and in someone’s memory</span><h3>A clear picture at audit time</h3><p>Record what the society spends next to what it collects, with an income and expenditure view the committee can show at the AGM.</p></article>
       </div>
     </div>
   </section>
@@ -375,6 +362,22 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
             <li>Visitor log<span>Who came, for which flat, in and out times</span></li>
           </ul>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="how" style="padding-top: 24px;">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">Billing, end to end</div>
+        <h2>One month of maintenance, start to finish.</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><span class="n">1 · On the 1st</span><h3>Charges go out</h3><p>Every flat gets its monthly charge, at the owner or tenant rate depending on who lived there. Bills reach residents on WhatsApp and email.</p><span class="who">Automatic</span></div>
+        <div class="step"><span class="n">2 · Any day</span><h3>Residents pay by UPI</h3><p>They pay straight to the society’s UPI or bank account and upload the screenshot. Paying extra is fine; it’s kept as credit.</p><span class="who">Owner or tenant</span></div>
+        <div class="step"><span class="n">3 · Same day</span><h3>Treasurer approves</h3><p>One queue, proof beside each payment. Approving shows the receipt first, so nothing goes out wrong.</p><span class="who">Committee</span></div>
+        <div class="step"><span class="n">4 · Seconds later</span><h3>Receipt arrives</h3><p>A numbered, signed PDF receipt lands on WhatsApp and email, and the flat’s passbook updates for owner and tenant alike.</p><span class="who">Automatic</span></div>
       </div>
     </div>
   </section>
@@ -428,7 +431,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
     <div class="wrap">
       <div class="sec-head">
         <div class="eyebrow">Your data</div>
-        <h2>The society’s money records stay private and on the record.</h2>
+        <h2>The society’s records stay private, and every rupee stays on the record.</h2>
       </div>
       <div class="trust">
         <div><b>Money never passes through us</b><span>Residents pay directly to the society’s UPI or bank account. Saral records and verifies.</span></div>
@@ -437,6 +440,29 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
         <div><b>Every rupee has a trail</b><span>Approvals, rejections and manual entries are logged with who did it and when.</span></div>
         <div><b>Weekly backups</b><span>The database is backed up every week to separate storage.</span></div>
         <div><b>Accounts by invitation</b><span>No public sign-up. The committee adds residents; login attempts are rate-limited.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roadmap -->
+  <section id="roadmap" style="padding-top: 24px;">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">On the roadmap</div>
+        <h2>Where Saral Society is going next.</h2>
+        <p class="lede">Once the day-to-day runs smoothly, the bigger jobs are the building itself and the decisions that shape its future. These are planned, not yet available.</p>
+      </div>
+      <div class="price">
+        <article>
+          <span class="soon">Planned</span>
+          <h3>Smart utility integrations</h3>
+          <p style="color: var(--muted);">Connect the society’s water meters, electricity sub-meters and common equipment, so usage is read automatically, billed to each flat’s passbook, and the committee hears about a leak or a failing pump before residents do.</p>
+        </article>
+        <article>
+          <span class="soon">Planned</span>
+          <h3>Redevelopment platform</h3>
+          <p style="color: var(--muted);">Take the society through redevelopment in one place: member meetings and digital voting, developer offers compared side by side, the documents in one vault, and progress every member can follow.</p>
+        </article>
       </div>
     </div>
   </section>
@@ -475,6 +501,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
     <div class="wrap">
       <div class="sec-head"><div class="eyebrow">Questions</div><h2>Asked by committees before they start.</h2></div>
       <div class="faq">
+        <details><summary>Is Saral Society only for accounting?</summary><p>No. Billing and receipts are where most committees start, but the same app handles expenses, complaints, notices and clubhouse bookings, with gate passes and visitor management on the way. Utility integrations and redevelopment are on the roadmap.</p></details>
         <details><summary>Do residents have to install an app?</summary><p>No. Everything works in the phone’s browser today. Android apps for residents and guards are on the way and use the same account.</p></details>
         <details><summary>Does the money go through Saral Society?</summary><p>No. Residents pay directly into the society’s own UPI ID or bank account. Saral keeps the record, checks the proof with the treasurer, and issues the receipt.</p></details>
         <details><summary>How are owner and tenant rates handled?</summary><p>Set a base rate and a tenant multiplier once. Each month the flat is charged by who lived there. Owner and tenant see the same passbook for the flat.</p></details>
@@ -501,7 +528,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 <footer>
   <div class="wrap">
     <span>© 2026 Saral Society · Designed and built by Sanket Joshi, Pune</span>
-    <nav aria-label="Footer"><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="demo/index.html">Demo</a></nav>
+    <nav aria-label="Footer"><a href="#features">Features</a><a href="#how">Billing</a><a href="#roadmap">Roadmap</a><a href="#pricing">Pricing</a><a href="demo/index.html">Demo</a></nav>
   </div>
 </footer>
 

@@ -422,7 +422,12 @@ Explicitly out of the four phases above:
 - CHS audit-ready export pack: member register, receipt register,
   income and expenditure, receipts and payments, balance sheet, defaulters
   list in the formats auditors expect under the MCS Act.
-- Polls and §79A-compliant digital voting for redevelopment decisions.
+- Smart utility integrations: water meters, electricity sub-meters and
+  common equipment (pumps, lifts, DG set) read automatically, usage billed
+  to each flat's passbook, and alerts to the committee on leaks or faults.
+- Redevelopment platform: member meetings, polls and §79A-compliant digital
+  voting, developer offers compared side by side, a redevelopment document
+  vault, and progress tracking visible to every member.
 - Document vault (bye-laws, minutes, NOCs).
 - Rewards for on-time payment.
 - Vendor marketplace and vendor logins.
