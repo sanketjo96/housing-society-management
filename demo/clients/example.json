@@ -1,0 +1,24 @@
+{
+  "name": "Green Valley Heights",
+  "about": "Example preset. A fictional society that wants billing and notices, not amenity booking or gate passes, and has asked for notices. Copy this file to clients/<client-id>.json and open the demo with ?client=<client-id>.",
+  "society": {
+    "name": "Green Valley Heights Co-operative Housing Society Ltd.",
+    "short": "Green Valley Heights CHS",
+    "display": "Green Valley Heights",
+    "locality": "Kothrud, Pune",
+    "address": "Plot 14, Paud Road, Kothrud, Pune 411038",
+    "regNo": "PNA/EXAMPLE/HSG/0000/2020",
+    "accountNo": "XXXX XXXX 0000 (Example Bank)",
+    "stamp": ["GREEN VALLEY", "HEIGHTS", "CHS · PUNE"]
+  },
+  "meta": {
+    "upiId": "greenvalley.demo@upi"
+  },
+  "features": {
+    "amenities": false,
+    "gate": false
+  },
+  "prd": {
+    "7.13": { "status": "requested", "note": "Example: asked for in the first call" }
+  }
+}
